@@ -47,17 +47,35 @@ npx supabase migration up   # 스키마 적용
 ```
 로컬 없이 클라우드 프로젝트만 쓸 거면 이 단계는 건너뛰어도 된다.
 
-### B-2. Supabase 신규 프로젝트 생성
-UNIQN 프로젝트와 **반드시 분리** (리스크 격리가 목적 — 기획서 §3).
+### B-2. Supabase — 기존 계정에 새 조직 + 새 프로젝트
+UNIQN과 **같은 계정**을 쓰되, **새 Organization**을 만들어 그 안에 프로젝트를 생성한다.
 
-1. https://supabase.com/dashboard 에서 신규 프로젝트 생성 (리전: Northeast Asia (Seoul) 권장)
-2. Project Settings → API 에서 아래 3개 복사
-   - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
-   - Publishable key → `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-   - Secret key → `SUPABASE_SECRET_KEY` (**서버 전용, NEXT_PUBLIC_ 붙이면 브라우저로 유출됨**)
-3. 스키마 적용 — 둘 중 하나:
-   - SQL Editor 에 `app/supabase/migrations/20260824000000_init_schema.sql` 붙여넣고 실행
+조직을 나누는 이유: 한 조직 안에서는 Free/Pro 플랜을 섞을 수 없다. 같은 조직에 두면
+UNIQN이 Pro로 올라갈 때 딜러마스터도 같이 유료로 끌려간다. 청구서 분리 효과도 있다.
+
+> 무료 프로젝트 한도 2개는 **계정 단위 합산**이라 조직을 나눠도 늘어나지 않는다.
+> UNIQN이 이미 2개를 쓰고 있으면 Pro($25/mo)를 켜거나 안 쓰는 프로젝트를 pause 해야 한다.
+> (paused 프로젝트는 한도에 잡히지 않음)
+
+1. Dashboard 좌상단 조직 선택 → **New organization** (이름 예: `dealermaster`)
+2. 그 조직 안에서 **New project** — 리전은 **Northeast Asia (Seoul)** 권장
+3. Settings → **API Keys** 탭 → `Create new API Keys` → 아래 3개 복사
+
+| 대시보드 위치 | 형태 | .env.local 키 |
+|---|---|---|
+| Settings → Data API → Project URL | `https://<ref>.supabase.co` | `NEXT_PUBLIC_SUPABASE_URL` |
+| Settings → API Keys → Publishable key | `sb_publishable_...` | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` |
+| Settings → API Keys → Secret keys | `sb_secret_...` | `SUPABASE_SECRET_KEY` |
+
+- **Legacy API Keys 탭의 `anon` / `service_role` 은 쓰지 말 것** — 2026년 말 deprecated 예정이다.
+  신규 프로젝트라면 처음부터 publishable/secret 키로 간다.
+- `sb_secret_...` 은 RLS를 전부 우회(BYPASSRLS)한다. 절대 `NEXT_PUBLIC_` 접두사를 붙이지 말 것.
+  브라우저에서 쓰면 Supabase가 401로 막지만, 유출되면 다른 도구로는 그대로 쓰인다.
+
+4. 스키마 적용 — 둘 중 하나:
+   - SQL Editor에 `app/supabase/migrations/20260824000000_init_schema.sql` 붙여넣고 실행
    - 또는 CLI: `cd app && npx supabase login && npx supabase link --project-ref <ref> && npx supabase db push`
+     (`<ref>` 는 Project URL의 `https://<ref>.supabase.co` 부분)
 
 ### B-3. Anthropic API 키 발급
 https://console.anthropic.com → API Keys → `ANTHROPIC_API_KEY`

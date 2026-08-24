@@ -1,6 +1,40 @@
 -- 딜러마스터 DB 스키마
 -- Supabase(Postgres) 신규 프로젝트용
--- 작성일: 2026-08-20
+-- 원본: 09_db_schema.sql (2026-08-20) / 보안 수정: 2026-08-24
+
+-- ============================================
+-- 0. private 스키마 (Data API 에 노출되지 않는 내부용)
+-- ============================================
+create schema if not exists private;
+revoke all on schema private from anon, authenticated;
+
+-- 관리자 명단. 1인 운영이라 행 하나로 시작한다.
+-- created_by 자기참조 방식과 달리, 일반 유저가 스스로 관리자가 될 수 없다.
+create table private.admins (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+-- 정책 안에서 쓰는 관리자 판정 함수.
+-- private 스키마에 두어 anon/authenticated 가 직접 호출할 수 없게 한다.
+create or replace function private.is_admin()
+returns boolean
+language sql
+security definer
+set search_path = private, pg_temp
+stable
+as $fn$
+  select exists (
+    select 1 from private.admins a where a.user_id = (select auth.uid())
+  );
+$fn$;
+
+-- RLS 정책 안에서 호출되려면 실행 권한이 필요하다.
+-- 이 함수는 "호출자 본인이 관리자인가"만 boolean 으로 돌려주므로
+-- 실행 권한을 줘도 관리자 명단(private.admins)은 여전히 읽을 수 없다.
+revoke all on function private.is_admin() from public;
+grant usage on schema private to authenticated;
+grant execute on function private.is_admin() to authenticated;
 
 -- ============================================
 -- 1. subscriptions (구독 상태)
@@ -82,9 +116,12 @@ create table streaks (
 );
 
 -- ============================================
--- 5. rankings (주간 랭킹 집계 — materialized view)
+-- 5. weekly_rankings (주간 랭킹 집계 — materialized view)
 -- ============================================
-create materialized view weekly_rankings as
+-- materialized view 는 RLS 를 걸 수 없다. public 에 두고 grant 를 남기면
+-- 전 유저의 정답률·응답속도가 그대로 노출되므로 private 스키마에 둔다.
+-- 랭킹 화면은 서버 라우트에서 secret key 로 읽어 필요한 컬럼만 내려보낼 것.
+create materialized view private.weekly_rankings as
 select
   a.user_id,
   date_trunc('week', a.created_at) as week_start,
@@ -95,8 +132,12 @@ select
 from attempts a
 group by a.user_id, date_trunc('week', a.created_at);
 
-create index idx_weekly_rankings_week on weekly_rankings(week_start);
--- refresh 방법: Supabase Edge Function cron으로 매일 `refresh materialized view weekly_rankings;` 실행
+-- refresh ... concurrently 를 쓰려면 unique index 가 반드시 있어야 한다.
+-- 없으면 refresh 동안 뷰 전체가 잠겨 랭킹 조회가 멈춘다.
+create unique index idx_weekly_rankings_pk on private.weekly_rankings(user_id, week_start);
+create index idx_weekly_rankings_week on private.weekly_rankings(week_start);
+-- refresh 방법: cron 으로 매일
+--   refresh materialized view concurrently private.weekly_rankings;
 
 -- ============================================
 -- RLS 정책
@@ -106,33 +147,99 @@ alter table cases enable row level security;
 alter table attempts enable row level security;
 alter table streaks enable row level security;
 
--- subscriptions: 본인 것만 조회/수정 가능
-create policy "본인 구독 정보 조회" on subscriptions for select using (auth.uid() = user_id);
-create policy "본인 구독 정보 수정" on subscriptions for update using (auth.uid() = user_id);
+-- --- subscriptions ---
+-- 조회만 허용. INSERT/UPDATE/DELETE 정책은 의도적으로 두지 않는다.
+-- 구독 상태는 토스 웹훅을 받은 서버가 secret key 로만 쓴다.
+-- (유저에게 update 를 열어주면 스스로 status='active' 로 바꿔 무료 구독이 된다)
+create policy "본인 구독 정보 조회" on subscriptions
+  for select to authenticated
+  using ((select auth.uid()) = user_id);
 
--- cases: published + (무료 미리보기 or 구독 active)만 조회 가능
-create policy "발행된 케이스 조회" on cases for select using (
-  status = 'published' and (
-    is_free_preview = true
-    or exists (
-      select 1 from subscriptions s
-      where s.user_id = auth.uid() and s.status = 'active'
+-- --- cases ---
+-- 역할(role)마다 SELECT 정책을 하나씩만 둔다.
+-- permissive 정책이 여러 개면 매 쿼리마다 전부 평가되므로 (advisor
+-- multiple_permissive_policies 경고), 조건을 한 정책 안에서 OR 로 합친다.
+--
+-- anon 과 authenticated 를 굳이 나누는 이유: 조건에 subscriptions 참조가 들어가면
+-- anon 조회 시 "permission denied for table subscriptions" 로 무료 미리보기까지
+-- 막힌다. anon 정책에는 그 참조를 넣지 않는다.
+create policy "무료 미리보기 조회" on cases
+  for select to anon
+  using (status = 'published' and is_free_preview = true);
+
+create policy "케이스 조회" on cases
+  for select to authenticated
+  using (
+    (
+      status = 'published' and (
+        is_free_preview = true
+        or exists (
+          select 1 from subscriptions s
+          where s.user_id = (select auth.uid()) and s.status = 'active'
+        )
+      )
     )
-  )
-);
--- draft/archived 케이스는 관리자만 조회 (created_by 본인, 1인 운영이라 단순화)
-create policy "관리자 전체 케이스 조회" on cases for select using (auth.uid() = created_by);
-create policy "관리자 케이스 작성/수정" on cases for all using (auth.uid() = created_by);
+    -- 관리자는 draft/archived 까지 전부. 흔한 경로가 아니므로 뒤에 둔다.
+    or private.is_admin()
+  );
 
--- attempts: 본인 기록만 조회/작성 가능
-create policy "본인 시도 기록 조회" on attempts for select using (auth.uid() = user_id);
-create policy "본인 시도 기록 작성" on attempts for insert with check (auth.uid() = user_id);
+create policy "관리자 케이스 작성" on cases
+  for insert to authenticated
+  with check (private.is_admin());
 
--- streaks: 본인 것만 조회, 갱신은 서버(Edge Function)에서만 수행하므로 update는 service_role만 허용
-create policy "본인 스트릭 조회" on streaks for select using (auth.uid() = user_id);
+create policy "관리자 케이스 수정" on cases
+  for update to authenticated
+  using (private.is_admin())
+  with check (private.is_admin());
+
+create policy "관리자 케이스 삭제" on cases
+  for delete to authenticated
+  using (private.is_admin());
+
+-- --- attempts ---
+-- 기록은 남기되 고치지 못하게 한다 (update/delete 정책 없음 = 거부).
+create policy "본인 시도 기록 조회" on attempts
+  for select to authenticated
+  using ((select auth.uid()) = user_id);
+
+create policy "본인 시도 기록 작성" on attempts
+  for insert to authenticated
+  with check ((select auth.uid()) = user_id);
+
+-- --- streaks ---
+-- 조회만. 갱신은 서버가 secret key 로 수행한다
+-- (유저에게 열어주면 스스로 master 등급이 된다).
+create policy "본인 스트릭 조회" on streaks
+  for select to authenticated
+  using ((select auth.uid()) = user_id);
 
 -- ============================================
--- 참고: 스트릭 갱신 로직은 애플리케이션/Edge Function에서 처리
--- last_played_week = date_trunc('week', now())로 비교해서
--- 이번 주 첫 플레이면 current_streak_weeks += 1, 한 주 이상 건너뛰었으면 0으로 리셋
+-- Data API 노출 권한
 -- ============================================
+grant usage on schema public to anon, authenticated;
+grant select on cases to anon, authenticated;
+grant select on subscriptions, attempts, streaks to authenticated;
+grant insert on attempts to authenticated;
+grant insert, update, delete on cases to authenticated;  -- 실제 통과 여부는 위 RLS 가 결정
+
+-- ============================================
+-- updated_at 자동 갱신
+-- ============================================
+create or replace function private.touch_updated_at()
+returns trigger
+language plpgsql
+security invoker
+set search_path = pg_temp
+as $fn$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$fn$;
+
+create trigger trg_subscriptions_updated_at before update on subscriptions
+  for each row execute function private.touch_updated_at();
+create trigger trg_cases_updated_at before update on cases
+  for each row execute function private.touch_updated_at();
+create trigger trg_streaks_updated_at before update on streaks
+  for each row execute function private.touch_updated_at();
