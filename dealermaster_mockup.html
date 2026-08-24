@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>딜러마스터 — 전체 목업</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+  :root{
+    --teal-50:#E1F5EE; --teal-100:#9FE1CB; --teal-400:#1D9E75; --teal-600:#0F6E56; --teal-800:#085041; --teal-900:#04342C;
+    --amber-50:#FAEEDA; --amber-400:#EF9F27; --amber-600:#854F0B; --amber-800:#633806;
+    --ink:#1C1C1A; --ink-2:#5C5B57; --ink-3:#8B8A85;
+    --paper:#FBFAF7; --card:#FFFFFF; --line:#E7E5DF;
+    --red:#B23A2E;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'Pretendard', -apple-system, sans-serif;
+    background:#EFEDE7;
+    color:var(--ink);
+    padding:32px 16px 64px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:420px; margin:0 auto;}
+
+  .nav{
+    display:flex; gap:6px; overflow-x:auto; margin-bottom:20px; padding-bottom:4px;
+  }
+  .nav button{
+    flex:0 0 auto; font-family:inherit; font-size:12.5px; font-weight:600;
+    padding:8px 13px; border-radius:20px; border:1px solid var(--line);
+    background:var(--card); color:var(--ink-2); cursor:pointer; white-space:nowrap;
+    transition:all .15s ease;
+  }
+  .nav button.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
+
+  .phone{
+    background:var(--paper);
+    border-radius:28px;
+    border:8px solid var(--ink);
+    overflow:hidden;
+    box-shadow:0 20px 50px rgba(0,0,0,.18);
+    min-height:720px;
+    position:relative;
+  }
+  .notch{
+    position:absolute; top:0; left:50%; transform:translateX(-50%);
+    width:120px; height:22px; background:var(--ink); border-radius:0 0 14px 14px; z-index:10;
+  }
+  .screen{ display:none; padding:40px 18px 24px; min-height:720px; }
+  .screen.active{ display:block; }
+
+  .eyebrow{ font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--teal-600); text-transform:uppercase; }
+  .suit{ font-size:11px; opacity:.55; letter-spacing:2px; }
+
+  /* ===== 랜딩 ===== */
+  .landing-hero{ padding-top:8px; }
+  .brand-mark{
+    display:flex; align-items:center; gap:8px; margin-bottom:34px;
+  }
+  .brand-mark .glyph{
+    width:34px; height:34px; border-radius:9px; background:var(--teal-800);
+    display:flex; align-items:center; justify-content:center; color:#fff; font-size:15px; font-weight:800;
+  }
+  .brand-mark .name{ font-size:16px; font-weight:800; letter-spacing:-.01em; }
+
+  h1.display{
+    font-family:'Pretendard'; font-weight:800; font-size:32px; line-height:1.28; letter-spacing:-.02em;
+    margin:0 0 14px;
+  }
+  h1.display em{ font-style:normal; color:var(--teal-600); }
+  .sub{ font-size:14.5px; color:var(--ink-2); line-height:1.65; margin-bottom:28px; }
+
+  .ruling-card{
+    background:var(--ink); color:#fff; border-radius:16px; padding:20px;
+    position:relative; overflow:hidden; margin-bottom:24px;
+  }
+  .ruling-card::before{
+    content:"♠"; position:absolute; right:-10px; top:-18px; font-size:110px; opacity:.08;
+  }
+  .ruling-card .label{ font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber-400); font-weight:700; margin-bottom:10px; }
+  .ruling-card .q{ font-size:14px; line-height:1.6; margin-bottom:14px; position:relative; z-index:1; }
+  .ruling-card .cta-row{ display:flex; align-items:center; justify-content:space-between; }
+  .timer-pill{ font-size:11.5px; background:rgba(255,255,255,.12); padding:5px 10px; border-radius:20px; font-weight:600; }
+
+  .btn-primary{
+    width:100%; padding:15px; border-radius:12px; border:none; background:var(--teal-800);
+    color:#fff; font-family:inherit; font-size:14.5px; font-weight:700; cursor:pointer; letter-spacing:-.01em;
+  }
+  .btn-ghost{
+    width:100%; padding:14px; border-radius:12px; border:1px solid var(--line); background:transparent;
+    color:var(--ink-2); font-family:inherit; font-size:13.5px; font-weight:600; cursor:pointer; margin-top:10px;
+  }
+  .free-note{ text-align:center; font-size:12px; color:var(--ink-3); margin-top:14px; }
+
+  /* ===== 대시보드 ===== */
+  .top-row{ display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
+  .greet .who{ font-size:12px; color:var(--ink-3); margin-bottom:3px; }
+  .greet .name{ font-size:19px; font-weight:800; letter-spacing:-.01em; }
+  .streak-chip{
+    display:flex; align-items:center; gap:6px; background:var(--amber-50); color:var(--amber-800);
+    padding:7px 13px; border-radius:20px; font-size:12.5px; font-weight:700;
+  }
+
+  .grade-card{
+    background:var(--teal-800); border-radius:16px; padding:18px 20px; margin-bottom:18px;
+    display:flex; justify-content:space-between; align-items:center; color:#fff;
+  }
+  .grade-card .tier{ font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; opacity:.7; margin-bottom:4px; }
+  .grade-card .tier-name{ font-size:19px; font-weight:800; }
+  .grade-card .badge{
+    width:46px; height:46px; border-radius:50%; background:rgba(255,255,255,.14);
+    display:flex; align-items:center; justify-content:center; font-size:20px;
+  }
+
+  .section-label{ font-size:12.5px; font-weight:700; color:var(--ink-2); margin:22px 0 10px; }
+
+  .axis-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .axis-card{
+    background:var(--card); border:1px solid var(--line); border-radius:14px; padding:15px;
+  }
+  .axis-card.locked{ opacity:.55; }
+  .axis-card .ic{ font-size:19px; margin-bottom:9px; display:block; }
+  .axis-card .t{ font-size:13.5px; font-weight:700; margin-bottom:2px; }
+  .axis-card .d{ font-size:11.5px; color:var(--ink-3); }
+
+  .today-card{
+    background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-top:10px;
+    display:flex; align-items:center; gap:12px;
+  }
+  .today-card .num{ font-size:22px; font-weight:800; color:var(--teal-600); }
+  .today-card .txt{ font-size:12.5px; color:var(--ink-2); }
+
+  /* ===== 케이스 플레이 ===== */
+  .play-top{ display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+  .back-x{ font-size:20px; color:var(--ink-3); }
+  .progress-track{ flex:1; height:4px; background:var(--line); border-radius:4px; margin:0 12px; overflow:hidden; }
+  .progress-fill{ width:60%; height:100%; background:var(--teal-600); }
+  .timer-badge{
+    font-size:13px; font-weight:800; color:var(--red); background:#FBEBE8; padding:4px 10px; border-radius:20px;
+  }
+  .case-suit{ text-align:center; font-size:12px; letter-spacing:6px; color:var(--ink-3); margin-bottom:14px; }
+  .case-situation{
+    background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; font-size:14.5px;
+    line-height:1.7; margin-bottom:18px;
+  }
+  .case-situation .tag{ display:inline-block; font-size:10.5px; font-weight:700; color:var(--teal-600); background:var(--teal-50); padding:3px 9px; border-radius:20px; margin-bottom:10px; }
+  textarea.answer{
+    width:100%; min-height:90px; border:1px solid var(--line); border-radius:12px; padding:13px;
+    font-family:inherit; font-size:13.5px; resize:none; background:var(--card);
+  }
+  textarea.answer:focus{ outline:none; border-color:var(--teal-600); }
+  .char-count{ text-align:right; font-size:11px; color:var(--ink-3); margin:6px 0 18px; }
+
+  /* ===== 결과 ===== */
+  .verdict-flip{
+    background:var(--teal-800); border-radius:18px; padding:26px 20px; text-align:center; color:#fff; margin-bottom:18px;
+    position:relative; overflow:hidden;
+  }
+  .verdict-flip::after{ content:"♦"; position:absolute; left:-14px; bottom:-24px; font-size:120px; opacity:.08; }
+  .verdict-flip .mark{ font-size:34px; margin-bottom:8px; }
+  .verdict-flip .word{ font-size:19px; font-weight:800; margin-bottom:4px; }
+  .verdict-flip .rule{ font-size:11.5px; opacity:.75; }
+
+  .feedback-card{
+    background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px;
+  }
+  .feedback-card .h{ font-size:12px; font-weight:700; color:var(--ink-2); margin-bottom:8px; }
+  .feedback-card p{ font-size:13.5px; line-height:1.7; color:var(--ink); }
+
+  .stat-row{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin:18px 0; }
+  .stat-box{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; text-align:center; }
+  .stat-box .v{ font-size:17px; font-weight:800; color:var(--teal-600); }
+  .stat-box .l{ font-size:10.5px; color:var(--ink-3); margin-top:2px; }
+
+  /* ===== 관리자 ===== */
+  .admin-head{ font-size:12px; font-weight:700; color:var(--amber-800); background:var(--amber-50); display:inline-block; padding:5px 11px; border-radius:20px; margin-bottom:16px; }
+  .admin-row{
+    display:flex; justify-content:space-between; align-items:center; padding:13px 0; border-bottom:1px solid var(--line);
+  }
+  .admin-row:last-child{ border-bottom:none; }
+  .admin-row .t{ font-size:13.5px; font-weight:600; margin-bottom:3px; }
+  .admin-row .meta{ font-size:11px; color:var(--ink-3); }
+  .status-pill{ font-size:10.5px; font-weight:700; padding:4px 9px; border-radius:20px; }
+  .status-pill.draft{ background:#F1EFE8; color:var(--ink-2); }
+  .status-pill.published{ background:var(--teal-50); color:var(--teal-800); }
+  .fab{
+    position:absolute; bottom:22px; right:18px; width:52px; height:52px; border-radius:50%;
+    background:var(--ink); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px;
+    border:none; box-shadow:0 8px 18px rgba(0,0,0,.25);
+  }
+
+  /* ===== 축2 사이드팟 계산기 / 축3 플랍게임 트레이너 ===== */
+  .track-label{ display:flex; align-items:center; gap:7px; margin-bottom:14px; }
+  .track-label .dot{ width:7px; height:7px; border-radius:50%; background:var(--teal-600); }
+  .track-label span{ font-size:11.5px; font-weight:700; color:var(--teal-600); letter-spacing:.03em; }
+
+  .stack-row{ display:flex; gap:8px; margin-bottom:16px; }
+  .stack-chip{
+    flex:1; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 8px; text-align:center;
+  }
+  .stack-chip.allin{ border-color:var(--red); background:#FBEBE8; }
+  .stack-chip .p{ font-size:11px; color:var(--ink-3); margin-bottom:4px; }
+  .stack-chip .amt{ font-size:14px; font-weight:800; }
+  .stack-chip .st{ font-size:9.5px; font-weight:700; color:var(--red); margin-top:3px; }
+
+  .event-log{
+    background:var(--ink); color:#EFEDE7; border-radius:12px; padding:14px 15px; margin-bottom:16px; font-size:12px; line-height:2;
+  }
+  .event-log .ev{ opacity:.55; }
+  .event-log .ev.live{ opacity:1; color:var(--amber-400); font-weight:700; }
+
+  .pot-input-group{ display:flex; gap:10px; margin-bottom:8px; }
+  .pot-field{ flex:1; }
+  .pot-field label{ display:block; font-size:11px; color:var(--ink-2); font-weight:600; margin-bottom:6px; }
+  .pot-field input{
+    width:100%; border:1px solid var(--line); border-radius:10px; padding:11px 10px; font-family:inherit;
+    font-size:14px; font-weight:700; background:var(--card);
+  }
+  .pot-field input:focus{ outline:none; border-color:var(--teal-600); }
+
+  .board-cards{ display:flex; gap:7px; justify-content:center; margin-bottom:20px; }
+  .pcard{
+    width:42px; height:58px; border-radius:7px; background:#fff; border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:800;
+  }
+  .pcard.red{ color:var(--red); }
+  .pcard.black{ color:var(--ink); }
+
+  .hand-row{ display:flex; align-items:center; justify-content:space-between; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:11px 13px; margin-bottom:9px; }
+  .hand-row .who{ font-size:12.5px; font-weight:700; width:44px; }
+  .hand-row .mini{ display:flex; gap:5px; }
+  .mcard{ width:26px; height:36px; border-radius:5px; background:#fff; border:1px solid var(--line); font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .mcard.red{ color:var(--red); }
+  .pick-btn{
+    border:1px solid var(--line); background:var(--card); border-radius:20px; padding:5px 13px; font-size:11.5px;
+    font-family:inherit; font-weight:700; color:var(--ink-2);
+  }
+
+  /* ===== 칩 범례 ===== */
+  .chip-legend{ display:flex; gap:7px; margin-bottom:16px; overflow-x:auto; }
+  .chip{
+    flex:0 0 auto; width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:8.5px; font-weight:800; color:#fff; border:2px solid rgba(255,255,255,.5); box-shadow:inset 0 0 0 2px rgba(0,0,0,.12);
+  }
+  .chip.c100{ background:#B4B2A9; }
+  .chip.c500{ background:#378ADD; }
+  .chip.c1000{ background:#1D9E75; }
+  .chip.c5000{ background:#2C2C2A; }
+  .chip.c25000{ background:#7F77DD; }
+  .chip.c100000{ background:var(--amber-400); color:#4A2F02; }
+
+  /* ===== 서브탭 (딜러교육 계산 모드) ===== */
+  .subtab-row{ display:flex; gap:6px; margin-bottom:16px; }
+  .subtab{
+    flex:1; text-align:center; font-size:11.5px; font-weight:700; padding:9px 4px; border-radius:10px;
+    border:1px solid var(--line); background:var(--card); color:var(--ink-2); cursor:pointer;
+  }
+  .subtab.active{ background:var(--teal-800); color:#fff; border-color:var(--teal-800); }
+  .submode{ display:none; }
+  .submode.active{ display:block; }
+
+  .limit-box{
+    background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px;
+  }
+  .limit-box .row{ display:flex; justify-content:space-between; font-size:13px; padding:6px 0; border-bottom:1px solid var(--line); }
+  .limit-box .row:last-child{ border-bottom:none; }
+  .limit-box .row .k{ color:var(--ink-3); }
+  .limit-box .row .v{ font-weight:700; }
+
+  /* ===== 홀덤 테이블 좌석 배치 ===== */
+  .table-felt{
+    position:relative; width:100%; height:250px; background:var(--teal-800); border-radius:130px;
+    border:7px solid var(--teal-900); margin-bottom:18px; box-shadow:inset 0 0 30px rgba(0,0,0,.25);
+  }
+  .pot-center{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; color:#fff;
+  }
+  .pot-center .l{ font-size:9.5px; opacity:.65; letter-spacing:.05em; }
+  .pot-center .v{ font-size:16px; font-weight:800; }
+  .seat{ position:absolute; text-align:center; width:56px; }
+  .seat-avatar{
+    width:32px; height:32px; border-radius:50%; background:#fff; color:var(--teal-800); font-size:11px; font-weight:800;
+    display:flex; align-items:center; justify-content:center; margin:0 auto 3px; position:relative;
+  }
+  .seat-name{ font-size:9.5px; color:#fff; font-weight:700; }
+  .seat-stack{ font-size:9px; color:var(--amber-400); font-weight:700; }
+  .seat-tag{
+    position:absolute; top:-6px; right:-4px; font-size:7px; font-weight:800; background:var(--amber-400); color:#4A2F02;
+    padding:1.5px 4px; border-radius:8px;
+  }
+  .dealer-btn{
+    position:absolute; width:18px; height:18px; border-radius:50%; background:#fff; color:var(--ink);
+    font-size:9px; font-weight:900; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 4px rgba(0,0,0,.3);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="nav">
+    <button class="active" data-screen="landing">랜딩</button>
+    <button data-screen="dashboard">대시보드</button>
+    <button data-screen="play">TDA 케이스</button>
+    <button data-screen="dealer">딜러교육</button>
+    <button data-screen="mixgame">믹스게임</button>
+    <button data-screen="table">테이블뷰</button>
+    <button data-screen="result">결과</button>
+    <button data-screen="admin">관리자</button>
+  </div>
+
+  <div class="phone">
+    <div class="notch"></div>
+
+    <!-- 1. 랜딩 -->
+    <div class="screen active" id="landing">
+      <div class="landing-hero">
+        <div class="brand-mark"><div class="glyph">D</div><div class="name">딜러마스터</div></div>
+        <h1 class="display">판정을 배우는 게 아니라<br><em>판정력을 기른다</em></h1>
+        <p class="sub">TDA 규정 기반 실전 케이스를 제한시간 안에 풀며 TD 판단력을 훈련합니다.</p>
+
+        <div class="ruling-card">
+          <div class="label">무료 체험 · 케이스 1</div>
+          <div class="q">"올인 선언 후 카드가 노출됐습니다. 다른 플레이어들의 베팅 액션이 아직 남아있는 상황입니다. 어떻게 처리해야 할까요?"</div>
+          <div class="cta-row"><span class="timer-pill">⏱ 30초</span><span class="suit">♠ ♥ ♦ ♣</span></div>
+        </div>
+
+        <button class="btn-primary">무료로 케이스 풀어보기</button>
+        <button class="btn-ghost">이미 회원이신가요? 로그인</button>
+        <p class="free-note">월 9,900원 · 언제든 해지 가능</p>
+      </div>
+    </div>
+
+    <!-- 2. 대시보드 -->
+    <div class="screen" id="dashboard">
+      <div class="top-row">
+        <div class="greet"><div class="who">환영합니다</div><div class="name">Sno 님</div></div>
+        <div class="streak-chip">🔥 3주 연속</div>
+      </div>
+
+      <div class="grade-card">
+        <div><div class="tier">현재 등급</div><div class="tier-name">시니어 딜러</div></div>
+        <div class="badge">🏅</div>
+      </div>
+
+      <div class="section-label">축 선택</div>
+      <div class="axis-grid">
+        <div class="axis-card"><span class="ic">⚖️</span><div class="t">TDA 룰</div><div class="d">오늘의 케이스 2개</div></div>
+        <div class="axis-card"><span class="ic">🎓</span><div class="t">딜러 교육</div><div class="d">사이드팟 계산기</div></div>
+      </div>
+      <div class="axis-card" style="margin-top:10px;"><span class="ic">🃏</span><div class="t">믹스게임 운영</div><div class="d">플랍 · 스터드 · 드로우 트레이너</div></div>
+
+      <div class="section-label">이번 주 진행</div>
+      <div class="today-card">
+        <div class="num">12/16</div>
+        <div class="txt">이번 주 케이스 정답률 75%<br>목표까지 4문제 남음</div>
+      </div>
+    </div>
+
+    <!-- 3. 케이스 플레이 -->
+    <div class="screen" id="play">
+      <div class="play-top">
+        <span class="back-x">✕</span>
+        <div class="progress-track"><div class="progress-fill"></div></div>
+        <span class="timer-badge">0:24</span>
+      </div>
+      <div class="case-suit">♠ ♥ ♦ ♣</div>
+      <div class="case-situation">
+        <span class="tag">Rule 45 · 다수 칩 벳</span>
+        노리밋 홀덤 블라인드 25-50. 포스트플랍에서 A가 1050으로 오픈 벳. B가 마지막 남은 칩(1000짜리 2개, 총 2000)을 조용히 앞으로 밀었습니다. B는 "레이즈"나 "올인"을 선언하지 않았습니다.
+        <br><br>
+        <strong>B의 액션은 콜인가요, 레이즈인가요? 그 근거를 설명해보세요.</strong>
+      </div>
+      <textarea class="answer" placeholder="여기에 답변을 입력하세요...">레이즈나 올인 선언이 없었고, 1000짜리 칩 하나만 빼도 콜 금액(1050)에 못 미치기 때문에 콜로 처리해야 합니다.</textarea>
+      <div class="char-count">62자</div>
+      <button class="btn-primary">답변 제출</button>
+    </div>
+
+    <!-- 축2 딜러교육: 벳 계산 트레이너 -->
+    <div class="screen" id="dealer">
+      <div class="play-top">
+        <span class="back-x">✕</span>
+        <div class="progress-track"><div class="progress-fill" style="width:40%;"></div></div>
+        <span class="timer-badge">0:31</span>
+      </div>
+      <div class="track-label"><span class="dot"></span><span>딜러교육 · 게임A · 벳 계산 트레이너</span></div>
+
+      <div class="chip-legend">
+        <div class="chip c100">100</div>
+        <div class="chip c500">500</div>
+        <div class="chip c1000">1K</div>
+        <div class="chip c5000">5K</div>
+        <div class="chip c25000">25K</div>
+        <div class="chip c100000">100K</div>
+      </div>
+
+      <div class="subtab-row">
+        <div class="subtab active" data-sub="sidepot">사이드팟</div>
+        <div class="subtab" data-sub="potlimit">팟리밋</div>
+        <div class="subtab" data-sub="fixedlimit">픽스드리밋</div>
+      </div>
+
+      <div class="submode active" id="sidepot">
+        <div class="stack-row">
+          <div class="stack-chip allin"><div class="p">A</div><div class="amt">600</div><div class="st">ALL-IN</div></div>
+          <div class="stack-chip"><div class="p">B</div><div class="amt">5,500</div></div>
+          <div class="stack-chip"><div class="p">C</div><div class="amt">5,500</div></div>
+        </div>
+        <div class="event-log">
+          <div class="ev">프리플랍 · A 600 올인, B·C 콜</div>
+          <div class="ev">플랍 · 체크 – 체크</div>
+          <div class="ev live">턴 · B 1,000 벳, C 콜</div>
+          <div class="ev">리버 대기 중</div>
+        </div>
+        <div class="pot-input-group">
+          <div class="pot-field"><label>메인팟</label><input type="text" value="1,800"></div>
+          <div class="pot-field"><label>사이드팟</label><input type="text" value="2,000"></div>
+        </div>
+        <div class="char-count">B·C 간 사이드팟만 정확히 분리했는지 확인하세요</div>
+      </div>
+
+      <div class="submode" id="potlimit">
+        <div class="limit-box">
+          <div class="row"><span class="k">게임</span><span class="v">PLO (팟리밋 오마하)</span></div>
+          <div class="row"><span class="k">블라인드</span><span class="v">500 / 1,000</span></div>
+          <div class="row"><span class="k">현재 팟</span><span class="v">5,000</span></div>
+          <div class="row"><span class="k">직전 벳</span><span class="v">2,500 (콜 시)</span></div>
+        </div>
+        <div class="event-log">
+          <div class="ev">프리플랍 · UTG 2,500 레이즈</div>
+          <div class="ev live">주인공 콜 시 팟은 얼마가 되며, 최대 레이즈(팟사이즈)는?</div>
+        </div>
+        <div class="pot-input-group">
+          <div class="pot-field"><label>콜 후 팟</label><input type="text" value="10,000"></div>
+          <div class="pot-field"><label>최대 레이즈 총액</label><input type="text" value="12,500"></div>
+        </div>
+        <div class="char-count">Rule 54 · 팟사이즈 레이즈 = 콜 금액 + (콜 후 팟)</div>
+      </div>
+
+      <div class="submode" id="fixedlimit">
+        <div class="limit-box">
+          <div class="row"><span class="k">게임</span><span class="v">픽스드리밋 홀덤</span></div>
+          <div class="row"><span class="k">벳 단위</span><span class="v">스몰벳 1,000 / 빅벳 2,000</span></div>
+          <div class="row"><span class="k">현재 스트릿</span><span class="v">턴 (빅벳 적용)</span></div>
+          <div class="row"><span class="k">현재까지 레이즈</span><span class="v">2회</span></div>
+        </div>
+        <div class="event-log">
+          <div class="ev">턴 · A 2,000 벳, B 레이즈 2,000</div>
+          <div class="ev live">주인공이 리레이즈하면 총 얼마를 내야 하나?</div>
+        </div>
+        <div class="pot-input-group">
+          <div class="pot-field"><label>리레이즈 총액</label><input type="text" value="6,000"></div>
+          <div class="pot-field"><label>남은 레이즈 횟수</label><input type="text" value="1회"></div>
+        </div>
+        <div class="char-count">Rule 48 · 헤즈업 아니면 하우스 레이즈 캡 적용</div>
+      </div>
+
+      <button class="btn-primary" style="margin-top:14px;">계산 제출</button>
+    </div>
+
+    <!-- 축3 믹스게임: 플랍게임 트레이너 -->
+    <div class="screen" id="mixgame">
+      <div class="play-top">
+        <span class="back-x">✕</span>
+        <div class="progress-track"><div class="progress-fill" style="width:75%;"></div></div>
+        <span class="timer-badge">0:08</span>
+      </div>
+      <div class="track-label"><span class="dot"></span><span>믹스게임 · 게임C · 오마하 하이로우 승자판정</span></div>
+
+      <div class="board-cards">
+        <div class="pcard black">K♠</div>
+        <div class="pcard red">9♦</div>
+        <div class="pcard black">4♣</div>
+        <div class="pcard red">7♥</div>
+        <div class="pcard black">2♠</div>
+      </div>
+
+      <div class="hand-row">
+        <div class="who">A</div>
+        <div class="mini"><div class="mcard">Q♠</div><div class="mcard red">J♦</div><div class="mcard">8♣</div><div class="mcard red">3♥</div></div>
+        <button class="pick-btn">승자</button>
+      </div>
+      <div class="hand-row">
+        <div class="who">B</div>
+        <div class="mini"><div class="mcard red">A♥</div><div class="mcard">5♠</div><div class="mcard red">2♦</div><div class="mcard">6♣</div></div>
+        <button class="pick-btn">승자</button>
+      </div>
+      <div class="hand-row">
+        <div class="who">C</div>
+        <div class="mini"><div class="mcard">K♣</div><div class="mcard red">Q♥</div><div class="mcard">J♠</div><div class="mcard red">4♦</div></div>
+        <button class="pick-btn">승자</button>
+      </div>
+
+      <p style="font-size:11.5px; color:var(--ink-3); text-align:center; margin-top:6px;">하이 승자와 로우 승자를 각각 선택하세요</p>
+      <button class="btn-primary" style="margin-top:16px;">판정 제출</button>
+    </div>
+
+    <!-- 홀덤테이블 좌석 배치 -->
+    <div class="screen" id="table">
+      <div class="track-label"><span class="dot"></span><span>테이블뷰 · 6-max 좌석 배치</span></div>
+
+      <div class="chip-legend">
+        <div class="chip c100">100</div>
+        <div class="chip c500">500</div>
+        <div class="chip c1000">1K</div>
+        <div class="chip c5000">5K</div>
+        <div class="chip c25000">25K</div>
+        <div class="chip c100000">100K</div>
+      </div>
+
+      <div class="table-felt">
+        <div class="pot-center"><div class="l">POT</div><div class="v">8,400</div></div>
+
+        <div class="seat" style="left:142px; top:198px;">
+          <div class="seat-avatar">나</div>
+          <div class="seat-name">Seat 1</div>
+          <div class="seat-stack">42,500</div>
+        </div>
+        <div class="seat" style="left:18px; top:150px;">
+          <div class="seat-avatar">B<span class="seat-tag">SB</span></div>
+          <div class="seat-name">Seat 2</div>
+          <div class="seat-stack">18,000</div>
+        </div>
+        <div class="seat" style="left:18px; top:38px;">
+          <div class="seat-avatar">C<span class="seat-tag">BB</span></div>
+          <div class="seat-name">Seat 3</div>
+          <div class="seat-stack">25,500</div>
+        </div>
+        <div class="seat" style="left:142px; top:-8px;">
+          <div class="seat-avatar">D</div>
+          <div class="seat-name">Seat 4</div>
+          <div class="seat-stack">61,000</div>
+        </div>
+        <div class="seat" style="left:266px; top:38px;">
+          <div class="seat-avatar">E</div>
+          <div class="seat-name">Seat 5</div>
+          <div class="seat-stack">9,600</div>
+        </div>
+        <div class="seat" style="left:266px; top:150px;">
+          <div class="seat-avatar">F</div>
+          <div class="seat-name">Seat 6</div>
+          <div class="seat-stack">33,000</div>
+        </div>
+
+        <div class="dealer-btn" style="left:200px; top:-2px;">D</div>
+      </div>
+
+      <div class="feedback-card">
+        <div class="h">이번 훈련</div>
+        <p>Seat 4(딜러버튼)가 다음 핸드 버튼 이동을 어디로 해야 하는지, Seat 2·3의 블라인드 포스팅이 맞는지 확인하세요.</p>
+      </div>
+      <button class="btn-primary">좌석 배치 판정 시작</button>
+    </div>
+
+    <!-- 4. 결과 -->
+    <div class="screen" id="result">
+      <div class="verdict-flip">
+        <div class="mark">✓</div>
+        <div class="word">정답입니다</div>
+        <div class="rule">Rule 45-A · 다수의 칩 벳</div>
+      </div>
+      <div class="feedback-card">
+        <div class="h">AI 피드백</div>
+        <p>정확합니다. 레이즈나 올인을 먼저 선언하지 않은 상태에서 낸 다수 칩 벳은, 칩 하나를 빼도 콜 금액에 못 미치면 콜로 처리됩니다. B의 마지막 칩 전부였다는 사실은 판정과 무관합니다.</p>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="v">12초</div><div class="l">응답 시간</div></div>
+        <div class="stat-box"><div class="v">+1</div><div class="l">연속 정답</div></div>
+        <div class="stat-box"><div class="v">18/24</div><div class="l">이번 달</div></div>
+      </div>
+      <button class="btn-primary">다음 케이스</button>
+    </div>
+
+    <!-- 5. 관리자 -->
+    <div class="screen" id="admin">
+      <div class="admin-head">관리자 · 콘텐츠 발행</div>
+      <div class="section-label" style="margin-top:0;">케이스 목록</div>
+
+      <div class="admin-row">
+        <div><div class="t">사이드팟 계산 — 3명 올인</div><div class="meta">축2 · 게임A · 발행 예정 8/25</div></div>
+        <span class="status-pill draft">draft</span>
+      </div>
+      <div class="admin-row">
+        <div><div class="t">브링인 판단 — 동률 업카드</div><div class="meta">축3 · 게임D · 검수 대기</div></div>
+        <span class="status-pill draft">draft</span>
+      </div>
+      <div class="admin-row">
+        <div><div class="t">언더콜 처리 — 오픈 벳</div><div class="meta">축1 · TDA · Rule 51-B</div></div>
+        <span class="status-pill published">published</span>
+      </div>
+      <div class="admin-row">
+        <div><div class="t">최소 레이즈 금액 계산</div><div class="meta">축1 · TDA · Rule 43-A</div></div>
+        <span class="status-pill published">published</span>
+      </div>
+      <div class="admin-row">
+        <div><div class="t">버튼 위치 오류 처리</div><div class="meta">축1 · TDA · Rule 34-A</div></div>
+        <span class="status-pill published">published</span>
+      </div>
+
+      <button class="fab">+</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const buttons = document.querySelectorAll('.nav button');
+  const screens = document.querySelectorAll('.screen');
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      buttons.forEach(b => b.classList.remove('active'));
+      screens.forEach(s => s.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.screen).classList.add('active');
+    });
+  });
+
+  const subtabs = document.querySelectorAll('.subtab');
+  const submodes = document.querySelectorAll('.submode');
+  subtabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      subtabs.forEach(t => t.classList.remove('active'));
+      submodes.forEach(m => m.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.sub).classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>
