@@ -20,6 +20,9 @@
 | Supabase 클라이언트 3종 (browser / server / proxy) | ✅ | `app/src/lib/supabase/` |
 | 세션 자동 갱신 (Next 16 `proxy.ts`) | ✅ | 빌드 출력에 `ƒ Proxy (Middleware)` |
 | Anthropic 클라이언트 + 모델 상수 | ✅ | `app/src/lib/ai/anthropic.ts` |
+| 클라우드 Supabase 프로젝트 (dealermaster / ap-northeast-2) | ✅ | 마이그레이션 2개 적용, advisors security 0건 |
+| 관리자 계정 등록 (tmdgh2qn@gmail.com) | ✅ | `private.admins` 1행, is_admin() 판정 검증 |
+| 로컬 Supabase 스택 (포트 544xx) | ✅ | UNIQN 스택과 동시 실행 가능 |
 | 타입체크 / 린트 / 프로덕션 빌드 | ✅ | `tsc --noEmit` exit 0, `eslint` 0 error, `next build` 성공 |
 
 ### 확인된 로컬 도구
@@ -47,7 +50,7 @@ npx supabase migration up   # 스키마 적용
 ```
 로컬 없이 클라우드 프로젝트만 쓸 거면 이 단계는 건너뛰어도 된다.
 
-### B-2. Supabase — 기존 계정에 새 조직 + 새 프로젝트
+### B-2. ~~Supabase — 기존 계정에 새 조직 + 새 프로젝트~~ ✅ 완료
 UNIQN과 **같은 계정**을 쓰되, **새 Organization**을 만들어 그 안에 프로젝트를 생성한다.
 
 조직을 나누는 이유: 한 조직 안에서는 Free/Pro 플랜을 섞을 수 없다. 같은 조직에 두면
@@ -131,7 +134,7 @@ npm run db:diff     # 스키마 변경분 확인
 
 - [x] 1. ~~Next.js + Vercel 프로젝트 초기화~~
 - [ ] 2. TDA use policy 확인 ← **B-0, 코딩보다 우선**
-- [ ] 3. Supabase 신규 프로젝트 생성 + 스키마 실행 ← **B-2**
+- [x] 3. ~~Supabase 신규 프로젝트 생성 + 스키마 실행~~
 - [ ] 4. 토스페이먼츠 심사 신청 ← **B-4, 병렬**
 - [ ] 5. Auth (이메일/소셜 로그인) 구현
 - [ ] 6. 케이스 30개 seed 스크립트 (`05_pilot_cases_v1.md` + `11_pilot_cases_v2.md` → `cases` 테이블)
