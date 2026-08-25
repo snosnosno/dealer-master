@@ -142,19 +142,18 @@ describe('불변성', () => {
 })
 
 describe('칩 보존 가드', () => {
-  it('현재 벳보다 낮은 목표 벳은 던진다 — 음수 delta 로 칩이 생기는 것을 막는다', () => {
-    // 블라인드 200 을 낸 좌석이 같은 라운드에 앤티 25 를 목표치로 내면
-    // to(25) < bet(200) 이라 스택이 늘고 투입액이 줄어든다.
+  it('현재 벳보다 낮은 레이즈·벳은 던진다 — 음수 delta 로 칩이 생기는 것을 막는다', () => {
+    // 이미 200 을 벳한 좌석의 목표를 50 으로 낮추면 delta 가 음수가 되어
+    // 스택이 늘고 투입액이 줄어든다. post_blind 는 가산이라 이 경로로 못 들어오므로
+    // 가드를 실제로 지키는 것은 player_action 쪽이다.
     let s = initialState(seats, 0)
     s = applyEvent(s, { type: 'post_blind', seat: 2, amount: 200, kind: 'bb' })
     expect(() =>
-      applyEvent(s, { type: 'post_blind', seat: 2, amount: 25, kind: 'ante' }),
-    ).toThrow(/목표 벳 25 이 현재 벳 200 보다 작다/)
-
-    // player_action 경로도 같은 헬퍼를 쓰므로 함께 막힌다
-    expect(() =>
       applyEvent(s, { type: 'player_action', seat: 2, action: { kind: 'raise', to: 50 } }),
-    ).toThrow(/좌석 2\(0-based\)/)
+    ).toThrow(/좌석 2\(0-based\) 의 목표 벳 50 이 현재 벳 200 보다 작다/)
+    expect(() =>
+      applyEvent(s, { type: 'player_action', seat: 2, action: { kind: 'bet', to: 0 } }),
+    ).toThrow(/목표 벳 0 이 현재 벳 200 보다 작다/)
   })
 
   it('같은 금액으로의 재지정은 던지지 않는다 — 이미 맞춘 벳에 콜하는 정상 경로', () => {
@@ -177,5 +176,27 @@ describe('칩 보존 가드', () => {
     const paid = applyEvent(s, { type: 'award_pot', potIndex: 0, seat: 1, amount: 100 })
     expect(paid.pot).toBe(0)
     expect(paid.seats[1].stack).toBe(12500)
+  })
+})
+
+describe('post_blind 가산 의미론', () => {
+  // amount 는 '이만큼 낸다' 는 가산액이다. 앤티와 블라인드를 같은 좌석이 낼 때
+  // 순서와 무관하게 합계가 같아야 한다 — 25 + 200 = 225.
+  it('앤티를 먼저 내도 블라인드와 합산된다', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'post_blind', seat: 2, amount: 25, kind: 'ante' })
+    s = applyEvent(s, { type: 'post_blind', seat: 2, amount: 200, kind: 'bb' })
+    expect(s.contributed[2]).toBe(225)
+    expect(s.seats[2].bet).toBe(225)
+    expect(s.seats[2].stack).toBe(47000 - 225)
+  })
+
+  it('블라인드를 먼저 내도 앤티와 합산된다 — 순서가 결과를 바꾸지 않는다', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'post_blind', seat: 2, amount: 200, kind: 'bb' })
+    s = applyEvent(s, { type: 'post_blind', seat: 2, amount: 25, kind: 'ante' })
+    expect(s.contributed[2]).toBe(225)
+    expect(s.seats[2].bet).toBe(225)
+    expect(s.seats[2].stack).toBe(47000 - 225)
   })
 })

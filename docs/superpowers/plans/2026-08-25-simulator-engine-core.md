@@ -817,6 +817,9 @@ export type PlayerAction =
 
 export type HandEvent =
   | { type: 'move_button'; toSeat: number }
+  /** amount 는 목표치가 아니라 '이만큼 낸다' 는 **가산액**이다. 앤티와 블라인드를
+   *  같은 좌석이 낼 때 순서와 무관하게 합산돼야 한다 (25 + 200 = 225).
+   *  목표치로 다루면 앤티가 블라인드에 흡수되거나(과소 징수) 음수 delta 가 된다. */
   | { type: 'post_blind'; seat: number; amount: number; kind: 'sb' | 'bb' | 'ante' }
   | { type: 'deal_hole'; seat: number; card: Card }
   | { type: 'burn' }
@@ -904,7 +907,8 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
       return { ...state, buttonSeat: e.toSeat }
 
     case 'post_blind': {
-      const { seats, contributed } = raiseBetTo(state, e.seat, e.amount)
+      // amount 는 가산액이다 — 목표치가 아니다 (위 HandEvent 주석 참조)
+      const { seats, contributed } = raiseBetTo(state, e.seat, state.seats[e.seat].bet + e.amount)
       return { ...state, seats, contributed }
     }
 
@@ -974,7 +978,7 @@ export function stateAt(init: HandState, events: HandEvent[], index: number): Ha
 - [ ] **Step 5: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- reduce`
-Expected: PASS, 14 tests
+Expected: PASS, 16 tests
 
 - [ ] **Step 6: 커밋**
 

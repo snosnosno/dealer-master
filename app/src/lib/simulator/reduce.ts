@@ -67,7 +67,10 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
       return { ...state, buttonSeat: e.toSeat }
 
     case 'post_blind': {
-      const { seats, contributed } = raiseBetTo(state, e.seat, e.amount)
+      // amount 는 목표치가 아니라 '이만큼 낸다' 는 가산액이다. 블라인드는 bet 이 0 일 때
+      // 내므로 sb/bb 는 동작이 같고, 앤티는 블라인드와 어느 순서로 와도 합계가 옳아진다.
+      // 목표치로 다루면 앤티가 블라인드에 흡수되거나(과소 징수) 음수 delta 가 된다.
+      const { seats, contributed } = raiseBetTo(state, e.seat, state.seats[e.seat].bet + e.amount)
       return { ...state, seats, contributed }
     }
 
