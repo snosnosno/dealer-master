@@ -4,6 +4,7 @@ import { initialState, stateAt, applyEvent } from './reduce'
 import { buildPots } from './pots'
 import { nlh } from './rulesets/nlh'
 import type { HandState } from './types'
+import type { DecisionKind, Hand } from './generate'
 
 describe('generateHand — 결정론', () => {
   it('같은 시드는 같은 핸드를 만든다', () => {
@@ -131,7 +132,7 @@ describe('generateHand — 제약', () => {
  * lastRaiseSize·canRaise 는 상태에 남지 않고 라운드 진행에서만 나오는 값이라
  * 이벤트 열을 걸으며 재구성하는 것 말고는 밖에서 알 방법이 없다.
  */
-function assertEveryActionLegal(seed: string, opts: { require?: ['calculation'] } = {}) {
+function assertEveryActionLegal(seed: string, opts: { require?: DecisionKind[] } = {}) {
   const hand = generateHand({ seed, ...opts })
   const bb = hand.blinds.bb
   let state: HandState = initialState(hand.seats, hand.buttonSeat)
@@ -194,6 +195,7 @@ describe('generateHand — 규칙 준수', () => {
     for (let n = 0; n < 200; n++) total += assertEveryActionLegal('legal-' + n)
     for (let n = 0; n < 60; n++) {
       total += assertEveryActionLegal('legal-calc-' + n, { require: ['calculation'] })
+      total += assertEveryActionLegal('legal-sd-' + n, { require: ['showdown'] })
     }
     // 액션이 거의 없는 핸드만 뽑혔다면 위 단언들이 아무것도 안 본 것이다.
     expect(total).toBeGreaterThan(1000)
@@ -226,6 +228,140 @@ describe('generateHand — 규칙 준수', () => {
           hand.seats.reduce((a, s) => a + s.stack, 0),
         )
       }
+    }
+  })
+})
+
+/**
+ * 마지막으로 "베팅이 있었던" 라운드의 마지막 공격자를 이벤트 열에서 되찾는다.
+ * 생성기 내부 변수를 믿지 않고 상태 델타로만 판정한다 — 어떤 액션이 공격이었나는
+ * "그 좌석의 벳이 직전 최고 벳을 넘겼나"로 결정된다.
+ * 라운드에 액션이 하나도 없었으면(전원 올인) 앞 라운드의 값을 덮어쓰지 않는다.
+ */
+function lastRoundAggressor(hand: Hand): number | null {
+  const init = initialState(hand.seats, hand.buttonSeat)
+  let settled: number | null = null
+  let roundHasAction = false
+  let roundAggressor: number | null = null
+
+  hand.events.forEach((e, i) => {
+    if (e.type === 'collect_bets') {
+      if (roundHasAction) settled = roundAggressor
+      roundHasAction = false
+      roundAggressor = null
+      return
+    }
+    if (e.type !== 'player_action') return
+    roundHasAction = true
+    const before = stateAt(init, hand.events, i)
+    const maxBefore = Math.max(...before.seats.map((x) => x.bet))
+    const after = stateAt(init, hand.events, i + 1)
+    if (after.seats[e.seat].bet > maxBefore) roundAggressor = e.seat
+  })
+  return settled
+}
+
+describe('generateHand — 쇼다운 절차', () => {
+  it('공개 순서는 마지막 공격자부터, 공격자가 없으면 버튼 왼쪽부터 시계방향이다', () => {
+    let withAggressor = 0
+    let withoutAggressor = 0
+
+    for (let seatCount = 3; seatCount <= 9; seatCount++) {
+      for (let n = 0; n < 60; n++) {
+        const hand = generateHand({ seed: `order-${seatCount}-${n}`, seatCount })
+        const revealed = hand.events.filter((e) => e.type === 'showdown_reveal').map((e) => e.seat)
+        if (revealed.length === 0) continue
+
+        const aggressor = lastRoundAggressor(hand)
+        if (aggressor === null) withoutAggressor++
+        else withAggressor++
+
+        const start = aggressor ?? (hand.buttonSeat + 1) % seatCount
+        const final = stateAt(initialState(hand.seats, hand.buttonSeat), hand.events, hand.events.length)
+        const expected: number[] = []
+        for (let i = 0; i < seatCount; i++) {
+          const seat = (start + i) % seatCount
+          if (!final.seats[seat].folded) expected.push(seat)
+        }
+        expect(revealed, `시드 order-${seatCount}-${n}`).toEqual(expected)
+      }
+    }
+
+    // 양쪽 갈래를 다 밟지 않으면 이 테스트는 절반만 검증한 것이다.
+    expect(withAggressor).toBeGreaterThan(0)
+    expect(withoutAggressor).toBeGreaterThan(0)
+  })
+
+  it('액션이 끝난 뒤에 보드를 마저 깔 때는 카드를 먼저 공개한다', () => {
+    let runouts = 0
+
+    // 런아웃은 액션이 올인으로 닫힌 핸드에서만 생긴다. 배역 없는 핸드에는
+    // 올인이 사실상 없으므로(§ 사이드팟 빈도) calculation 시드를 함께 쓴다.
+    for (let seatCount = 3; seatCount <= 9; seatCount++) {
+      for (let n = 0; n < 60; n++) {
+        const hand = generateHand({
+          seed: `runout-${seatCount}-${n}`,
+          seatCount,
+          require: ['calculation'],
+        })
+        const init = initialState(hand.seats, hand.buttonSeat)
+        const first = hand.events.findIndex((e) => e.type === 'showdown_reveal')
+        if (first < 0) continue
+
+        const boardAfter = hand.events.findIndex((e, i) => i > first && e.type === 'deal_board')
+        if (boardAfter < 0) continue
+        runouts++
+
+        // 공개 뒤에 보드가 더 깔린다면, 그 시점에 아무도 액션할 수 없어야 한다.
+        // 액션할 사람이 남아 있는데 카드를 먼저 깠다면 그건 절차 위반이다.
+        const at = stateAt(init, hand.events, first)
+        const actable = at.seats.filter((x) => !x.folded && !x.allIn).length
+        expect(actable, `시드 runout-${seatCount}-${n}`).toBeLessThan(2)
+      }
+    }
+
+    // 런아웃 핸드를 하나도 안 만났다면 위 단언은 공허하다.
+    expect(runouts).toBeGreaterThan(0)
+  })
+})
+
+describe('generateHand — require 계약', () => {
+  it("showdown 을 요구하면 모든 시드에서 쇼다운이 나온다", () => {
+    let hands = 0
+    for (let seatCount = 3; seatCount <= 9; seatCount++) {
+      for (let n = 0; n < 40; n++) {
+        const seed = `sd-${seatCount}-${n}`
+        const hand = generateHand({ seed, seatCount, require: ['showdown'] })
+        const final = stateAt(initialState(hand.seats, hand.buttonSeat), hand.events, hand.events.length)
+        expect(final.seats.filter((s) => !s.folded).length, seed).toBeGreaterThanOrEqual(2)
+        expect(hand.events.some((e) => e.type === 'showdown_reveal'), seed).toBe(true)
+        expect(final.board, seed).toHaveLength(5)
+        hands++
+      }
+    }
+    expect(hands).toBe(280)
+  })
+
+  it('calculation 과 showdown 을 함께 요구해도 배역이 서로를 깨지 않는다', () => {
+    for (let seatCount = 3; seatCount <= 9; seatCount++) {
+      for (let n = 0; n < 20; n++) {
+        const seed = `both-${seatCount}-${n}`
+        const hand = generateHand({ seed, seatCount, require: ['calculation', 'showdown'] })
+        const final = stateAt(initialState(hand.seats, hand.buttonSeat), hand.events, hand.events.length)
+        const pots = buildPots(final.contributed, final.seats.map((s) => s.folded))
+        expect(pots.length, seed).toBeGreaterThanOrEqual(2)
+        expect(hand.events.some((e) => e.type === 'showdown_reveal'), seed).toBe(true)
+      }
+    }
+  })
+
+  it('배역이 필요 없는 두 종류는 모든 핸드에 구조적으로 존재한다', () => {
+    // procedure / action_validity 에 배역을 심지 않은 근거를 테스트로 고정한다.
+    for (let n = 0; n < 40; n++) {
+      const hand = generateHand({ seed: 'kinds-' + n, require: ['procedure', 'action_validity'] })
+      expect(hand.events.some((e) => e.type === 'deal_hole')).toBe(true)
+      expect(hand.events.some((e) => e.type === 'collect_bets')).toBe(true)
+      expect(hand.events.some((e) => e.type === 'player_action')).toBe(true)
     }
   })
 })

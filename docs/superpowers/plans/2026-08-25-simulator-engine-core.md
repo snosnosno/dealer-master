@@ -2123,6 +2123,13 @@ Expected: FAIL — `Failed to resolve import "./generate"`
 `src/lib/simulator/generate.ts`:
 
 ```ts
+/**
+ * 결정론적 핸드 생성기.
+ *
+ * 시드 하나에서 완결된 노리밋 홀덤 핸드 하나를 만든다. 무작위성은 전부
+ * createRng(seed) 하나를 통과한다 — Math.random() 이 한 번이라도 섞이면
+ * 같은 시드가 다른 핸드를 만들어 재현이 불가능한 버그가 된다.
+ */
 import { makeDeck, shuffle, type Card } from './cards'
 import { createRng, type Rng } from './rng'
 import { initialState, applyEvent } from './reduce'
@@ -2171,10 +2178,9 @@ type StackPlan = {
   shoveSeats: number[]
   /** 두 올인을 모두 커버하며 반드시 콜하는 자리 */
   coverSeat: number | null
+  /** 어느 스트리트에서도 폴드하지 않아 반드시 쇼다운까지 가는 두 자리 */
+  showdownSeats: number[]
 }
-
-/** 배역이 없는 라운드(프리플랍 외)용 */
-const NO_PLAN: StackPlan = { stacks: [], shoveSeats: [], coverSeat: null }
 
 /** 서로 다른 좌석 k 개를 결정론적으로 고른다. */
 function pickDistinctSeats(rng: Rng, count: number, k: number): number[] {
@@ -2184,17 +2190,28 @@ function pickDistinctSeats(rng: Rng, count: number, k: number): number[] {
   return out
 }
 
-function pickStacks(rng: Rng, count: number, needAllin: boolean): StackPlan {
+function pickStacks(rng: Rng, count: number, needAllin: boolean, needShowdown: boolean): StackPlan {
   const stacks: number[] = []
   for (let i = 0; i < count; i++) stacks.push(rng.pick(STACK_UNITS))
-  if (!needAllin) return { stacks, shoveSeats: [], coverSeat: null }
+  if (!needAllin) {
+    // 쇼다운만 요구되면 끝까지 폴드하지 않는 두 자리를 심는 것으로 충분하다.
+    const showdownSeats = needShowdown ? pickDistinctSeats(rng, count, 2) : []
+    return { stacks, shoveSeats: [], coverSeat: null, showdownSeats }
+  }
 
   // 서로 다른 금액의 올인 두 개 + 둘 다 커버하는 한 명
   const [a, b, c] = pickDistinctSeats(rng, count, 3)
   stacks[a] = 8000
   stacks[b] = 12500
   stacks[c] = 47000
-  return { stacks, shoveSeats: [a, b], coverSeat: c }
+  /*
+   * 두 배역은 충돌하지 않는다 — calculation 이 showdown 을 함의한다. 숏스택 둘은
+   * 프리플랍에 올인하므로 폴드할 수 없고 그래서 언제나 쇼다운까지 간다. 좌석을 새로
+   * 뽑으면 오히려 한 좌석에 두 배역이 배정돼 서로를 덮어쓴다. 같은 좌석을 쇼다운
+   * 배역으로도 지정해 두면, 미콜 반환으로 올인이 풀리는 경로에서도 폴드하지 않는다
+   * (return_uncalled 는 allIn 을 결과 스택에서 다시 유도한다).
+   */
+  return { stacks, shoveSeats: [a, b], coverSeat: c, showdownSeats: needShowdown ? [a, b] : [] }
 }
 
 function liveCount(s: HandState): number {
@@ -2227,15 +2244,17 @@ function decideAction(s: HandState, seat: number, d: BotContext): HandEvent {
   const toCall = d.currentBet - st.bet
   const act = (action: PlayerAction): HandEvent => ({ type: 'player_action', seat, action })
 
-  // 사이드팟 훈련용 배역은 확률에 맡기지 않는다
-  if (d.street === 'preflop' && d.plan.shoveSeats.includes(seat)) return act({ kind: 'allin', to: allinTo })
-  if (d.street === 'preflop' && d.plan.coverSeat === seat) {
-    /*
-     * 커버 좌석은 프리플랍에 절대 폴드하지 않고, 스택이 닿는 데까지 맞춘다.
-     * 여기서 주사위를 굴리면 두 올인 중 위쪽이 미콜로 되돌아가(return_uncalled)
-     * 두 사람의 투입액이 같아지고, 팟이 하나로 합쳐져 사이드팟이 사라진다.
-     * 계약은 "올인이 두 번"이 아니라 "팟이 갈린다"이므로 확률에 맡길 수 없다.
-     */
+  // require 가 선언한 것은 계약이다. 배역을 확률에 맡기면 어떤 시드에서 조용히 깨진다.
+  const preflop = d.street === 'preflop'
+  if (preflop && d.plan.shoveSeats.includes(seat)) return act({ kind: 'allin', to: allinTo })
+
+  /*
+   * 절대 폴드하지 않고 스택이 닿는 데까지 맞추는 배역 — 커버 좌석은 프리플랍에만,
+   * 쇼다운 좌석은 모든 스트리트에서. 폴드 경로가 하나라도 남으면 계약이 확률로
+   * 내려앉는다: 커버 좌석이 폴드하면 위쪽 올인이 미콜로 되돌아가 두 투입액이 같아져
+   * 팟이 하나로 합쳐지고, 쇼다운 좌석이 폴드하면 쇼다운 없는 핸드가 돌아온다.
+   */
+  if ((preflop && d.plan.coverSeat === seat) || d.plan.showdownSeats.includes(seat)) {
     if (toCall === 0) return act({ kind: 'check' })
     return toCall >= st.stack ? act({ kind: 'allin', to: allinTo }) : act({ kind: 'call', to: d.currentBet })
   }
@@ -2286,10 +2305,12 @@ function runBettingRound(
   bb: number,
   street: Street,
   plan: StackPlan,
-): { events: HandEvent[]; state: HandState } {
+): { events: HandEvent[]; state: HandState; lastAggressor: number | null } {
   const n = state.seats.length
   const events: HandEvent[] = []
   let s = state
+  /** 이 라운드에서 마지막으로 벳·레이즈한 좌석. 쇼다운 공개 순서의 기준이다. */
+  let lastAggressor: number | null = null
 
   let currentBet = Math.max(...s.seats.map((x) => x.bet))
   // 프리플랍은 빅블라인드가 오픈 벳 역할을 하므로 레이즈 폭의 출발점이 bb 다.
@@ -2331,6 +2352,8 @@ function runBettingRound(
       const raiseSize = newBet - currentBet
       currentBet = newBet
       isOpenBet = false
+      // 풀 레이즈에 못 미치는 올인도 공격이다 — 리오픈 권리와 공개 순서는 다른 규칙이다.
+      lastAggressor = seat
       /*
        * 풀 레이즈만 베팅을 다시 연다.
        * 풀 레이즈에 못 미치는 올인은 lastRaiseSize 를 갱신하지도 않는다 —
@@ -2355,14 +2378,21 @@ function runBettingRound(
     s = applyEvent(s, e)
   }
 
-  return { events, state: s }
+  return { events, state: s, lastAggressor }
 }
 
 export function generateHand(opts: GenerateOptions): Hand {
   const rng = createRng(opts.seed)
   const seatCount = opts.seatCount ?? 6
   const rulesetId = opts.rulesetId ?? 'nlh'
-  const needAllin = (opts.require ?? []).includes('calculation')
+  const required = opts.require ?? []
+  const needAllin = required.includes('calculation')
+  /*
+   * 'procedure' 와 'action_validity' 는 배역이 필요 없다 — 모든 핸드에 구조적으로
+   * 존재한다. 딜링·번·정산 절차는 언제나 나오고, 블라인드 포스팅을 포함한 액션도
+   * 언제나 나온다. 나머지 둘만 심어야 계약이 된다.
+   */
+  const needShowdown = required.includes('showdown')
 
   /*
    * 헤즈업은 블라인드 규칙이 다르다 — 2인 테이블에서는 버튼이 스몰블라인드이고
@@ -2374,7 +2404,7 @@ export function generateHand(opts: GenerateOptions): Hand {
     throw new Error(`좌석 수는 ${MIN_SEATS}~${MAX_SEATS} 만 지원합니다: ${seatCount}`)
   }
 
-  const plan = pickStacks(rng, seatCount, needAllin)
+  const plan = pickStacks(rng, seatCount, needAllin, needShowdown)
   const seats: SeatInit[] = plan.stacks.map((stack, i) => ({ name: PLAYER_NAMES[i], stack }))
   const buttonSeat = rng.int(seatCount)
   const blinds = { sb: 100, bb: 200 }
@@ -2413,6 +2443,28 @@ export function generateHand(opts: GenerateOptions): Hand {
 
   const streets: Street[] = ['preflop', 'flop', 'turn', 'river']
 
+  /*
+   * 쇼다운 공개 순서. 좌석 인덱스 순으로 돌면 좌석 번호가 규칙인 것처럼 가르치게 된다 —
+   * 실제 기준은 마지막 베팅 라운드의 마지막 공격자(벳·레이즈한 사람)이고, 그 라운드에
+   * 벳이 없었으면 버튼 왼쪽 첫 생존자다. "누가 먼저 오픈하는가"는 딜러 시험 항목이라
+   * 이벤트 열의 순서가 곧 정답이 된다. 베팅 라운드가 열리지 않은 스트리트(전원 올인)는
+   * 이 값을 덮어쓰지 않는다 — 기준은 마지막 스트리트가 아니라 마지막 베팅 라운드다.
+   */
+  let showdownFirst: number | null = null
+  let revealed = false
+  const reveal = () => {
+    if (revealed) return
+    revealed = true
+    const start = showdownFirst ?? (buttonSeat + 1) % seatCount
+    for (let i = 0; i < seatCount; i++) {
+      const seat = (start + i) % seatCount
+      if (state.seats[seat].folded) continue
+      const e: HandEvent = { type: 'showdown_reveal', seat }
+      events.push(e)
+      state = applyEvent(state, e)
+    }
+  }
+
   for (const street of streets) {
     // 생존자 확인이 먼저다. 딜을 먼저 하면 전원 폴드로 끝난 핸드에도
     // 플랍이 깔린다 — 딜러 훈련 제품이 그 장면을 정상 절차로 보여주게 된다.
@@ -2433,27 +2485,24 @@ export function generateHand(opts: GenerateOptions): Hand {
 
     const canAct = actableSeats(state).length
     if (canAct >= 2) {
-      const r = runBettingRound(state, rng, blinds.bb, street, street === 'preflop' ? plan : NO_PLAN)
+      const r = runBettingRound(state, rng, blinds.bb, street, plan)
       events.push(...r.events)
       state = r.state
+      showdownFirst = r.lastAggressor
     }
 
     const collect: HandEvent = { type: 'collect_bets' }
     events.push(collect)
     state = applyEvent(state, collect)
+
+    // 액션이 끝났으면 카드를 먼저 올리고 남은 보드를 런아웃한다.
+    // 리버까지 깔아놓고 공개하면 실제 절차와 순서가 뒤바뀐 채로 재생된다.
+    if (actableSeats(state).length < 2 && liveCount(state) >= 2) reveal()
   }
 
-  // 쇼다운 공개. 폴드로 끝난 핸드의 승자는 카드를 보여주지 않고 머크한다 —
+  // 폴드로 끝난 핸드의 승자는 카드를 보여주지 않고 머크한다 —
   // 여기서 공개하면 딜러가 절대 하면 안 되는 동작을 가르치게 된다.
-  if (liveCount(state) >= 2) {
-    state.seats.forEach((s, seat) => {
-      if (!s.folded) {
-        const e: HandEvent = { type: 'showdown_reveal', seat }
-        events.push(e)
-        state = applyEvent(state, e)
-      }
-    })
-  }
+  if (liveCount(state) >= 2) reveal()
 
   // 팟 지급까지 해야 핸드가 끝난다. 여기까지 와야 최종 상태의 pot 이 0 이 되고,
   // 칩 보존 테스트가 "팟에 남아 있는 칩"으로 눈감아 주지 않는다.
@@ -2472,7 +2521,7 @@ export function generateHand(opts: GenerateOptions): Hand {
 - [ ] **Step 4: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- generate`
-Expected: PASS, 18 tests
+Expected: PASS, 23 tests
 
 `calculation` 제약이 깨지면 확률(roll 임계값)을 만지지 말 것 — 그건 테스트가 통과할 때까지 주사위를 굴리는 것이다. `pickStacks` 가 심은 `shoveSeats` / `coverSeat` 배역이 `decideAction` 에서 실제로 강제되고 있는지를 보라. 계약은 "올인이 몇 번 나왔나"가 아니라 "팟이 갈렸나"다.
 
