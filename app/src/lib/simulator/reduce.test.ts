@@ -140,3 +140,42 @@ describe('불변성', () => {
     expect(before.board).toHaveLength(0)
   })
 })
+
+describe('칩 보존 가드', () => {
+  it('현재 벳보다 낮은 목표 벳은 던진다 — 음수 delta 로 칩이 생기는 것을 막는다', () => {
+    // 블라인드 200 을 낸 좌석이 같은 라운드에 앤티 25 를 목표치로 내면
+    // to(25) < bet(200) 이라 스택이 늘고 투입액이 줄어든다.
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'post_blind', seat: 2, amount: 200, kind: 'bb' })
+    expect(() =>
+      applyEvent(s, { type: 'post_blind', seat: 2, amount: 25, kind: 'ante' }),
+    ).toThrow(/목표 벳 25 이 현재 벳 200 보다 작다/)
+
+    // player_action 경로도 같은 헬퍼를 쓰므로 함께 막힌다
+    expect(() =>
+      applyEvent(s, { type: 'player_action', seat: 2, action: { kind: 'raise', to: 50 } }),
+    ).toThrow(/좌석 2\(0-based\)/)
+  })
+
+  it('같은 금액으로의 재지정은 던지지 않는다 — 이미 맞춘 벳에 콜하는 정상 경로', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'post_blind', seat: 2, amount: 200, kind: 'bb' })
+    const same = applyEvent(s, { type: 'player_action', seat: 2, action: { kind: 'call', to: 200 } })
+    expect(same.seats[2].bet).toBe(200)
+    expect(same.contributed[2]).toBe(200)
+  })
+
+  it('팟보다 큰 지급은 던진다 — 클램프로 초과분을 감추지 않는다', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'post_blind', seat: 1, amount: 100, kind: 'sb' })
+    s = applyEvent(s, { type: 'collect_bets' })
+    expect(s.pot).toBe(100)
+    expect(() => applyEvent(s, { type: 'award_pot', potIndex: 0, seat: 1, amount: 101 })).toThrow(
+      /지급하려는 101 이 남은 팟 100 보다 크다/,
+    )
+    // 팟 전액 지급은 정상 경로다
+    const paid = applyEvent(s, { type: 'award_pot', potIndex: 0, seat: 1, amount: 100 })
+    expect(paid.pot).toBe(0)
+    expect(paid.seats[1].stack).toBe(12500)
+  })
+})

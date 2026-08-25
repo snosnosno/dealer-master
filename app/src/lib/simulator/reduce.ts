@@ -38,6 +38,15 @@ function raiseBetTo(
   to: number,
 ): { seats: SeatState[]; contributed: number[] } {
   const seat = state.seats[i]
+  // 목표 벳이 현재 벳보다 작으면 delta 가 음수가 되어 스택이 늘고 투입액이 줄어든다.
+  // 칩이 무에서 생기는 경로라 조용히 흘리지 않고 여기서 크게 실패시킨다.
+  // 미콜 벳을 되돌리는 것은 return_uncalled 의 일이다.
+  if (to < seat.bet) {
+    throw new Error(
+      `좌석 ${i}(0-based) 의 목표 벳 ${to} 이 현재 벳 ${seat.bet} 보다 작다. ` +
+        `벳은 되돌릴 수 없다 — 미콜 벳 반환은 return_uncalled 를 쓸 것.`,
+    )
+  }
   const want = to - seat.bet
   const delta = Math.min(want, seat.stack)
   const contributed = state.contributed.slice()
@@ -111,12 +120,20 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
     case 'showdown_reveal':
       return { ...state, seats: withSeat(state, e.seat, { revealed: true }) }
 
-    case 'award_pot':
+    case 'award_pot': {
+      // 클램프로 팟을 0 에서 멈추면 좌석 스택에는 전액이 들어가면서 초과분이 감춰진다.
+      // 이것도 칩이 생기는 경로다. 감추지 말고 터뜨린다.
+      if (e.amount > state.pot) {
+        throw new Error(
+          `좌석 ${e.seat}(0-based) 에 지급하려는 ${e.amount} 이 남은 팟 ${state.pot} 보다 크다.`,
+        )
+      }
       return {
         ...state,
-        pot: Math.max(0, state.pot - e.amount),
+        pot: state.pot - e.amount,
         seats: withSeat(state, e.seat, { stack: state.seats[e.seat].stack + e.amount }),
       }
+    }
   }
 }
 
