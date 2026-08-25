@@ -38,8 +38,10 @@ function raiseBetTo(
   to: number,
 ): { seats: SeatState[]; contributed: number[] } {
   const seat = state.seats[i]
-  // 목표 벳이 현재 벳보다 작으면 delta 가 음수가 되어 스택이 늘고 투입액이 줄어든다.
-  // 칩이 무에서 생기는 경로라 조용히 흘리지 않고 여기서 크게 실패시킨다.
+  // 목표 벳이 현재 벳보다 작으면 delta 가 음수가 되어 스택이 늘고 벳·투입액이 줄어든다.
+  // 칩 총액은 보존된다(스택이 는 만큼 벳이 준다) — 깨지는 것은 contributed 원장이다.
+  // 그 원장이 Task 5 사이드팟의 근거이므로, 어긋난 채 진행하면 사이드팟이 조용히 틀어진다.
+  // 생성기 버그를 흡수하지 말고 여기서 fail-fast 한다.
   // 미콜 벳을 되돌리는 것은 return_uncalled 의 일이다.
   if (to < seat.bet) {
     throw new Error(
@@ -98,6 +100,15 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
 
     case 'return_uncalled': {
       const seat = state.seats[e.seat]
+      // 낸 것보다 많이 되돌리면 bet 과 contributed 가 음수로 내려간다.
+      // 여기도 칩 총액은 보존되고 깨지는 것은 원장이다 — raiseBetTo 와 같은 계열이다.
+      // amount === seat.bet(벳 전액 반환)은 가장 흔한 정상 경로이므로 통과시킨다.
+      if (e.amount > seat.bet) {
+        throw new Error(
+          `좌석 ${e.seat}(0-based) 에 되돌리려는 ${e.amount} 이 현재 벳 ${seat.bet} 보다 크다. ` +
+            `낸 것보다 많이 되돌릴 수 없다.`,
+        )
+      }
       const contributed = state.contributed.slice()
       contributed[e.seat] -= e.amount
       return {
@@ -128,7 +139,8 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
 
     case 'award_pot': {
       // 클램프로 팟을 0 에서 멈추면 좌석 스택에는 전액이 들어가면서 초과분이 감춰진다.
-      // 이것도 칩이 생기는 경로다. 감추지 말고 터뜨린다.
+      // 리듀서에서 칩 총액이 문자 그대로 늘어나는 곳은 여기 하나뿐이다
+      // (팟은 pot 만큼만 줄고 스택은 amount 만큼 는다). 감추지 말고 터뜨린다.
       if (e.amount > state.pot) {
         throw new Error(
           `좌석 ${e.seat}(0-based) 에 지급하려는 ${e.amount} 이 남은 팟 ${state.pot} 보다 크다.`,

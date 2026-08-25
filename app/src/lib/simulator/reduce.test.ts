@@ -107,6 +107,7 @@ describe('불변성', () => {
   it('얼린 상태에 이벤트를 적용해도 제자리 수정이 일어나지 않는다', () => {
     const all: HandEvent[] = [
       ...events,
+      { type: 'burn' },
       { type: 'deal_board', street: 'flop', cards: [parseCard('7c'), parseCard('8d'), parseCard('9h')] },
       { type: 'player_action', seat: 1, action: { kind: 'bet', to: 1000 } },
       { type: 'return_uncalled', seat: 1, amount: 600 },
@@ -218,5 +219,24 @@ describe('return_uncalled 의 allIn 유도', () => {
     s = applyEvent(s, { type: 'return_uncalled', seat: 1, amount: 1 })
     expect(s.seats[1].stack).toBe(1)
     expect(s.seats[1].allIn).toBe(false)
+  })
+})
+
+describe('return_uncalled 무결성 가드', () => {
+  it('낸 것보다 많이 되돌리면 던진다 — bet·contributed 가 음수로 내려가는 것을 막는다', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'player_action', seat: 2, action: { kind: 'bet', to: 200 } })
+    expect(() => applyEvent(s, { type: 'return_uncalled', seat: 2, amount: 201 })).toThrow(
+      /좌석 2\(0-based\) 에 되돌리려는 201 이 현재 벳 200 보다 크다/,
+    )
+  })
+
+  it('벳 전액 반환은 통과한다 — 가장 흔한 정상 경로', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'player_action', seat: 2, action: { kind: 'bet', to: 200 } })
+    const back = applyEvent(s, { type: 'return_uncalled', seat: 2, amount: 200 })
+    expect(back.seats[2].bet).toBe(0)
+    expect(back.seats[2].stack).toBe(47000)
+    expect(back.contributed[2]).toBe(0)
   })
 })

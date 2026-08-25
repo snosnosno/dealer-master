@@ -936,6 +936,13 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
 
     case 'return_uncalled': {
       const seat = state.seats[e.seat]
+      // 낸 것보다 많이 되돌리면 bet 과 contributed 가 음수가 된다 — 원장이 깨진다
+      if (e.amount > seat.bet) {
+        throw new Error(
+          `좌석 ${e.seat}(0-based) 에 되돌리려는 ${e.amount} 이 현재 벳 ${seat.bet} 보다 크다. ` +
+            `낸 것보다 많이 되돌릴 수 없다.`,
+        )
+      }
       const contributed = state.contributed.slice()
       contributed[e.seat] -= e.amount
       return {
@@ -979,7 +986,7 @@ export function stateAt(init: HandState, events: HandEvent[], index: number): Ha
 - [ ] **Step 5: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- reduce`
-Expected: PASS, 18 tests
+Expected: PASS, 20 tests
 
 - [ ] **Step 6: 커밋**
 
