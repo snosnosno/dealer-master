@@ -943,7 +943,8 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
         seats: withSeat(state, e.seat, {
           stack: seat.stack + e.amount,
           bet: seat.bet - e.amount,
-          allIn: false,
+          // 결과 스택에서 유도한다 — 무조건 false 면 amount 가 0 일 때 올인이 잘못 풀린다
+          allIn: seat.stack + e.amount === 0,
         }),
         contributed,
       }
@@ -978,7 +979,7 @@ export function stateAt(init: HandState, events: HandEvent[], index: number): Ha
 - [ ] **Step 5: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- reduce`
-Expected: PASS, 16 tests
+Expected: PASS, 18 tests
 
 - [ ] **Step 6: 커밋**
 

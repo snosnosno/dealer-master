@@ -200,3 +200,23 @@ describe('post_blind 가산 의미론', () => {
     expect(s.seats[2].stack).toBe(47000 - 225)
   })
 })
+
+describe('return_uncalled 의 allIn 유도', () => {
+  it('0원 반환은 올인 상태를 풀지 않는다', () => {
+    // amount 0 은 무의미한 이벤트지만, 그것 때문에 allIn 이 풀리면
+    // 스택이 0 인 좌석이 아직 액션할 수 있는 것처럼 보인다.
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'player_action', seat: 1, action: { kind: 'allin', to: 12500 } })
+    s = applyEvent(s, { type: 'return_uncalled', seat: 1, amount: 0 })
+    expect(s.seats[1].stack).toBe(0)
+    expect(s.seats[1].allIn).toBe(true)
+  })
+
+  it('양수 반환은 올인을 푼다 — 기존 동작이 유지된다', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'player_action', seat: 1, action: { kind: 'allin', to: 12500 } })
+    s = applyEvent(s, { type: 'return_uncalled', seat: 1, amount: 1 })
+    expect(s.seats[1].stack).toBe(1)
+    expect(s.seats[1].allIn).toBe(false)
+  })
+})

@@ -105,7 +105,10 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
         seats: withSeat(state, e.seat, {
           stack: seat.stack + e.amount,
           bet: seat.bet - e.amount,
-          allIn: false,
+          // 결과 스택에서 유도한다. 무조건 false 로 두면 amount 가 0 일 때
+          // 올인 좌석의 플래그가 잘못 풀려, 이후 액션 유효성(Task 6)과
+          // 사이드팟 자격(Task 5)이 그 좌석을 전혀 다르게 취급한다.
+          allIn: seat.stack + e.amount === 0,
         }),
         contributed,
       }
