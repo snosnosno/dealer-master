@@ -151,6 +151,15 @@ describe('validateAction — 파일럿 케이스 3 (Rule 51-B 언더콜)', () =>
     expect(r.valid).toBe(false)
   })
 
+  it('벳 앞에서의 체크는 플로어 판단 영역이지 폴드 확정이 아니다', () => {
+    // 체크는 무효 액션이지 폴드 선언이 아니다. forced 로 내보내면 Task 8 이
+    // "벳 앞의 체크 = 폴드"를 단일 정답으로 출제하고 사용자가 그걸 규칙으로 배운다.
+    const c = ctx({ currentBet: 500, seatBet: 0 })
+    const r = nlh.validateAction(c, { kind: 'check' })
+    expect(r.valid).toBe(false)
+    if (!r.valid) expect(r.ruling).toBe('td_discretion')
+  })
+
   it('벳이 없으면 체크할 수 있다', () => {
     const r = nlh.validateAction(ctx(), { kind: 'check' })
     expect(r.valid).toBe(true)

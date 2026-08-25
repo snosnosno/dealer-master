@@ -49,7 +49,17 @@ export const nlh: Ruleset = {
 
       case 'check':
         if (ctx.currentBet > ctx.seatBet) {
-          return bad('벳이 있으므로 체크할 수 없습니다', { kind: 'fold' })
+          /*
+           * 벳을 마주한 체크는 "무효 액션"이지 폴드 선언이 아니다. 실제 룸에서 그
+           * 체크는 구속력이 없고 그 좌석이 다시 액션한다 — 그래서 forced 가 아니라
+           * 플로어 판단 영역이다 (컨트롤러 판정 R19). forced 로 내면 Task 8 이
+           * "체크 = 폴드"를 단일 정답으로 출제한다.
+           *
+           * ⚠️ corrected 의 fold 에는 조항 번호 근거가 없다 — 어느 처리로 갈지는
+           * 플로어가 정하므로 이 값은 기본값일 뿐 정답이 아니다
+           * (types.ts 의 ValidationResult 주석 참조). TDA 2024 PDF 원문으로 확인할 것.
+           */
+          return bad('벳이 있으므로 체크할 수 없습니다', { kind: 'fold' }, 'td_discretion')
         }
         return ok(action)
 

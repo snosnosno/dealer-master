@@ -1559,6 +1559,15 @@ describe('validateAction — 파일럿 케이스 3 (Rule 51-B 언더콜)', () =>
     expect(r.valid).toBe(false)
   })
 
+  it('벳 앞에서의 체크는 플로어 판단 영역이지 폴드 확정이 아니다', () => {
+    // 체크는 무효 액션이지 폴드 선언이 아니다. forced 로 내보내면 Task 8 이
+    // "벳 앞의 체크 = 폴드"를 단일 정답으로 출제하고 사용자가 그걸 규칙으로 배운다.
+    const c = ctx({ currentBet: 500, seatBet: 0 })
+    const r = nlh.validateAction(c, { kind: 'check' })
+    expect(r.valid).toBe(false)
+    if (!r.valid) expect(r.ruling).toBe('td_discretion')
+  })
+
   it('벳이 없으면 체크할 수 있다', () => {
     const r = nlh.validateAction(ctx(), { kind: 'check' })
     expect(r.valid).toBe(true)
@@ -1736,7 +1745,17 @@ export const nlh: Ruleset = {
 
       case 'check':
         if (ctx.currentBet > ctx.seatBet) {
-          return bad('벳이 있으므로 체크할 수 없습니다', { kind: 'fold' })
+          /*
+           * 벳을 마주한 체크는 "무효 액션"이지 폴드 선언이 아니다. 실제 룸에서 그
+           * 체크는 구속력이 없고 그 좌석이 다시 액션한다 — 그래서 forced 가 아니라
+           * 플로어 판단 영역이다 (컨트롤러 판정 R19). forced 로 내면 Task 8 이
+           * "체크 = 폴드"를 단일 정답으로 출제한다.
+           *
+           * ⚠️ corrected 의 fold 에는 조항 번호 근거가 없다 — 어느 처리로 갈지는
+           * 플로어가 정하므로 이 값은 기본값일 뿐 정답이 아니다
+           * (types.ts 의 ValidationResult 주석 참조). TDA 2024 PDF 원문으로 확인할 것.
+           */
+          return bad('벳이 있으므로 체크할 수 없습니다', { kind: 'fold' }, 'td_discretion')
         }
         return ok(action)
 
@@ -1854,7 +1873,7 @@ export const nlh: Ruleset = {
 - [ ] **Step 5: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- nlh`
-Expected: PASS, 23 tests
+Expected: PASS, 24 tests
 
 - [ ] **Step 6: 커밋**
 
