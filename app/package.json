@@ -9,7 +9,9 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "db:diff": "supabase db diff",
-    "db:push": "supabase db push"
+    "db:push": "supabase db push",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
@@ -30,6 +32,7 @@
     "eslint-config-next": "16.3.2",
     "supabase": "^2.115.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.11"
   }
 }
