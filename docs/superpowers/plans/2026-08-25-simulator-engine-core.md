@@ -974,7 +974,7 @@ export function stateAt(init: HandState, events: HandEvent[], index: number): Ha
 - [ ] **Step 5: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- reduce`
-Expected: PASS, 9 tests
+Expected: PASS, 11 tests
 
 - [ ] **Step 6: 커밋**
 

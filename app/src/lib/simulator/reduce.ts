@@ -1,0 +1,125 @@
+/**
+ * 이벤트 리듀서.
+ *
+ * applyEvent 는 입력 상태를 절대 제자리에서 고치지 않는다. 중첩 배열까지
+ * 새로 만들어 돌려준다. 얕은 복사만 하고 seats·board·contributed 를 공유하면
+ * 되감기로 만든 과거 상태가 조용히 오염돼서, 재현이 안 되는 버그가 된다.
+ */
+import type { HandEvent, HandState, SeatInit, SeatState } from './types'
+
+export function initialState(seats: SeatInit[], buttonSeat: number): HandState {
+  return {
+    seats: seats.map((s) => ({
+      name: s.name,
+      stack: s.stack,
+      bet: 0,
+      folded: false,
+      allIn: false,
+      hole: [],
+      revealed: false,
+    })),
+    buttonSeat,
+    board: [],
+    pot: 0,
+    street: 'preflop',
+    contributed: seats.map(() => 0),
+  }
+}
+
+/** 좌석 하나만 바꾼 새 seats 배열을 만든다. */
+function withSeat(state: HandState, i: number, patch: Partial<SeatState>): SeatState[] {
+  return state.seats.map((s, idx) => (idx === i ? { ...s, ...patch } : s))
+}
+
+/** 좌석 i 의 벳을 to 까지 올린다. 스택보다 크면 스택 전액(올인)으로 자른다. */
+function raiseBetTo(
+  state: HandState,
+  i: number,
+  to: number,
+): { seats: SeatState[]; contributed: number[] } {
+  const seat = state.seats[i]
+  const want = to - seat.bet
+  const delta = Math.min(want, seat.stack)
+  const contributed = state.contributed.slice()
+  contributed[i] += delta
+  return {
+    seats: withSeat(state, i, {
+      stack: seat.stack - delta,
+      bet: seat.bet + delta,
+      allIn: seat.stack - delta === 0,
+    }),
+    contributed,
+  }
+}
+
+export function applyEvent(state: HandState, e: HandEvent): HandState {
+  switch (e.type) {
+    case 'move_button':
+      return { ...state, buttonSeat: e.toSeat }
+
+    case 'post_blind': {
+      const { seats, contributed } = raiseBetTo(state, e.seat, e.amount)
+      return { ...state, seats, contributed }
+    }
+
+    case 'deal_hole':
+      return {
+        ...state,
+        seats: withSeat(state, e.seat, { hole: [...state.seats[e.seat].hole, e.card] }),
+      }
+
+    case 'burn':
+      return state
+
+    case 'deal_board':
+      return { ...state, board: [...state.board, ...e.cards], street: e.street }
+
+    case 'player_action': {
+      const a = e.action
+      if (a.kind === 'fold') {
+        return { ...state, seats: withSeat(state, e.seat, { folded: true }) }
+      }
+      if (a.kind === 'check') return state
+      const { seats, contributed } = raiseBetTo(state, e.seat, a.to)
+      return { ...state, seats, contributed }
+    }
+
+    case 'return_uncalled': {
+      const seat = state.seats[e.seat]
+      const contributed = state.contributed.slice()
+      contributed[e.seat] -= e.amount
+      return {
+        ...state,
+        seats: withSeat(state, e.seat, {
+          stack: seat.stack + e.amount,
+          bet: seat.bet - e.amount,
+          allIn: false,
+        }),
+        contributed,
+      }
+    }
+
+    case 'collect_bets': {
+      const total = state.seats.reduce((sum, s) => sum + s.bet, 0)
+      return {
+        ...state,
+        pot: state.pot + total,
+        seats: state.seats.map((s) => ({ ...s, bet: 0 })),
+      }
+    }
+
+    case 'showdown_reveal':
+      return { ...state, seats: withSeat(state, e.seat, { revealed: true }) }
+
+    case 'award_pot':
+      return {
+        ...state,
+        pot: Math.max(0, state.pot - e.amount),
+        seats: withSeat(state, e.seat, { stack: state.seats[e.seat].stack + e.amount }),
+      }
+  }
+}
+
+export function stateAt(init: HandState, events: HandEvent[], index: number): HandState {
+  return events.slice(0, index).reduce(applyEvent, init)
+}
