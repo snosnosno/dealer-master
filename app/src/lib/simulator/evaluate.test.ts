@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { evaluateHand, compareHands } from './evaluate'
-import { parseCard } from './cards'
+import { evaluateHand, compareHands, CATEGORY_LABEL, type HandCategory } from './evaluate'
+import { parseCard, type Card } from './cards'
 
 const h = (...s: string[]) => s.map(parseCard)
 
@@ -100,5 +100,45 @@ describe('목업 핸드 — 설계 문서의 검증 시나리오', () => {
 
   it('보드에 스페이드가 2장뿐이라 박서준은 플러시가 아니다', () => {
     expect(park.category).toBe(1)
+  })
+})
+
+describe('CATEGORY_LABEL 과 HandRank.label', () => {
+  it('0~8 아홉 카테고리 전부에 서로 다른 라벨이 빠짐없이 붙어 있다', () => {
+    const keys = Object.keys(CATEGORY_LABEL)
+      .map(Number)
+      .sort((a, b) => a - b)
+    expect(keys).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+
+    const labels = Object.values(CATEGORY_LABEL)
+    expect(labels.filter((l) => l.trim().length > 0)).toHaveLength(9) // 빈 라벨 없음
+    expect(new Set(labels).size).toBe(9) // 복붙으로 두 카테고리가 같은 이름을 갖지 않음
+  })
+
+  it('평가한 핸드의 label 은 자기 카테고리의 라벨을 그대로 갖는다', () => {
+    const fixtures: [HandCategory, Card[]][] = [
+      [8, h('9s', '8s', '7s', '6s', '5s', '2d', 'Kh')],
+      [7, h('9s', '9h', '9d', '9c', '5s', '2d', 'Kh')],
+      [6, h('9s', '9h', '9d', '5c', '5s', '2d', 'Kh')],
+      [5, h('As', 'Js', '8s', '5s', '2s', '9d', 'Kh')],
+      [4, h('9s', '8h', '7d', '6c', '5s', '2d', 'Kh')],
+      [3, h('9s', '9h', '9d', '5c', '3s', '2d', 'Kh')],
+      [2, h('9s', '9h', '5d', '5c', '3s', '2d', 'Kh')],
+      [1, h('9s', '9h', '5d', '4c', '3s', '2d', 'Kh')],
+      [0, h('9s', '7h', '5d', '4c', '3s', '2d', 'Kh')],
+    ]
+    for (const [category, cards] of fixtures) {
+      const r = evaluateHand(cards)
+      expect(r.category).toBe(category)
+      expect(r.label).toBe(CATEGORY_LABEL[category])
+    }
+  })
+
+  it('카테고리 번호와 라벨의 짝이 뒤바뀌지 않았다', () => {
+    // 아홉 개를 통째로 옮겨 적으면 CATEGORY_LABEL 정의를 복사한 것일 뿐이라
+    // 강도 순서가 어긋났는지만 낮음/중간/높음 세 지점에서 고정한다.
+    expect(evaluateHand(h('9s', '9h', '5d', '4c', '3s', '2d', 'Kh')).label).toBe('원페어')
+    expect(evaluateHand(h('9s', '9h', '9d', '5c', '5s', '2d', 'Kh')).label).toBe('풀하우스')
+    expect(evaluateHand(h('9s', '8s', '7s', '6s', '5s', '2d', 'Kh')).label).toBe('스트레이트 플러시')
   })
 })
