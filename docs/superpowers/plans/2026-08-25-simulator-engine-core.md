@@ -1094,7 +1094,7 @@ describe('awardPots — 목업 핸드의 핵심', () => {
     2: h('7c','7s'), // 트리플 7
     3: h('9h','9d'), // 트리플 9
   }
-  const holeArr = [[], hole[1], hole[2], hole[3], [], []] as any
+  const holeArr = [[], hole[1], hole[2], hole[3], [], []]
 
   const pots = buildPots([0, 12500, 12500, 8000, 200, 0], [true, false, false, false, true, true])
   const BUTTON = 2
@@ -1118,14 +1118,14 @@ describe('awardPots — 목업 핸드의 핵심', () => {
   it('자격자가 한 명뿐이면 보드가 5장이 아니어도 지급된다', () => {
     // 전원 폴드로 끝난 핸드. 쇼다운이 없으므로 족보를 평가하면 안 된다.
     const onePot = buildPots([1000, 500], [false, true])
-    const awards = awardPots(onePot, [[], []] as any, [], 0)
+    const awards = awardPots(onePot, [[], []], [], 0)
     expect(awards).toEqual([{ potIndex: 0, seat: 0, amount: 1500 }])
   })
 })
 
 describe('awardPots — 동점 분배와 홀칩', () => {
   const board = h('Kd','9s','7h','2c','Qs')
-  const tie = [h('Ah','Jd'), h('Ac','Jh')] as any // 완전 동일 족보
+  const tie = [h('Ah','Jd'), h('Ac','Jh')] // 완전 동일 족보
 
   it('동점이면 나눠 갖는다', () => {
     const pots = buildPots([1000, 1000], [false, false])
@@ -1187,6 +1187,12 @@ export type PotAward = { potIndex: number; seat: number; amount: number }
  * 그 사람의 투입액에 이미 포함돼 있다 — contributed 를 쓰면 자동으로 맞는다.
  */
 export function buildPots(contributed: number[], folded: boolean[]): Pot[] {
+  // folded 가 짧으면 뒤쪽 좌석이 조용히 "살아 있는" 것으로 취급돼
+  // 자격자 집합이 틀어진다. 팟 분할은 틀려도 그럴듯해 보이므로 여기서 막는다.
+  if (folded.length !== contributed.length) {
+    throw new Error(`좌석 수 불일치: contributed ${contributed.length}, folded ${folded.length}`)
+  }
+
   const levels = Array.from(
     new Set(contributed.filter((c) => c > 0)),
   ).sort((a, b) => a - b)
@@ -1222,6 +1228,7 @@ export function buildPots(contributed: number[], folded: boolean[]): Pot[] {
   const merged: Pot[] = []
   for (const p of pots) {
     const last = merged[merged.length - 1]
+    // eligibleSeats 는 양쪽 다 좌석 오름차순으로 쌓이므로 순서대로 비교하면 집합 비교가 된다.
     const sameEligible =
       last !== undefined &&
       last.eligibleSeats.length === p.eligibleSeats.length &&
@@ -1244,7 +1251,8 @@ export const ODD_CHIP_UNIT = 100
  * 버튼 자신은 이 순서의 맨 뒤다 (가장 좋은 포지션이 홀칩을 마지막에 받는다).
  */
 function orderFromButton(seats: number[], buttonSeat: number, seatCount: number): number[] {
-  const dist = (s: number) => (s - buttonSeat - 1 + seatCount * 2) % seatCount
+  // JS 의 % 는 음수를 그대로 음수로 돌려주므로 한 번 더 접어 0 이상으로 만든다.
+  const dist = (s: number) => (((s - buttonSeat - 1) % seatCount) + seatCount) % seatCount
   return [...seats].sort((a, b) => dist(a) - dist(b))
 }
 
