@@ -105,6 +105,11 @@ describe('awardPots — 목업 핸드의 핵심', () => {
 describe('awardPots — 동점 분배와 홀칩', () => {
   const board = h('Kd','9s','7h','2c','Qs')
   const tie = [h('Ah','Jd'), h('Ac','Jh')] // 완전 동일 족보
+  // 셋·넷이 동시에 동점인 경우. 전부 A-J 하이카드로 완전히 같고,
+  // 보드에 같은 수트가 2장뿐이라 누구도 플러시가 되지 않는다.
+  // 마지막 좌석은 폴드해서 자격이 없으므로 홀카드가 필요 없다.
+  const tie4 = [h('Ah','Jd'), h('Ac','Jh'), h('Ad','Jc'), []]
+  const tie5 = [h('Ah','Jd'), h('Ac','Jh'), h('Ad','Jc'), h('As','Js'), []]
 
   it('동점이면 나눠 갖는다', () => {
     const pots = buildPots([1000, 1000], [false, false])
@@ -135,5 +140,48 @@ describe('awardPots — 동점 분배와 홀칩', () => {
     const pots = buildPots([1050, 1050], [false, false])
     const awards = awardPots(pots, tie, board, 0)
     expect(awards.reduce((a, x) => a + x.amount, 0)).toBe(2100)
+  })
+
+  it('셋이 나눠도 홀칩 하나가 버튼 왼쪽 첫 자격자에게 가고 총액이 보존된다', () => {
+    // 팟 2,200 을 셋이 나눈다. 2,200 / 3 은 나눠떨어지지 않는다 —
+    // 700 씩 주고 남는 홀칩 100 하나가 버튼 왼쪽 첫 자격자에게 간다.
+    // 반올림(733 x 3 = 2,199)은 칩을 하나 잃고 733 은 존재하지도 않는 칩이다.
+    // 좌석 3 은 폴드한 데드머니 100 이라 팟을 가르지 않는다.
+    const pots = buildPots([700, 700, 700, 100], [false, false, false, true])
+    expect(pots).toHaveLength(1)
+    expect(pots[0].amount).toBe(2200)
+
+    // 버튼이 좌석 0 이면 배분 순서는 1 → 2 → 3 → 0 이다. 첫 자격자는 좌석 1.
+    const awards = awardPots(pots, tie4, board, 0)
+    const bySeat = new Map(awards.map((a) => [a.seat, a.amount]))
+    expect(bySeat.get(1)).toBe(800)
+    expect(bySeat.get(2)).toBe(700)
+    expect(bySeat.get(0)).toBe(700)
+    expect(awards.reduce((a, x) => a + x.amount, 0)).toBe(2200)
+  })
+
+  it('넷이 나누고 홀칩이 둘이면 버튼 왼쪽부터 연속으로 하나씩 간다', () => {
+    // 팟 2,600 을 넷이 나눈다. 600 씩 주고 홀칩 100 이 두 개 남는다.
+    // 두 개가 한 사람에게 몰리지 않고 버튼 왼쪽부터 한 개씩 간다.
+    const pots = buildPots([600, 600, 600, 600, 200], [false, false, false, false, true])
+    expect(pots).toHaveLength(1)
+    expect(pots[0].amount).toBe(2600)
+
+    // 버튼이 좌석 1 이면 배분 순서는 2 → 3 → 4 → 0 → 1 이다.
+    // 자격자는 0~3 이므로 홀칩 두 개는 좌석 2 와 3 이 받는다 — 좌석 번호 순이 아니다.
+    const awards = awardPots(pots, tie5, board, 1)
+    const bySeat = new Map(awards.map((a) => [a.seat, a.amount]))
+    expect(bySeat.get(2)).toBe(700)
+    expect(bySeat.get(3)).toBe(700)
+    expect(bySeat.get(0)).toBe(600)
+    expect(bySeat.get(1)).toBe(600)
+    expect(awards.reduce((a, x) => a + x.amount, 0)).toBe(2600)
+  })
+
+  it('hole 이 좌석 수보다 짧으면 조용히 틀리지 않고 던진다', () => {
+    // 4인 테이블에서 만든 팟에 2인분 hole 만 넘긴 경우.
+    // 이대로 두면 seatCount 가 2 라 홀칩 순서가 조용히 틀어진다.
+    const pots = [{ amount: 1000, eligibleSeats: [0, 3] }]
+    expect(() => awardPots(pots, tie, board, 0)).toThrow(/좌석 수 불일치/)
   })
 })

@@ -52,9 +52,10 @@ export function buildPots(contributed: number[], folded: boolean[]): Pot[] {
 
   /*
    * 층을 자른 것만으로는 팟이 되지 않는다.
-   * 사이드팟은 "올인으로 더 적게 낸 사람 때문에 참가 자격이 갈릴 때"만 생긴다 (TDA Rule 21).
+   * 사이드팟은 "올인으로 더 적게 낸 사람 때문에 참가 자격이 갈릴 때"만 생긴다.
    * 폴드한 사람이 만든 층은 자격자 집합을 바꾸지 않으므로 팟을 새로 만들지 않고
    * 앞 팟에 얹히는 데드머니일 뿐이다.
+   * ⚠️ 조항 번호는 TDA 2024 PDF 원문으로 확인할 것 (기존 "TDA Rule 21" 표기는 미검증).
    *
    * 이 병합을 빼면 폴드한 빅블라인드의 200 하나가 별도 팟을 만들어
    * 목업 핸드가 [800, 23400, 9000] 세 팟이 된다 (정답은 [24200, 9000]).
@@ -99,6 +100,18 @@ export function awardPots(
 ): PotAward[] {
   const awards: PotAward[] = []
   const seatCount = hole.length
+
+  // hole 이 좌석 수보다 짧으면 seatCount 가 작아져 홀칩 순서가 조용히 틀어지고,
+  // 자격 좌석의 홀카드도 없는 채로 평가에 들어간다. 통합 단계에서 증상으로 나타나면
+  // 원인 추적이 가장 비싼 종류라 여기서 크게 실패시킨다.
+  // buildPots 의 좌석 수 가드와 같은 계열 — 없는 정보라 유도로는 풀 수 없다.
+  for (const pot of pots) {
+    for (const seat of pot.eligibleSeats) {
+      if (seat < 0 || seat >= seatCount) {
+        throw new Error(`좌석 수 불일치: 자격 좌석 ${seat}, hole ${seatCount}`)
+      }
+    }
+  }
 
   pots.forEach((pot, potIndex) => {
     if (pot.eligibleSeats.length === 0) return

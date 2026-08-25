@@ -1126,6 +1126,11 @@ describe('awardPots — 목업 핸드의 핵심', () => {
 describe('awardPots — 동점 분배와 홀칩', () => {
   const board = h('Kd','9s','7h','2c','Qs')
   const tie = [h('Ah','Jd'), h('Ac','Jh')] // 완전 동일 족보
+  // 셋·넷이 동시에 동점인 경우. 전부 A-J 하이카드로 완전히 같고,
+  // 보드에 같은 수트가 2장뿐이라 누구도 플러시가 되지 않는다.
+  // 마지막 좌석은 폴드해서 자격이 없으므로 홀카드가 필요 없다.
+  const tie4 = [h('Ah','Jd'), h('Ac','Jh'), h('Ad','Jc'), []]
+  const tie5 = [h('Ah','Jd'), h('Ac','Jh'), h('Ad','Jc'), h('As','Js'), []]
 
   it('동점이면 나눠 갖는다', () => {
     const pots = buildPots([1000, 1000], [false, false])
@@ -1156,6 +1161,49 @@ describe('awardPots — 동점 분배와 홀칩', () => {
     const pots = buildPots([1050, 1050], [false, false])
     const awards = awardPots(pots, tie, board, 0)
     expect(awards.reduce((a, x) => a + x.amount, 0)).toBe(2100)
+  })
+
+  it('셋이 나눠도 홀칩 하나가 버튼 왼쪽 첫 자격자에게 가고 총액이 보존된다', () => {
+    // 팟 2,200 을 셋이 나눈다. 2,200 / 3 은 나눠떨어지지 않는다 —
+    // 700 씩 주고 남는 홀칩 100 하나가 버튼 왼쪽 첫 자격자에게 간다.
+    // 반올림(733 x 3 = 2,199)은 칩을 하나 잃고 733 은 존재하지도 않는 칩이다.
+    // 좌석 3 은 폴드한 데드머니 100 이라 팟을 가르지 않는다.
+    const pots = buildPots([700, 700, 700, 100], [false, false, false, true])
+    expect(pots).toHaveLength(1)
+    expect(pots[0].amount).toBe(2200)
+
+    // 버튼이 좌석 0 이면 배분 순서는 1 → 2 → 3 → 0 이다. 첫 자격자는 좌석 1.
+    const awards = awardPots(pots, tie4, board, 0)
+    const bySeat = new Map(awards.map((a) => [a.seat, a.amount]))
+    expect(bySeat.get(1)).toBe(800)
+    expect(bySeat.get(2)).toBe(700)
+    expect(bySeat.get(0)).toBe(700)
+    expect(awards.reduce((a, x) => a + x.amount, 0)).toBe(2200)
+  })
+
+  it('넷이 나누고 홀칩이 둘이면 버튼 왼쪽부터 연속으로 하나씩 간다', () => {
+    // 팟 2,600 을 넷이 나눈다. 600 씩 주고 홀칩 100 이 두 개 남는다.
+    // 두 개가 한 사람에게 몰리지 않고 버튼 왼쪽부터 한 개씩 간다.
+    const pots = buildPots([600, 600, 600, 600, 200], [false, false, false, false, true])
+    expect(pots).toHaveLength(1)
+    expect(pots[0].amount).toBe(2600)
+
+    // 버튼이 좌석 1 이면 배분 순서는 2 → 3 → 4 → 0 → 1 이다.
+    // 자격자는 0~3 이므로 홀칩 두 개는 좌석 2 와 3 이 받는다 — 좌석 번호 순이 아니다.
+    const awards = awardPots(pots, tie5, board, 1)
+    const bySeat = new Map(awards.map((a) => [a.seat, a.amount]))
+    expect(bySeat.get(2)).toBe(700)
+    expect(bySeat.get(3)).toBe(700)
+    expect(bySeat.get(0)).toBe(600)
+    expect(bySeat.get(1)).toBe(600)
+    expect(awards.reduce((a, x) => a + x.amount, 0)).toBe(2600)
+  })
+
+  it('hole 이 좌석 수보다 짧으면 조용히 틀리지 않고 던진다', () => {
+    // 4인 테이블에서 만든 팟에 2인분 hole 만 넘긴 경우.
+    // 이대로 두면 seatCount 가 2 라 홀칩 순서가 조용히 틀어진다.
+    const pots = [{ amount: 1000, eligibleSeats: [0, 3] }]
+    expect(() => awardPots(pots, tie, board, 0)).toThrow(/좌석 수 불일치/)
   })
 })
 ```
@@ -1217,9 +1265,10 @@ export function buildPots(contributed: number[], folded: boolean[]): Pot[] {
 
   /*
    * 층을 자른 것만으로는 팟이 되지 않는다.
-   * 사이드팟은 "올인으로 더 적게 낸 사람 때문에 참가 자격이 갈릴 때"만 생긴다 (TDA Rule 21).
+   * 사이드팟은 "올인으로 더 적게 낸 사람 때문에 참가 자격이 갈릴 때"만 생긴다.
    * 폴드한 사람이 만든 층은 자격자 집합을 바꾸지 않으므로 팟을 새로 만들지 않고
    * 앞 팟에 얹히는 데드머니일 뿐이다.
+   * ⚠️ 조항 번호는 TDA 2024 PDF 원문으로 확인할 것 (기존 "TDA Rule 21" 표기는 미검증).
    *
    * 이 병합을 빼면 폴드한 빅블라인드의 200 하나가 별도 팟을 만들어
    * 목업 핸드가 [800, 23400, 9000] 세 팟이 된다 (정답은 [24200, 9000]).
@@ -1265,6 +1314,18 @@ export function awardPots(
   const awards: PotAward[] = []
   const seatCount = hole.length
 
+  // hole 이 좌석 수보다 짧으면 seatCount 가 작아져 홀칩 순서가 조용히 틀어지고,
+  // 자격 좌석의 홀카드도 없는 채로 평가에 들어간다. 통합 단계에서 증상으로 나타나면
+  // 원인 추적이 가장 비싼 종류라 여기서 크게 실패시킨다.
+  // buildPots 의 좌석 수 가드와 같은 계열 — 없는 정보라 유도로는 풀 수 없다.
+  for (const pot of pots) {
+    for (const seat of pot.eligibleSeats) {
+      if (seat < 0 || seat >= seatCount) {
+        throw new Error(`좌석 수 불일치: 자격 좌석 ${seat}, hole ${seatCount}`)
+      }
+    }
+  }
+
   pots.forEach((pot, potIndex) => {
     if (pot.eligibleSeats.length === 0) return
 
@@ -1309,9 +1370,9 @@ export function awardPots(
 - [ ] **Step 4: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- pots`
-Expected: PASS, 16 tests
+Expected: PASS, 19 tests
 
-`buildPots` 의 병합 규칙과 `awardPots` 의 버튼 기준 순서는 이 계획서에서 가장 자주 틀리는 두 곳이다. 테스트가 깨지면 **테스트를 고치지 말고 구현을 고칠 것** — 기대값은 TDA Rule 21 과 홀칩 규칙에서 나온 것이지 구현에서 나온 것이 아니다.
+`buildPots` 의 병합 규칙과 `awardPots` 의 버튼 기준 순서는 이 계획서에서 가장 자주 틀리는 두 곳이다. 테스트가 깨지면 **테스트를 고치지 말고 구현을 고칠 것** — 기대값은 사이드팟 규칙과 홀칩 규칙에서 나온 것이지 구현에서 나온 것이 아니다. ⚠️ 두 규칙의 조항 번호(기존 "TDA Rule 21" / "Rule 20" 표기)는 TDA 2024 PDF 원문 대조 전이라 미검증이다.
 
 - [ ] **Step 5: 커밋**
 
