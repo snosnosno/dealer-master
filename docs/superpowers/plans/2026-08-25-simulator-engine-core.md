@@ -69,7 +69,7 @@
 ## Task 1: 테스트 환경과 시드 PRNG
 
 **Files:**
-- Create: `vitest.config.ts`
+- Create: `vitest.config.mts`
 - Create: `src/lib/simulator/rng.ts`
 - Test: `src/lib/simulator/rng.test.ts`
 - Modify: `package.json` (scripts)
@@ -87,7 +87,7 @@ npm install -D vitest
 
 - [ ] **Step 2: Vitest 설정 파일 작성**
 
-`vitest.config.ts`:
+`vitest.config.mts`:
 
 ```ts
 import { defineConfig } from 'vitest/config'
@@ -234,7 +234,7 @@ Expected: PASS, 5 tests
 - [ ] **Step 8: 커밋**
 
 ```bash
-git add vitest.config.ts package.json package-lock.json src/lib/simulator/rng.ts src/lib/simulator/rng.test.ts
+git add vitest.config.mts package.json package-lock.json src/lib/simulator/rng.ts src/lib/simulator/rng.test.ts
 git commit -m "feat: 시뮬레이터 시드 PRNG 및 vitest 환경"
 ```
 
