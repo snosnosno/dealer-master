@@ -58,6 +58,7 @@
 | `src/lib/simulator/pots.ts` | 사이드팟 분리와 지급 계산 |
 | `src/lib/simulator/rulesets/types.ts` | `Ruleset` 인터페이스 |
 | `src/lib/simulator/rulesets/nlh.ts` | 노리밋 홀덤 구현 (V1 유일) |
+| `src/lib/simulator/bots.ts` | 봇 배역 배정과 액션 정책 |
 | `src/lib/simulator/generate.ts` | 시드 → Hand |
 | `src/lib/simulator/decisions.ts` | 생성된 핸드에서 판단 지점 추출 |
 | `src/lib/simulator/score.ts` | 답안 채점 |
@@ -1975,6 +1976,7 @@ git commit -m "feat: 룰셋 인터페이스와 노리밋 홀덤 액션 유효성
 ## Task 7: 핸드 생성기
 
 **Files:**
+- Create: `src/lib/simulator/bots.ts`
 - Create: `src/lib/simulator/generate.ts`
 - Test: `src/lib/simulator/generate.test.ts`
 
@@ -2120,59 +2122,35 @@ Expected: FAIL — `Failed to resolve import "./generate"`
 
 - [ ] **Step 3: 구현 작성**
 
-`src/lib/simulator/generate.ts`:
+`src/lib/simulator/bots.ts`:
 
 ```ts
 /**
- * 결정론적 핸드 생성기.
+ * 봇의 배역과 액션 정책.
  *
- * 시드 하나에서 완결된 노리밋 홀덤 핸드 하나를 만든다. 무작위성은 전부
- * createRng(seed) 하나를 통과한다 — Math.random() 이 한 번이라도 섞이면
- * 같은 시드가 다른 핸드를 만들어 재현이 불가능한 버그가 된다.
+ * 오케스트레이터(generate.ts)는 "언제 누구에게 묻는가"를 정하고, 이 파일은
+ * "무엇을 하기로 정하는가"를 정한다. 둘을 한 파일에 두면 라운드 진행 규칙과
+ * 봇의 성향이 뒤엉켜, 봇을 손볼 때마다 절차 코드를 다시 읽어야 한다.
+ *
+ * 배역 배정(pickStacks)이 여기 있는 이유: 스택 금액과 배역은 같은 결정이다.
+ * 8,000 과 12,500 이라는 숫자는 "서로 다른 금액으로 올인해서 팟을 가른다"는
+ * 배역 그 자체이지 테이블 설정이 아니다.
+ *
+ * 무작위성은 전부 호출자가 넘긴 Rng 하나를 통과한다 — Math.random() 금지.
  */
-import { makeDeck, shuffle, type Card } from './cards'
-import { createRng, type Rng } from './rng'
-import { initialState, applyEvent } from './reduce'
-import { awardPots, buildPots } from './pots'
+import type { Rng } from './rng'
 import { nlh } from './rulesets/nlh'
-import type { RulesetId } from './rulesets/types'
-import type { HandEvent, HandState, PlayerAction, SeatInit, Street } from './types'
+import type { HandEvent, HandState, PlayerAction, Street } from './types'
 
-export type Difficulty = 'basic' | 'intermediate' | 'advanced'
-export type DecisionKind = 'procedure' | 'action_validity' | 'calculation' | 'showdown'
-
-export type GenerateOptions = {
-  seed: string
-  rulesetId?: RulesetId
-  seatCount?: number
-  difficulty?: Difficulty
-  require?: DecisionKind[]
-}
-
-export type Hand = {
-  seed: string
-  rulesetId: RulesetId
-  seats: SeatInit[]
-  buttonSeat: number
-  blinds: { sb: number; bb: number }
-  events: HandEvent[]
-}
-
-export const PLAYER_NAMES = [
-  '김도현','박서준','이민아','최우진','정하늘','강태호','윤소라','임재혁','한다은',
-] as const
-
+/** 배역이 성립하는 스택 금액들. 전부 100 단위라 팟이 칩 단위 아래로 쪼개지지 않는다. */
 const STACK_UNITS = [8000, 12500, 19000, 25000, 31500, 47000, 62000, 88000]
-
-export const MIN_SEATS = 3
-export const MAX_SEATS = PLAYER_NAMES.length
 
 /**
  * 사이드팟이 나오도록 심은 배역.
  * "올인 이벤트가 2번 나온다"는 사이드팟의 대리 지표일 뿐이라 확률에 맡기면 안 된다.
  * 누가 쏘고 누가 받는지를 좌석으로 확정해야 계약이 계약이 된다.
  */
-type StackPlan = {
+export type StackPlan = {
   stacks: number[]
   /** 프리플랍에 무조건 올인하는 숏스택 두 자리 */
   shoveSeats: number[]
@@ -2190,7 +2168,7 @@ function pickDistinctSeats(rng: Rng, count: number, k: number): number[] {
   return out
 }
 
-function pickStacks(rng: Rng, count: number, needAllin: boolean, needShowdown: boolean): StackPlan {
+export function pickStacks(rng: Rng, count: number, needAllin: boolean, needShowdown: boolean): StackPlan {
   const stacks: number[] = []
   for (let i = 0; i < count; i++) stacks.push(rng.pick(STACK_UNITS))
   if (!needAllin) {
@@ -2214,19 +2192,7 @@ function pickStacks(rng: Rng, count: number, needAllin: boolean, needShowdown: b
   return { stacks, shoveSeats: [a, b], coverSeat: c, showdownSeats: needShowdown ? [a, b] : [] }
 }
 
-function liveCount(s: HandState): number {
-  return s.seats.filter((x) => !x.folded).length
-}
-
-/** 폴드도 올인도 아닌 좌석 — 아직 액션할 수 있는 사람들 */
-function actableSeats(s: HandState): number[] {
-  return s.seats
-    .map((x, i) => ({ x, i }))
-    .filter(({ x }) => !x.folded && !x.allIn)
-    .map(({ i }) => i)
-}
-
-type BotContext = {
+export type BotContext = {
   rng: Rng
   bb: number
   currentBet: number
@@ -2238,7 +2204,7 @@ type BotContext = {
 }
 
 /** 봇 한 명의 액션 하나를 고른다. 반드시 그 시점에 합법인 액션만 만든다. */
-function decideAction(s: HandState, seat: number, d: BotContext): HandEvent {
+export function decideAction(s: HandState, seat: number, d: BotContext): HandEvent {
   const st = s.seats[seat]
   const allinTo = st.bet + st.stack
   const toCall = d.currentBet - st.bet
@@ -2286,6 +2252,70 @@ function decideAction(s: HandState, seat: number, d: BotContext): HandEvent {
   if (roll < 0.42) return act({ kind: 'fold' })
   if (!d.canRaise || roll < 0.86) return act({ kind: 'call', to: d.currentBet })
   return aggress()
+}
+```
+
+`src/lib/simulator/generate.ts`:
+
+```ts
+/**
+ * 결정론적 핸드 생성기.
+ *
+ * 시드 하나에서 완결된 노리밋 홀덤 핸드 하나를 만든다. 무작위성은 전부
+ * createRng(seed) 하나를 통과한다 — Math.random() 이 한 번이라도 섞이면
+ * 같은 시드가 다른 핸드를 만들어 재현이 불가능한 버그가 된다.
+ */
+import { makeDeck, shuffle, type Card } from './cards'
+import { createRng, type Rng } from './rng'
+import { decideAction, pickStacks, type StackPlan } from './bots'
+import { initialState, applyEvent } from './reduce'
+import { awardPots, buildPots } from './pots'
+import type { RulesetId } from './rulesets/types'
+import type { HandEvent, HandState, SeatInit, Street } from './types'
+
+export type Difficulty = 'basic' | 'intermediate' | 'advanced'
+export type DecisionKind = 'procedure' | 'action_validity' | 'calculation' | 'showdown'
+
+export type GenerateOptions = {
+  seed: string
+  rulesetId?: RulesetId
+  seatCount?: number
+  /**
+   * 현재 생성에 영향을 주지 않는다 — 난이도 설계는 이 계획 밖이다.
+   * 'basic' 과 'advanced' 가 무엇을 달리해야 하는지(봇 공격성·스택 편차·판단
+   * 지점 개수·규칙 난이도)가 정의된 적이 없어, 지금 구현하면 난이도 설계를
+   * 지어내는 것이 된다. require 와 달리 보장할 대상이 아직 없다.
+   */
+  difficulty?: Difficulty
+  require?: DecisionKind[]
+}
+
+export type Hand = {
+  seed: string
+  rulesetId: RulesetId
+  seats: SeatInit[]
+  buttonSeat: number
+  blinds: { sb: number; bb: number }
+  events: HandEvent[]
+}
+
+export const PLAYER_NAMES = [
+  '김도현','박서준','이민아','최우진','정하늘','강태호','윤소라','임재혁','한다은',
+] as const
+
+export const MIN_SEATS = 3
+export const MAX_SEATS = PLAYER_NAMES.length
+
+function liveCount(s: HandState): number {
+  return s.seats.filter((x) => !x.folded).length
+}
+
+/** 폴드도 올인도 아닌 좌석 — 아직 액션할 수 있는 사람들 */
+function actableSeats(s: HandState): number[] {
+  return s.seats
+    .map((x, i) => ({ x, i }))
+    .filter(({ x }) => !x.folded && !x.allIn)
+    .map(({ i }) => i)
 }
 
 /**
@@ -2533,7 +2563,7 @@ Expected: PASS, 전체 통과
 - [ ] **Step 6: 커밋**
 
 ```bash
-git add src/lib/simulator/generate.ts src/lib/simulator/generate.test.ts
+git add src/lib/simulator/bots.ts src/lib/simulator/generate.ts src/lib/simulator/generate.test.ts
 git commit -m "feat: 결정론적 핸드 생성기"
 ```
 
