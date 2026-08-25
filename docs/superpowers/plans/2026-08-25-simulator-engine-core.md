@@ -63,7 +63,7 @@
 | `src/lib/simulator/decisions.ts` | 생성된 핸드에서 판단 지점 추출 |
 | `src/lib/simulator/score.ts` | 답안 채점 |
 
-테스트는 각 파일 옆에 `*.test.ts`로 둔다.
+테스트는 각 파일 옆에 `*.test.ts`로 둔다. 예외는 `decisions.ts` 하나로, 계약 테스트(`decisions.test.ts`)와 정답 정확성 회귀(`decisions.answers.test.ts`)를 나눈다 — 책임이 갈리고 한 파일에 몰면 400줄을 넘는다 (컨트롤러 판정 R25).
 
 ---
 
@@ -2573,7 +2573,8 @@ git commit -m "feat: 결정론적 핸드 생성기"
 
 **Files:**
 - Create: `src/lib/simulator/decisions.ts`
-- Test: `src/lib/simulator/decisions.test.ts`
+- Test: `src/lib/simulator/decisions.test.ts` (계약 16개)
+- Test: `src/lib/simulator/decisions.answers.test.ts` (정답 정확성 회귀 9개)
 
 **Interfaces:**
 - Consumes: `Hand` (Task 7), `buildPots`/`awardPots` (Task 5), `nlh` (Task 6)
@@ -2585,15 +2586,13 @@ git commit -m "feat: 결정론적 핸드 생성기"
 
 - [ ] **Step 1: 실패하는 테스트 작성**
 
-`src/lib/simulator/decisions.test.ts`:
+`src/lib/simulator/decisions.test.ts` — 계약 테스트 (16개):
 
 ```ts
 import { describe, it, expect } from 'vitest'
 import { generateHand, type Hand } from './generate'
 import { initialState, stateAt } from './reduce'
 import { extractDecisions, TIME_LIMITS } from './decisions'
-import { parseCard } from './cards'
-import type { HandEvent } from './types'
 
 describe('extractDecisions', () => {
   const hand = generateHand({ seed: 'dp-1', require: ['calculation'] })
@@ -2749,13 +2748,28 @@ describe('extractDecisions — 정답 검증', () => {
     }
   })
 })
+```
 
-/*
- * 아래는 컨트롤러가 따로 인용을 요구한 다섯 가지(최소 레이즈 정답 · 선택지 겹침 ·
- * correctSeats 복수형 · td_discretion · 선택지 순서)를 실측으로 못박는 테스트다.
- * 위 블록이 "한 시드에서 맞는가"를 본다면, 여기는 "여러 시드에서 구조적으로
- * 보장되는가"를 본다.
+`src/lib/simulator/decisions.answers.test.ts` — 정답 정확성 회귀 (9개):
+
+정답이 규칙과 맞는가·채점 가능한 형태인가를 여러 시드에서 본다.
+검토가 발견한 최소 레이즈 정답 불일치(221/296)와 선택지 겹침(296/296)의 회귀 방어선이라
+책임이 계약 테스트와 갈린다 — 그래서 파일을 나눈다 (컨트롤러 판정 R25).
+
+```ts
+/**
+ * 출제된 문제의 "정답"이 규칙과 맞는가, 그리고 채점이 가능한 형태인가.
+ *
+ * 계약 테스트(`decisions.test.ts`)가 "함수가 명세대로 동작하는가"를 본다면
+ * 여기는 검토에서 실제로 터진 결함들의 회귀 방어선이다 —
+ * 최소 레이즈 정답 불일치(221/296) 와 선택지 겹침(296/296) 이 그것이다.
+ * 한 시드에서 맞는지가 아니라 여러 시드에서 구조적으로 보장되는지를 본다.
  */
+import { describe, it, expect } from 'vitest'
+import { generateHand, type Hand } from './generate'
+import { extractDecisions } from './decisions'
+import { parseCard } from './cards'
+import type { HandEvent } from './types'
 
 /** 선택지 문자열 앞머리의 금액을 숫자로 되돌린다. */
 const amountOf = (choice: string) => Number(choice.split(' —')[0].replace(/,/g, ''))
@@ -3288,7 +3302,7 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
 - [ ] **Step 4: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- decisions`
-Expected: PASS, 25 tests
+Expected: PASS, 25 tests (`decisions.test.ts` 16 + `decisions.answers.test.ts` 9)
 
 일부 시드에서 사이드팟이나 쇼다운이 안 나와 테스트가 실패하면, 테스트의 시드를 바꾸지 말고 `generateHand`에 `require: ['calculation']`이 제대로 동작하는지 먼저 확인할 것. 그래도 안 나오면 Task 7의 `pickStacks`가 심는 배역을 확인한다.
 
@@ -3299,7 +3313,7 @@ Expected: PASS, 25 tests
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/lib/simulator/decisions.ts src/lib/simulator/decisions.test.ts
+git add src/lib/simulator/decisions.ts src/lib/simulator/decisions.test.ts src/lib/simulator/decisions.answers.test.ts
 git commit -m "feat: 핸드에서 판단 지점 추출"
 ```
 
