@@ -2229,8 +2229,15 @@ function decideAction(s: HandState, seat: number, d: BotContext): HandEvent {
 
   // 사이드팟 훈련용 배역은 확률에 맡기지 않는다
   if (d.street === 'preflop' && d.plan.shoveSeats.includes(seat)) return act({ kind: 'allin', to: allinTo })
-  if (d.street === 'preflop' && d.plan.coverSeat === seat && toCall > 0 && toCall < st.stack) {
-    return act({ kind: 'call', to: d.currentBet })
+  if (d.street === 'preflop' && d.plan.coverSeat === seat) {
+    /*
+     * 커버 좌석은 프리플랍에 절대 폴드하지 않고, 스택이 닿는 데까지 맞춘다.
+     * 여기서 주사위를 굴리면 두 올인 중 위쪽이 미콜로 되돌아가(return_uncalled)
+     * 두 사람의 투입액이 같아지고, 팟이 하나로 합쳐져 사이드팟이 사라진다.
+     * 계약은 "올인이 두 번"이 아니라 "팟이 갈린다"이므로 확률에 맡길 수 없다.
+     */
+    if (toCall === 0) return act({ kind: 'check' })
+    return toCall >= st.stack ? act({ kind: 'allin', to: allinTo }) : act({ kind: 'call', to: d.currentBet })
   }
 
   const roll = d.rng.next()
@@ -2465,7 +2472,7 @@ export function generateHand(opts: GenerateOptions): Hand {
 - [ ] **Step 4: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- generate`
-Expected: PASS, 13 tests
+Expected: PASS, 18 tests
 
 `calculation` 제약이 깨지면 확률(roll 임계값)을 만지지 말 것 — 그건 테스트가 통과할 때까지 주사위를 굴리는 것이다. `pickStacks` 가 심은 `shoveSeats` / `coverSeat` 배역이 `decideAction` 에서 실제로 강제되고 있는지를 보라. 계약은 "올인이 몇 번 나왔나"가 아니라 "팟이 갈렸나"다.
 
