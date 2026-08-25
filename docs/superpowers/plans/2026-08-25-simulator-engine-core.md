@@ -664,7 +664,7 @@ export function compareHands(a: HandRank, b: HandRank): number {
 - [ ] **Step 4: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- evaluate`
-Expected: PASS, 20 tests
+Expected: PASS, 23 tests
 
 - [ ] **Step 5: 커밋**
 
