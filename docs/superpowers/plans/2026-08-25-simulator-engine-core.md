@@ -1492,6 +1492,19 @@ describe('interpretChipPush — 파일럿 케이스 2 (Rule 45-A)', () => {
     const a = nlh.interpretChipPush(c, 2000, 'none', [1000, 1000])
     expect(a.kind).toBe('raise')
   })
+
+  it('칩 내역의 합이 밀어낸 총액과 다르면 던진다', () => {
+    // 어긋난 내역을 그대로 쓰면 "칩 하나를 빼면 콜에 못 미치는가" 판정이
+    // 조용히 뒤집힌다. 여기서는 콜(1050)로 나와야 할 것이 레이즈가 된다.
+    const c = ctx({ currentBet: 1050, seatBet: 0, seatStack: 12500 })
+    expect(() => nlh.interpretChipPush(c, 2000, 'none', [1000, 1000, 1000])).toThrow(/칩 내역 불일치/)
+  })
+
+  it('0 이나 음수 권종이 섞이면 던진다', () => {
+    // [1000, 0] 은 0 을 빼도 총액이 그대로라 무조건 레이즈로 판정된다.
+    const c = ctx({ currentBet: 1000, seatBet: 0, seatStack: 12500 })
+    expect(() => nlh.interpretChipPush(c, 1000, 'none', [1000, 0])).toThrow(/칩 권종이 잘못됨/)
+  })
 })
 
 describe('validateAction — 파일럿 케이스 3 (Rule 51-B 언더콜)', () => {
@@ -1579,6 +1592,17 @@ Expected: FAIL — `Failed to resolve import "./nlh"`
 `src/lib/simulator/rulesets/types.ts`:
 
 ```ts
+/**
+ * 룰셋 인터페이스.
+ *
+ * 비유: 같은 카드 게임이라도 종목마다 "규칙책"이 다르다. 엔진은 규칙책을 통째로
+ * 갈아 끼울 수 있게 만들어 두고, 액션이 합법인지·최소 레이즈가 얼마인지 같은
+ * 판정을 전부 그 책에 묻는다. V1 의 규칙책은 노리밋 홀덤(`nlh`) 하나뿐이지만,
+ * 스터드·드로우·팟리밋을 나중에 데이터로 붙이기 위해 인터페이스 뒤에 둔다.
+ *
+ * 여기가 판정하는 것이 곧 사용자에게 가르치는 규칙이다. 틀리면 딜러 훈련생이
+ * 틀린 규칙을 정답으로 배운다.
+ */
 import type { PlayerAction, Street } from '../types'
 
 export type RulesetId = 'nlh'
@@ -1608,6 +1632,10 @@ export type BettingContext = {
    * 이 좌석에게 레이즈 권리가 있는지.
    * 이미 액션한 좌석 앞에 "풀 레이즈에 못 미치는 올인"만 있었다면
    * 콜·폴드만 가능하고 레이즈로 베팅을 다시 열 수 없다.
+   *
+   * ⚠️ 이 리오픈 규칙에는 조항 번호 근거가 아직 없다 — 계획서·파일럿 문서
+   * 어디에도 인용이 없다. TDA 2024 PDF 원문으로 조항을 확인할 것.
+   * (규칙 내용 자체는 통용되는 노리밋 관행이나, 번호를 지어내지 않는다.)
    */
   canRaise: boolean
 }
@@ -1657,6 +1685,14 @@ export interface Ruleset {
 `src/lib/simulator/rulesets/nlh.ts`:
 
 ```ts
+/**
+ * 노리밋 홀덤 룰셋.
+ *
+ * 이 파일이 "그 액션이 합법인가"를 판정하고, 그 판정이 곧 사용자에게 가르치는
+ * 규칙이 된다. 그래서 무효 액션을 그냥 거절하지 않고 (1) 규정이 처리를 확정하는지
+ * (`forced`) (2) 플로어 판단 영역인지 (`td_discretion`) 까지 구분해서 돌려준다.
+ * 둘을 뭉개면 판단 영역 문제가 단일 정답으로 출제된다.
+ */
 import type { PlayerAction } from '../types'
 import type { BettingContext, DeclaredIntent, Ruleset, ValidationResult } from './types'
 
@@ -1731,6 +1767,7 @@ export const nlh: Ruleset = {
 
       case 'bet':
       case 'raise': {
+        // ⚠️ 리오픈 규칙의 조항 번호는 미검증이다 — types.ts 의 canRaise 주석 참조.
         if (!ctx.canRaise) {
           return bad(
             '풀 레이즈에 못 미치는 올인은 베팅을 다시 열지 않습니다 — 콜 또는 폴드만 가능합니다',
@@ -1767,6 +1804,22 @@ export const nlh: Ruleset = {
    * 발행 전에 TDA 2024 PDF 원문 표현으로 이 해석을 확인할 것.
    */
   interpretChipPush(ctx: BettingContext, pushedTotal: number, declared: DeclaredIntent, chips?: number[]) {
+    /*
+     * chips 는 pushedTotal 의 내역이다. 둘이 어긋나거나 0·음수 권종이 섞이면
+     * "칩 하나를 빼도 콜에 충분한가" 판정이 조용히 뒤집힌다 — [1000, 0] 은 0 을 빼도
+     * 총액이 그대로라 무조건 레이즈가 되고, 합이 다르면 없는 칩으로 판정한다.
+     * 조용한 오판정은 곧 틀린 규칙을 정답으로 가르치는 것이므로 급소에서 막는다.
+     */
+    if (chips) {
+      if (chips.length === 0 || chips.some((c) => !Number.isInteger(c) || c <= 0)) {
+        throw new Error(`칩 권종이 잘못됨: [${chips.join(', ')}]`)
+      }
+      const sum = chips.reduce((acc, c) => acc + c, 0)
+      if (sum !== pushedTotal) {
+        throw new Error(`칩 내역 불일치: chips 합 ${sum}, pushedTotal ${pushedTotal}`)
+      }
+    }
+
     const maxTo = this.maxRaiseTo(ctx)
     const wagerTo = Math.min(ctx.seatBet + pushedTotal, maxTo)
     const callTo = Math.min(ctx.currentBet, maxTo)
@@ -1801,7 +1854,7 @@ export const nlh: Ruleset = {
 - [ ] **Step 5: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- nlh`
-Expected: PASS, 21 tests
+Expected: PASS, 23 tests
 
 - [ ] **Step 6: 커밋**
 
