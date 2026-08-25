@@ -97,6 +97,36 @@ describe('interpretChipPush — 파일럿 케이스 2 (Rule 45-A)', () => {
     const c = ctx({ currentBet: 1000, seatBet: 0, seatStack: 12500 })
     expect(() => nlh.interpretChipPush(c, 1000, 'none', [1000, 0])).toThrow(/칩 권종이 잘못됨/)
   })
+
+  it('밀어낸 금액이 0 이하면 던진다', () => {
+    // 칩을 밀지 않은 것은 이 함수가 해석할 액션이 아니다(체크·폴드다).
+    const c = ctx({ currentBet: 500, seatBet: 0, seatStack: 12500 })
+    expect(() => nlh.interpretChipPush(c, 0, 'none')).toThrow(/밀어낸 금액/)
+  })
+})
+
+describe('interpretChipPush — 마주한 벳이 없을 때 (오프닝 벳)', () => {
+  const noBet = ctx({ currentBet: 0, lastRaiseSize: 0, seatBet: 0, seatStack: 12500 })
+
+  it('단일 칩을 말없이 밀면 그 금액 전부가 벳이다', () => {
+    // 플랍 이후 첫 액션에서 가장 흔한 무선언 액션이다. 콜할 것이 없으므로
+    // "칩 하나를 빼면 콜에 못 미치는가" 판정이 적용될 자리가 아니다.
+    expect(nlh.interpretChipPush(noBet, 1000, 'none', [1000])).toEqual({ kind: 'bet', to: 1000 })
+  })
+
+  it('칩 구성을 몰라도 밀어낸 금액이 벳이다', () => {
+    // 여기서 콜로 떨어지면 밀어낸 칩이 팟에 들어가지 않고 증발한다.
+    expect(nlh.interpretChipPush(noBet, 5000, 'none')).toEqual({ kind: 'bet', to: 5000 })
+  })
+
+  it('여러 칩을 밀어도 레이즈가 아니라 벳이다', () => {
+    // 올릴 벳이 없으면 레이즈가 아니다 — 화면에 "레이즈"로 나가면 안 된다.
+    expect(nlh.interpretChipPush(noBet, 2000, 'none', [1000, 1000])).toEqual({ kind: 'bet', to: 2000 })
+  })
+
+  it('스택 전액을 밀면 올인이다', () => {
+    expect(nlh.interpretChipPush(noBet, 12500, 'none', [12500])).toEqual({ kind: 'allin', to: 12500 })
+  })
 })
 
 describe('validateAction — 파일럿 케이스 3 (Rule 51-B 언더콜)', () => {
@@ -170,6 +200,23 @@ describe('validateAction — 파일럿 케이스 3 (Rule 51-B 언더콜)', () =>
     const r = nlh.validateAction(c, { kind: 'raise', to: 5000 })
     expect(r.valid).toBe(true)
     if (r.valid) expect(r.normalized).toEqual({ kind: 'allin', to: 5000 })
+  })
+
+  it('리오픈되지 않았으면 올인이라고 말해도 다시 올릴 수 없다', () => {
+    // "레이즈"로 거절당하는 액션이 "올인"이라는 단어 하나로 통과하면
+    // canRaise 를 둔 이유가 사라진다. 올인은 리오픈 제약의 예외가 아니다.
+    const c = ctx({ currentBet: 1100, lastRaiseSize: 1000, seatBet: 1000, seatStack: 50000, canRaise: false })
+    const r = nlh.validateAction(c, { kind: 'allin', to: 51000 })
+    expect(r.valid).toBe(false)
+    if (!r.valid) expect(r.corrected).toEqual({ kind: 'call', to: 1100 })
+  })
+
+  it('리오픈되지 않았어도 콜 금액 이하의 올인은 허용된다', () => {
+    // 스택이 콜 금액에 못 미치는 올인은 레이즈가 아니라 콜이다.
+    // 리오픈 검사가 이것까지 막으면 짧은 스택이 콜조차 못 하게 된다.
+    const c = ctx({ currentBet: 8000, seatBet: 0, seatStack: 3000, canRaise: false })
+    const r = nlh.validateAction(c, { kind: 'allin', to: 3000 })
+    expect(r.valid).toBe(true)
   })
 
   it('베팅이 리오픈되지 않았으면 레이즈할 수 없다', () => {
