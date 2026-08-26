@@ -144,6 +144,13 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
         currentBet: to,
         lastRaiseSize: raiseSize,
         bigBlind: hand.blinds.bb,
+        /*
+         * 아래 세 필드는 특정 좌석이 아니라 "규정이 정하는 최소 총액"을 묻기 위한
+         * 중립값이다. 문제 문구(:191)가 다음 행동할 사람을 지목하지 않는 이유가 이것이다 —
+         * 지목하면 답이 그 사람의 스택에 매이는데(짧은 스택은 최소 레이즈를 못 하고
+         * 올인만 가능하다) 여기 계산은 스택을 일부러 보지 않는다. 문구를 좌석에
+         * 매는 순간 이 중립값들이 조작된 컨텍스트가 된다.
+         */
         seatBet: 0,
         seatStack: Number.MAX_SAFE_INTEGER,
         isOpenBet: false,
@@ -182,7 +189,7 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
         dps.push({
           atEventIndex: raiseIdx + 1,
           kind: 'action_validity',
-          prompt: `${hand.seats[e.seat].name}이 ${fmt(to)}으로 ${e.action.kind === 'bet' ? '벳' : '레이즈'}했습니다. 다음 플레이어의 최소 레이즈 총액은?`,
+          prompt: `${hand.seats[e.seat].name}이 ${fmt(to)}으로 ${e.action.kind === 'bet' ? '벳' : '레이즈'}했습니다. 다음 레이즈의 최소 총액은?`,
           sub: prevBet > 0
             ? `직전 최고 벳은 ${fmt(prevBet)}이었습니다.`
             : '이번 라운드의 첫 벳입니다.',
@@ -267,7 +274,15 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
           })),
           correctSeats: winners,
         },
-        ruleRef: 'TDA Rule 21 · 사이드팟 지급 순서',
+        /*
+         * 이 문제는 팟이 하나든 여럿이든 "메인팟을 누가 이기는가"를 묻는다 —
+         * 근거는 핸드 랭킹이지 사이드팟 지급 순서(Rule 21)가 아니다. 게이트가
+         * `pots.length >= 2` 가 아니라 `eligibleSeats.length >= 2` 라 사이드팟이
+         * 없는 핸드에도 붙고(측정: 쇼다운 문제 955건 중 555건, 58.1%), 그때
+         * 21 을 인용하면 훈련생이 조항을 찾아가도 승자 판정 근거가 없다.
+         * 딜링 순서 문제(:115)와 같은 기준으로 숫자를 뺐다 — 확인한 번호만 쓴다.
+         */
+        ruleRef: 'TDA · 쇼다운 승자 판정',
         explanation: split
           ? `${named}이 ${category}로 동일해 메인팟을 나눠 갖습니다. 나눠떨어지지 않는 홀칩은 버튼 왼쪽 첫 자격자에게 갑니다.`
           : pots.length >= 2

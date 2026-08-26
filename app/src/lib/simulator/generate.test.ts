@@ -3,11 +3,15 @@
  *
  * 룰셋을 판정자로 부르지 않는다 — "생성된 액션이 규칙에 맞는가"와 그 판정의
  * 입력(베팅 컨텍스트, 오픈 벳 플래그)은 `generate.rules.test.ts` 의 몫이다.
- * 여기 남은 것은 결정론, 이벤트 구조, require 계약, 쇼다운 절차, 팟 무결성처럼
- * 핸드 출력만 보면 답이 나오는 질문들이다.
+ * 여기 남은 것은 결정론, 이벤트 구조, require 계약, 쇼다운 절차, 팟 무결성이다.
+ *
+ * 대부분은 핸드 출력만 보면 답이 나오지만 require 계약은 예외다 — "그 종류의
+ * 판단 지점이 나온다"는 약속이라 소비자인 `extractDecisions` 를 불러야 확인된다.
+ * 이벤트 존재만 보는 형태로 쓰면 어떤 회귀도 잡지 못한다.
  */
 import { describe, it, expect } from 'vitest'
 import { generateHand } from './generate'
+import { extractDecisions } from './decisions'
 import { initialState, stateAt } from './reduce'
 import { buildPots } from './pots'
 import type { Hand } from './generate'
@@ -286,14 +290,62 @@ describe('generateHand — require 계약', () => {
     }
   })
 
-  it('배역이 필요 없는 두 종류는 모든 핸드에 구조적으로 존재한다', () => {
-    // procedure / action_validity 에 배역을 심지 않은 근거를 테스트로 고정한다.
-    for (let n = 0; n < 40; n++) {
-      const hand = generateHand({ seed: 'kinds-' + n, require: ['procedure', 'action_validity'] })
-      expect(hand.events.some((e) => e.type === 'deal_hole')).toBe(true)
-      expect(hand.events.some((e) => e.type === 'collect_bets')).toBe(true)
-      expect(hand.events.some((e) => e.type === 'player_action')).toBe(true)
+  it("require:['procedure'] 는 판단 지점이 실제로 나오는 것까지 보장한다", () => {
+    /*
+     * require 는 "핸드에 그런 이벤트가 있다"가 아니라 "그 종류의 판단 지점이
+     * 나온다"는 약속이므로 소비자인 extractDecisions 로 확인한다. deal_hole·
+     * collect_bets·player_action 의 존재만 보면 모든 핸드가 구조적으로 통과해
+     * require 처리를 어떻게 망가뜨려도 빨개지지 않는다 (그 형태의 테스트가
+     * action_validity 의 미이행을 계약 이행처럼 보이게 하고 있었다).
+     *
+     * 반증하는 구현 변경: 딜링 판단 지점의 오답 게이트(`decisions.ts` 의
+     * `distractors.length >= 2`)를 3~9인 중 한 좌석 수에서라도 못 넘게 조이거나,
+     * 첫 홀카드 이벤트를 빼면 빨개진다.
+     */
+    let checked = 0
+    for (let seatCount = 3; seatCount <= 9; seatCount++) {
+      for (let n = 0; n < 20; n++) {
+        const seed = `req-proc-${seatCount}-${n}`
+        const dps = extractDecisions(generateHand({ seed, seatCount, require: ['procedure'] }))
+        expect(dps.some((d) => d.kind === 'procedure'), seed).toBe(true)
+        checked++
+      }
     }
+    expect(checked).toBe(140)
+  })
+
+  it("require:['action_validity'] 는 최선 노력이고 보장이 아니다", () => {
+    /*
+     * 이 축은 배역으로 심을 수 없다. 판단 지점이 나오려면 자발적 bet/raise 가
+     * 있어야 하고(올인은 해당하지 않는다), 그 금액에서 정답과도 서로와도 겹치지
+     * 않는 오답을 둘 만들 수 있어야 한다. 둘째 조건은 금액이 정한다.
+     *
+     * 시드 'av-0' 이 걸리는 곳은 둘째 조건이다. 첫 자발적 벳이 직전 최고 벳 0 위에
+     * 빅블라인드와 같은 200 으로 깔리므로 정답은 200 + max(200, 200) = 400 이고,
+     * 오답 후보 넷이 전부 무너진다 — 200+200=400(정답과 겹침), 200×2=400(겹침),
+     * 200+0=200(정답보다 크지 않음), 200+⌊200/2⌋=300(유일하게 살아남음).
+     * 하나뿐이면 문제가 성립하지 않으므로 이 핸드는 출제하지 않는다.
+     *
+     * 반증하는 구현 변경: 배역을 심어 이 축을 보장으로 올리면 마지막 단언이
+     * 빨개진다(계약을 올리는 것은 의도적 설계 변경이므로 이 테스트를 같이 고쳐야
+     * 한다). 오답 겹침 게이트를 없애도 마찬가지로 빨개진다. 생성기가 바뀌어
+     * 이 시드의 첫 벳이 더는 빅블라인드 크기가 아니게 되면 앞의 모양 단언이 먼저
+     * 빨개져 증인 시드를 새로 고르라고 알려 준다 — 시드는 출력을 베낀 기대값이
+     * 아니라 규칙이 예측한 모양의 증인이다.
+     */
+    const hand = generateHand({ seed: 'av-0', require: ['action_validity'] })
+    const idx = hand.events.findIndex(
+      (e) => e.type === 'player_action' && (e.action.kind === 'bet' || e.action.kind === 'raise'),
+    )
+    expect(idx).toBeGreaterThanOrEqual(0)
+    const e = hand.events[idx]
+    if (e.type !== 'player_action' || !('to' in e.action)) throw new Error('첫 벳/레이즈가 금액을 갖지 않는다')
+
+    const before = stateAt(initialState(hand.seats, hand.buttonSeat), hand.events, idx)
+    expect(Math.max(...before.seats.map((s) => s.bet))).toBe(0)
+    expect(e.action.to).toBe(hand.blinds.bb)
+
+    expect(extractDecisions(hand).some((d) => d.kind === 'action_validity')).toBe(false)
   })
 })
 

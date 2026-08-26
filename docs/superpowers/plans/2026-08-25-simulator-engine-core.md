@@ -1985,8 +1985,8 @@ git commit -m "feat: 룰셋 인터페이스와 노리밋 홀덤 액션 유효성
 **Files:**
 - Create: `src/lib/simulator/bots.ts`
 - Create: `src/lib/simulator/generate.ts`
-- Test: `src/lib/simulator/generate.test.ts` (생성기 행동 22개)
-- Test: `src/lib/simulator/generate.rules.test.ts` (규칙 적합성·오픈 벳 플래그 3개)
+- Test: `src/lib/simulator/generate.test.ts` (생성기 행동 23개)
+- Test: `src/lib/simulator/generate.rules.test.ts` (규칙 적합성·오픈 벳 플래그·액션 순서 5개)
 
 **Interfaces:**
 - Consumes: 전 태스크 전부
@@ -2007,11 +2007,15 @@ git commit -m "feat: 룰셋 인터페이스와 노리밋 홀덤 액션 유효성
  *
  * 룰셋을 판정자로 부르지 않는다 — "생성된 액션이 규칙에 맞는가"와 그 판정의
  * 입력(베팅 컨텍스트, 오픈 벳 플래그)은 `generate.rules.test.ts` 의 몫이다.
- * 여기 남은 것은 결정론, 이벤트 구조, require 계약, 쇼다운 절차, 팟 무결성처럼
- * 핸드 출력만 보면 답이 나오는 질문들이다.
+ * 여기 남은 것은 결정론, 이벤트 구조, require 계약, 쇼다운 절차, 팟 무결성이다.
+ *
+ * 대부분은 핸드 출력만 보면 답이 나오지만 require 계약은 예외다 — "그 종류의
+ * 판단 지점이 나온다"는 약속이라 소비자인 `extractDecisions` 를 불러야 확인된다.
+ * 이벤트 존재만 보는 형태로 쓰면 어떤 회귀도 잡지 못한다.
  */
 import { describe, it, expect } from 'vitest'
 import { generateHand } from './generate'
+import { extractDecisions } from './decisions'
 import { initialState, stateAt } from './reduce'
 import { buildPots } from './pots'
 import type { Hand } from './generate'
@@ -2290,14 +2294,62 @@ describe('generateHand — require 계약', () => {
     }
   })
 
-  it('배역이 필요 없는 두 종류는 모든 핸드에 구조적으로 존재한다', () => {
-    // procedure / action_validity 에 배역을 심지 않은 근거를 테스트로 고정한다.
-    for (let n = 0; n < 40; n++) {
-      const hand = generateHand({ seed: 'kinds-' + n, require: ['procedure', 'action_validity'] })
-      expect(hand.events.some((e) => e.type === 'deal_hole')).toBe(true)
-      expect(hand.events.some((e) => e.type === 'collect_bets')).toBe(true)
-      expect(hand.events.some((e) => e.type === 'player_action')).toBe(true)
+  it("require:['procedure'] 는 판단 지점이 실제로 나오는 것까지 보장한다", () => {
+    /*
+     * require 는 "핸드에 그런 이벤트가 있다"가 아니라 "그 종류의 판단 지점이
+     * 나온다"는 약속이므로 소비자인 extractDecisions 로 확인한다. deal_hole·
+     * collect_bets·player_action 의 존재만 보면 모든 핸드가 구조적으로 통과해
+     * require 처리를 어떻게 망가뜨려도 빨개지지 않는다 (그 형태의 테스트가
+     * action_validity 의 미이행을 계약 이행처럼 보이게 하고 있었다).
+     *
+     * 반증하는 구현 변경: 딜링 판단 지점의 오답 게이트(`decisions.ts` 의
+     * `distractors.length >= 2`)를 3~9인 중 한 좌석 수에서라도 못 넘게 조이거나,
+     * 첫 홀카드 이벤트를 빼면 빨개진다.
+     */
+    let checked = 0
+    for (let seatCount = 3; seatCount <= 9; seatCount++) {
+      for (let n = 0; n < 20; n++) {
+        const seed = `req-proc-${seatCount}-${n}`
+        const dps = extractDecisions(generateHand({ seed, seatCount, require: ['procedure'] }))
+        expect(dps.some((d) => d.kind === 'procedure'), seed).toBe(true)
+        checked++
+      }
     }
+    expect(checked).toBe(140)
+  })
+
+  it("require:['action_validity'] 는 최선 노력이고 보장이 아니다", () => {
+    /*
+     * 이 축은 배역으로 심을 수 없다. 판단 지점이 나오려면 자발적 bet/raise 가
+     * 있어야 하고(올인은 해당하지 않는다), 그 금액에서 정답과도 서로와도 겹치지
+     * 않는 오답을 둘 만들 수 있어야 한다. 둘째 조건은 금액이 정한다.
+     *
+     * 시드 'av-0' 이 걸리는 곳은 둘째 조건이다. 첫 자발적 벳이 직전 최고 벳 0 위에
+     * 빅블라인드와 같은 200 으로 깔리므로 정답은 200 + max(200, 200) = 400 이고,
+     * 오답 후보 넷이 전부 무너진다 — 200+200=400(정답과 겹침), 200×2=400(겹침),
+     * 200+0=200(정답보다 크지 않음), 200+⌊200/2⌋=300(유일하게 살아남음).
+     * 하나뿐이면 문제가 성립하지 않으므로 이 핸드는 출제하지 않는다.
+     *
+     * 반증하는 구현 변경: 배역을 심어 이 축을 보장으로 올리면 마지막 단언이
+     * 빨개진다(계약을 올리는 것은 의도적 설계 변경이므로 이 테스트를 같이 고쳐야
+     * 한다). 오답 겹침 게이트를 없애도 마찬가지로 빨개진다. 생성기가 바뀌어
+     * 이 시드의 첫 벳이 더는 빅블라인드 크기가 아니게 되면 앞의 모양 단언이 먼저
+     * 빨개져 증인 시드를 새로 고르라고 알려 준다 — 시드는 출력을 베낀 기대값이
+     * 아니라 규칙이 예측한 모양의 증인이다.
+     */
+    const hand = generateHand({ seed: 'av-0', require: ['action_validity'] })
+    const idx = hand.events.findIndex(
+      (e) => e.type === 'player_action' && (e.action.kind === 'bet' || e.action.kind === 'raise'),
+    )
+    expect(idx).toBeGreaterThanOrEqual(0)
+    const e = hand.events[idx]
+    if (e.type !== 'player_action' || !('to' in e.action)) throw new Error('첫 벳/레이즈가 금액을 갖지 않는다')
+
+    const before = stateAt(initialState(hand.seats, hand.buttonSeat), hand.events, idx)
+    expect(Math.max(...before.seats.map((s) => s.bet))).toBe(0)
+    expect(e.action.to).toBe(hand.blinds.bb)
+
+    expect(extractDecisions(hand).some((d) => d.kind === 'action_validity')).toBe(false)
   })
 })
 
@@ -2357,8 +2409,8 @@ import { initialState, applyEvent } from './reduce'
 import { createRng } from './rng'
 import { nlh } from './rulesets/nlh'
 import type { StackPlan } from './bots'
-import type { HandEvent, HandState, SeatInit } from './types'
-import type { DecisionKind } from './generate'
+import type { HandEvent, HandState, SeatInit, Street } from './types'
+import type { DecisionKind, Hand } from './generate'
 
 /**
  * 생성기가 봇 액션을 만들 때 쓴 것과 같은 규칙으로 베팅 컨텍스트를 다시 세운다.
@@ -2574,6 +2626,143 @@ describe('runBettingRound — 오픈 벳 플래그', () => {
     expect(rounds).toBe(140)
   })
 })
+
+/*
+ * ── 액션 순서 ──────────────────────────────────────────────────────────────
+ *
+ * "누가 먼저 액션하는가"는 딜러 시험 항목이고, 이벤트 열이 그 절차의 정본이다 —
+ * 쇼다운 공개 순서를 좌석 번호가 아니라 마지막 공격자 기준으로 고친 것과 같은
+ * 이유다. `decisions.ts` 는 이미 학습자에게 "언더더건 — {이름} (빅블라인드 다음)"
+ * 이라고 가르치므로, 시작 좌석이 밀리면 모든 핸드에서 그 라벨이 거짓이 된다.
+ *
+ * 룰셋은 금액과 리오픈 권리만 판정하고 차례는 보지 않는다. 그래서 이 파일의
+ * `assertEveryActionLegal` 도 `integration.test.ts` 의 재구성도 시작 좌석이
+ * 틀린 채로 초록으로 남는다 — 순서는 여기서만 잠긴다.
+ */
+
+type BettingRound = { street: Street; start: HandState; end: HandState; seats: number[] }
+
+/**
+ * 핸드를 `collect_bets` 경계로 잘라 베팅 라운드별 액션 좌석 순서를 뽑는다.
+ * `start` 는 그 라운드의 첫 액션 **직전** 상태다 — 아직 아무도 액션하지 않았으므로
+ * 폴드·올인 플래그가 라운드 시작 시점과 같다. 액션이 없는 라운드(전원 올인)는
+ * 애초에 담기지 않는다.
+ */
+function bettingRounds(hand: Hand): BettingRound[] {
+  let s: HandState = initialState(hand.seats, hand.buttonSeat)
+  let street: Street = 'preflop'
+  const rounds: BettingRound[] = []
+  let cur: BettingRound | null = null
+
+  for (const e of hand.events) {
+    if (e.type === 'deal_board') street = e.street
+    if (e.type === 'collect_bets') cur = null
+    if (e.type === 'player_action') {
+      if (!cur) {
+        cur = { street, start: s, end: s, seats: [] }
+        rounds.push(cur)
+      }
+      cur.seats.push(e.seat)
+    }
+    s = applyEvent(s, e)
+    if (e.type === 'player_action' && cur) cur.end = s
+  }
+  return rounds
+}
+
+/** `from` 부터 시계방향 첫 번째 액션 가능 좌석 — 폴드도 올인도 아닌 사람. */
+function firstActable(s: HandState, from: number): number {
+  const n = s.seats.length
+  for (let i = 0; i < n; i++) {
+    const seat = (from + i) % n
+    if (!s.seats[seat].folded && !s.seats[seat].allIn) return seat
+  }
+  throw new Error('액션 가능한 좌석이 없다')
+}
+
+describe('generateHand — 액션 순서', () => {
+  it('프리플랍은 UTG(버튼+3), 그 뒤는 버튼 왼쪽 첫 생존자부터 시작한다', () => {
+    /*
+     * 기대값은 규칙에서 나온다. 프리플랍은 빅블라인드(버튼+2) 다음 좌석이 UTG 이고,
+     * 플랍 이후는 버튼 왼쪽 첫 좌석부터 — 이미 폴드했거나 올인한 사람은 건너뛴다.
+     *
+     * 반증하는 구현 변경:
+     *  - `runBettingRound` 의 시작 좌석에서 프리플랍 `+3` 을 `+2`(빅블라인드)나
+     *    `+4` 로 바꾸면 프리플랍 단언이 빨개진다.
+     *  - 플랍 이후 `+1` 을 `+2` 로 바꾸면 포스트플랍 단언이 빨개진다.
+     *  - 프리플랍/포스트플랍 분기를 지워 한쪽 식으로 통일해도 둘 중 하나가 빨개진다.
+     */
+    let preflopRounds = 0
+    let postflopRounds = 0
+    let skippedStart = 0 // 버튼+1 이 폴드·올인이라 실제로 건너뛴 라운드
+
+    for (let seatCount = 3; seatCount <= 9; seatCount++) {
+      for (let n = 0; n < 20; n++) {
+        for (const require of [undefined, ['calculation'] as DecisionKind[]]) {
+          const seed = `order-${seatCount}-${n}-${require ? 'calc' : 'plain'}`
+          const hand = generateHand({ seed, seatCount, require })
+          const button = hand.buttonSeat
+
+          for (const r of bettingRounds(hand)) {
+            const label = `${seed} ${r.street}`
+            if (r.street === 'preflop') {
+              expect(r.seats[0], label).toBe((button + 3) % seatCount)
+              preflopRounds++
+            } else {
+              const from = (button + 1) % seatCount
+              const expected = firstActable(r.start, from)
+              expect(r.seats[0], label).toBe(expected)
+              if (expected !== from) skippedStart++
+              postflopRounds++
+            }
+          }
+        }
+      }
+    }
+
+    // 표본이 비면 위 단언은 아무것도 보지 않은 것이다.
+    expect(preflopRounds).toBe(280)
+    expect(postflopRounds).toBeGreaterThan(0)
+    // 건너뛰기 분기를 한 번도 안 밟았다면 포스트플랍 단언은 "버튼+1" 만 확인한 셈이다.
+    expect(skippedStart).toBeGreaterThan(0)
+  })
+
+  it('레이즈 없이 끝난 프리플랍은 빅블라인드가 마지막에 한 번 더 액션한다', () => {
+    /*
+     * 빅블라인드는 이미 블라인드로 현재 벳을 맞춰 놓았지만 아직 "액션한" 것이
+     * 아니다 — 아무도 올리지 않았다면 체크·레이즈를 고를 기회를 한 번 받는다.
+     * 여기서는 그 기회가 라운드의 **마지막** 액션이라는 것까지 본다.
+     *
+     * 반증하는 구현 변경: 라운드 종료 조건에서 `acted.has(i) &&` 를 떼면 전원
+     * 림프한 순간 라운드가 닫혀 빅블라인드가 액션하지 못하고 빨개진다.
+     * 시작 좌석을 빅블라인드로 당겨도(위 테스트가 잡는 변경) 여기서 같이 빨개진다.
+     */
+    let limped = 0
+
+    for (let seatCount = 3; seatCount <= 9; seatCount++) {
+      for (let n = 0; n < 40; n++) {
+        const seed = `bbopt-${seatCount}-${n}`
+        const hand = generateHand({ seed, seatCount })
+        const bbSeat = (hand.buttonSeat + 2) % seatCount
+        const pre = bettingRounds(hand).find((r) => r.street === 'preflop')
+        if (!pre) continue
+
+        // 누군가 빅블라인드 위로 올렸으면 옵션 상황이 아니다.
+        const finalBet = Math.max(...pre.end.seats.map((x) => x.bet))
+        if (finalBet !== hand.blinds.bb) continue
+        // 전원 폴드로 라운드가 닫혔거나 빅블라인드가 블라인드로 이미 올인이면 기회 자체가 없다.
+        if (pre.end.seats.filter((x) => !x.folded).length < 2) continue
+        if (pre.start.seats[bbSeat].allIn) continue
+
+        expect(pre.seats[pre.seats.length - 1], seed).toBe(bbSeat)
+        expect(pre.seats.filter((x) => x === bbSeat), seed).toHaveLength(1)
+        limped++
+      }
+    }
+
+    expect(limped).toBeGreaterThan(0)
+  })
+})
 ```
 
 - [ ] **Step 2: 테스트 실행 — 실패 확인**
@@ -2748,6 +2937,14 @@ export type GenerateOptions = {
    * 지어내는 것이 된다. require 와 달리 보장할 대상이 아직 없다.
    */
   difficulty?: Difficulty
+  /**
+   * 이 종류의 판단 지점이 나오도록 핸드를 만든다.
+   *
+   * 'calculation'·'showdown'·'procedure' 는 보장한다. **'action_validity' 는
+   * 최선 노력이다** — 상당수의 핸드에서 나오지 않는다. 근거는 generateHand 안의
+   * 주석에 있다. 호출부가 이 축을 반드시 물어야 한다면 나온 판단 지점을 확인하고
+   * 안 나왔을 때의 처리를 스스로 정해야 한다.
+   */
   require?: DecisionKind[]
 }
 
@@ -2911,9 +3108,24 @@ export function generateHand(opts: GenerateOptions): Hand {
   const required = opts.require ?? []
   const needAllin = required.includes('calculation')
   /*
-   * 'procedure' 와 'action_validity' 는 배역이 필요 없다 — 모든 핸드에 구조적으로
-   * 존재한다. 딜링·번·정산 절차는 언제나 나오고, 블라인드 포스팅을 포함한 액션도
-   * 언제나 나온다. 나머지 둘만 심어야 계약이 된다.
+   * 배역을 심는 것은 'calculation'(서로 다른 금액의 올인)과 'showdown'(리버까지
+   * 살아남는 둘 이상) 뿐이다. 나머지 둘은 심지 않는데, 그 결과가 서로 다르다.
+   *
+   * - 'procedure' 는 심지 않아도 보장된다. 딜링 판단 지점은 첫 홀카드에 붙고
+   *   홀카드는 언제나 돌려지며, 좌석이 3~9 면 정답 좌석과 겹치지 않는 오답 좌석이
+   *   언제나 둘 이상 남는다 (`decisions.ts:73-95`).
+   * - 'action_validity' 는 **최선 노력이고 보장이 아니다**. require 는 "핸드에
+   *   그런 이벤트가 있다"가 아니라 "그 종류의 판단 지점이 나온다"는 약속인데,
+   *   이 판단 지점은 (a) 자발적인 bet/raise 가 있고(올인은 해당하지 않는다,
+   *   `decisions.ts:132-135`) (b) 그 금액에서 정답과도 서로와도 겹치지 않는
+   *   오답을 둘 만들 수 있을 때만 나온다 (`decisions.ts:176-183`). 둘 다 금액이
+   *   정하는 조건이라 배역으로 심을 수 없고, (b) 를 느슨하게 하는 것은 같은
+   *   숫자를 두 번 내놓는 문제로 되돌아가는 것이다. 그래서 상당수의 핸드에는
+   *   이 종류가 아예 없다 — 그 downstream 결과(측정 안 된 축이 0 점으로 평균되어
+   *   승급을 막는다)는 `score.ts` 의 등급 창 주석에 이미 적혀 있다.
+   *
+   * require 를 하드 보장으로 올리는 것은 2단계 설계 결정이다. 여기서 조용히
+   * 통과시키는 대신 계약을 있는 그대로 적어 둔다.
    */
   const needShowdown = required.includes('showdown')
 
@@ -3044,7 +3256,7 @@ export function generateHand(opts: GenerateOptions): Hand {
 - [ ] **Step 4: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- generate`
-Expected: PASS, 25 tests (`generate.test.ts` 22 + `generate.rules.test.ts` 3)
+Expected: PASS, 28 tests (`generate.test.ts` 23 + `generate.rules.test.ts` 5)
 
 `calculation` 제약이 깨지면 확률(roll 임계값)을 만지지 말 것 — 그건 테스트가 통과할 때까지 주사위를 굴리는 것이다. `pickStacks` 가 심은 `shoveSeats` / `coverSeat` 배역이 `decideAction` 에서 실제로 강제되고 있는지를 보라. 계약은 "올인이 몇 번 나왔나"가 아니라 "팟이 갈렸나"다.
 
@@ -3066,7 +3278,7 @@ git commit -m "feat: 결정론적 핸드 생성기"
 
 **Files:**
 - Create: `src/lib/simulator/decisions.ts`
-- Test: `src/lib/simulator/decisions.test.ts` (계약 16개)
+- Test: `src/lib/simulator/decisions.test.ts` (계약 17개)
 - Test: `src/lib/simulator/decisions.answers.test.ts` (정답 정확성 회귀 10개)
 
 **Interfaces:**
@@ -3079,11 +3291,11 @@ git commit -m "feat: 결정론적 핸드 생성기"
 
 - [ ] **Step 1: 실패하는 테스트 작성**
 
-`src/lib/simulator/decisions.test.ts` — 계약 테스트 (16개):
+`src/lib/simulator/decisions.test.ts` — 계약 테스트 (17개):
 
 ```ts
 import { describe, it, expect } from 'vitest'
-import { generateHand, type Hand } from './generate'
+import { generateHand, type DecisionKind, type Hand } from './generate'
 import { initialState, stateAt } from './reduce'
 import { extractDecisions, TIME_LIMITS } from './decisions'
 
@@ -3140,6 +3352,38 @@ describe('extractDecisions', () => {
       expect(d.explanation.length).toBeGreaterThan(10)
       expect(d.ruleRef.length).toBeGreaterThan(0)
     })
+  })
+
+  it('조항 근거가 종류별로 정확히 이 문구다', () => {
+    /*
+     * ruleRef 는 조항 번호를 학습자에게 말하는 유일한 필드인데 위 테스트가 길이만
+     * 본다. 그래서 쇼다운 문제가 사이드팟 조항(Rule 21)을 단 채 열 번의 리뷰를
+     * 통과했다 — 팟이 하나뿐인 핸드에도 붙는 질문인데도. 인용을 바꾸려면 이제
+     * 이 테스트를 일부러 고쳐야 한다.
+     *
+     * 숫자가 없는 둘은 확인되지 않은 번호를 쓰지 않는다는 이 브랜치의 방침이다:
+     * 딜링 순서는 레포 파일럿 문서가 Rule 34 를 버튼에 배정하고(`decisions.ts` 의
+     * 해당 주석), 쇼다운 승자 판정의 근거는 핸드 랭킹이지 사이드팟 지급 순서가 아니다.
+     *
+     * 반증하는 구현 변경: 네 문구 중 하나라도 바꾸면 빨개진다. 종류를 하나도
+     * 못 본 채로 통과하는 것은 마지막 단언이 막는다.
+     */
+    const EXPECTED: Record<DecisionKind, string> = {
+      procedure: 'TDA · 딜링 순서',
+      action_validity: 'TDA Rule 43-A · Raise Amounts',
+      calculation: 'TDA Rule 21 · Side Pots',
+      showdown: 'TDA · 쇼다운 승자 판정',
+    }
+    const seen = new Set<DecisionKind>()
+    for (let i = 0; i < 40; i++) {
+      for (const kind of ['calculation', 'showdown', 'procedure'] as const) {
+        extractDecisions(generateHand({ seed: `ruleref-${kind}-${i}`, require: [kind] })).forEach((d) => {
+          expect(d.ruleRef, `${d.kind} @ ruleref-${kind}-${i}`).toBe(EXPECTED[d.kind])
+          seen.add(d.kind)
+        })
+      }
+    }
+    expect([...seen].sort()).toEqual(['action_validity', 'calculation', 'procedure', 'showdown'])
   })
 
   it('선택형 판단의 정답 인덱스가 선택지 범위 안이다', () => {
@@ -3725,6 +3969,13 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
         currentBet: to,
         lastRaiseSize: raiseSize,
         bigBlind: hand.blinds.bb,
+        /*
+         * 아래 세 필드는 특정 좌석이 아니라 "규정이 정하는 최소 총액"을 묻기 위한
+         * 중립값이다. 문제 문구(:191)가 다음 행동할 사람을 지목하지 않는 이유가 이것이다 —
+         * 지목하면 답이 그 사람의 스택에 매이는데(짧은 스택은 최소 레이즈를 못 하고
+         * 올인만 가능하다) 여기 계산은 스택을 일부러 보지 않는다. 문구를 좌석에
+         * 매는 순간 이 중립값들이 조작된 컨텍스트가 된다.
+         */
         seatBet: 0,
         seatStack: Number.MAX_SAFE_INTEGER,
         isOpenBet: false,
@@ -3763,7 +4014,7 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
         dps.push({
           atEventIndex: raiseIdx + 1,
           kind: 'action_validity',
-          prompt: `${hand.seats[e.seat].name}이 ${fmt(to)}으로 ${e.action.kind === 'bet' ? '벳' : '레이즈'}했습니다. 다음 플레이어의 최소 레이즈 총액은?`,
+          prompt: `${hand.seats[e.seat].name}이 ${fmt(to)}으로 ${e.action.kind === 'bet' ? '벳' : '레이즈'}했습니다. 다음 레이즈의 최소 총액은?`,
           sub: prevBet > 0
             ? `직전 최고 벳은 ${fmt(prevBet)}이었습니다.`
             : '이번 라운드의 첫 벳입니다.',
@@ -3848,7 +4099,15 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
           })),
           correctSeats: winners,
         },
-        ruleRef: 'TDA Rule 21 · 사이드팟 지급 순서',
+        /*
+         * 이 문제는 팟이 하나든 여럿이든 "메인팟을 누가 이기는가"를 묻는다 —
+         * 근거는 핸드 랭킹이지 사이드팟 지급 순서(Rule 21)가 아니다. 게이트가
+         * `pots.length >= 2` 가 아니라 `eligibleSeats.length >= 2` 라 사이드팟이
+         * 없는 핸드에도 붙고(측정: 쇼다운 문제 955건 중 555건, 58.1%), 그때
+         * 21 을 인용하면 훈련생이 조항을 찾아가도 승자 판정 근거가 없다.
+         * 딜링 순서 문제(:115)와 같은 기준으로 숫자를 뺐다 — 확인한 번호만 쓴다.
+         */
+        ruleRef: 'TDA · 쇼다운 승자 판정',
         explanation: split
           ? `${named}이 ${category}로 동일해 메인팟을 나눠 갖습니다. 나눠떨어지지 않는 홀칩은 버튼 왼쪽 첫 자격자에게 갑니다.`
           : pots.length >= 2
@@ -3866,7 +4125,7 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
 - [ ] **Step 4: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- decisions`
-Expected: PASS, 26 tests (`decisions.test.ts` 16 + `decisions.answers.test.ts` 10)
+Expected: PASS, 27 tests (`decisions.test.ts` 17 + `decisions.answers.test.ts` 10)
 
 일부 시드에서 사이드팟이나 쇼다운이 안 나와 테스트가 실패하면, 테스트의 시드를 바꾸지 말고 `generateHand`에 `require: ['calculation']`이 제대로 동작하는지 먼저 확인할 것. 그래도 안 나오면 Task 7의 `pickStacks`가 심는 배역을 확인한다.
 

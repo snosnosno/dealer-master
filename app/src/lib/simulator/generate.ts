@@ -27,6 +27,14 @@ export type GenerateOptions = {
    * 지어내는 것이 된다. require 와 달리 보장할 대상이 아직 없다.
    */
   difficulty?: Difficulty
+  /**
+   * 이 종류의 판단 지점이 나오도록 핸드를 만든다.
+   *
+   * 'calculation'·'showdown'·'procedure' 는 보장한다. **'action_validity' 는
+   * 최선 노력이다** — 상당수의 핸드에서 나오지 않는다. 근거는 generateHand 안의
+   * 주석에 있다. 호출부가 이 축을 반드시 물어야 한다면 나온 판단 지점을 확인하고
+   * 안 나왔을 때의 처리를 스스로 정해야 한다.
+   */
   require?: DecisionKind[]
 }
 
@@ -190,9 +198,24 @@ export function generateHand(opts: GenerateOptions): Hand {
   const required = opts.require ?? []
   const needAllin = required.includes('calculation')
   /*
-   * 'procedure' 와 'action_validity' 는 배역이 필요 없다 — 모든 핸드에 구조적으로
-   * 존재한다. 딜링·번·정산 절차는 언제나 나오고, 블라인드 포스팅을 포함한 액션도
-   * 언제나 나온다. 나머지 둘만 심어야 계약이 된다.
+   * 배역을 심는 것은 'calculation'(서로 다른 금액의 올인)과 'showdown'(리버까지
+   * 살아남는 둘 이상) 뿐이다. 나머지 둘은 심지 않는데, 그 결과가 서로 다르다.
+   *
+   * - 'procedure' 는 심지 않아도 보장된다. 딜링 판단 지점은 첫 홀카드에 붙고
+   *   홀카드는 언제나 돌려지며, 좌석이 3~9 면 정답 좌석과 겹치지 않는 오답 좌석이
+   *   언제나 둘 이상 남는다 (`decisions.ts:73-95`).
+   * - 'action_validity' 는 **최선 노력이고 보장이 아니다**. require 는 "핸드에
+   *   그런 이벤트가 있다"가 아니라 "그 종류의 판단 지점이 나온다"는 약속인데,
+   *   이 판단 지점은 (a) 자발적인 bet/raise 가 있고(올인은 해당하지 않는다,
+   *   `decisions.ts:132-135`) (b) 그 금액에서 정답과도 서로와도 겹치지 않는
+   *   오답을 둘 만들 수 있을 때만 나온다 (`decisions.ts:176-183`). 둘 다 금액이
+   *   정하는 조건이라 배역으로 심을 수 없고, (b) 를 느슨하게 하는 것은 같은
+   *   숫자를 두 번 내놓는 문제로 되돌아가는 것이다. 그래서 상당수의 핸드에는
+   *   이 종류가 아예 없다 — 그 downstream 결과(측정 안 된 축이 0 점으로 평균되어
+   *   승급을 막는다)는 `score.ts` 의 등급 창 주석에 이미 적혀 있다.
+   *
+   * require 를 하드 보장으로 올리는 것은 2단계 설계 결정이다. 여기서 조용히
+   * 통과시키는 대신 계약을 있는 그대로 적어 둔다.
    */
   const needShowdown = required.includes('showdown')
 

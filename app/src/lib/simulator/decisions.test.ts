@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateHand, type Hand } from './generate'
+import { generateHand, type DecisionKind, type Hand } from './generate'
 import { initialState, stateAt } from './reduce'
 import { extractDecisions, TIME_LIMITS } from './decisions'
 
@@ -56,6 +56,38 @@ describe('extractDecisions', () => {
       expect(d.explanation.length).toBeGreaterThan(10)
       expect(d.ruleRef.length).toBeGreaterThan(0)
     })
+  })
+
+  it('조항 근거가 종류별로 정확히 이 문구다', () => {
+    /*
+     * ruleRef 는 조항 번호를 학습자에게 말하는 유일한 필드인데 위 테스트가 길이만
+     * 본다. 그래서 쇼다운 문제가 사이드팟 조항(Rule 21)을 단 채 열 번의 리뷰를
+     * 통과했다 — 팟이 하나뿐인 핸드에도 붙는 질문인데도. 인용을 바꾸려면 이제
+     * 이 테스트를 일부러 고쳐야 한다.
+     *
+     * 숫자가 없는 둘은 확인되지 않은 번호를 쓰지 않는다는 이 브랜치의 방침이다:
+     * 딜링 순서는 레포 파일럿 문서가 Rule 34 를 버튼에 배정하고(`decisions.ts` 의
+     * 해당 주석), 쇼다운 승자 판정의 근거는 핸드 랭킹이지 사이드팟 지급 순서가 아니다.
+     *
+     * 반증하는 구현 변경: 네 문구 중 하나라도 바꾸면 빨개진다. 종류를 하나도
+     * 못 본 채로 통과하는 것은 마지막 단언이 막는다.
+     */
+    const EXPECTED: Record<DecisionKind, string> = {
+      procedure: 'TDA · 딜링 순서',
+      action_validity: 'TDA Rule 43-A · Raise Amounts',
+      calculation: 'TDA Rule 21 · Side Pots',
+      showdown: 'TDA · 쇼다운 승자 판정',
+    }
+    const seen = new Set<DecisionKind>()
+    for (let i = 0; i < 40; i++) {
+      for (const kind of ['calculation', 'showdown', 'procedure'] as const) {
+        extractDecisions(generateHand({ seed: `ruleref-${kind}-${i}`, require: [kind] })).forEach((d) => {
+          expect(d.ruleRef, `${d.kind} @ ruleref-${kind}-${i}`).toBe(EXPECTED[d.kind])
+          seen.add(d.kind)
+        })
+      }
+    }
+    expect([...seen].sort()).toEqual(['action_validity', 'calculation', 'procedure', 'showdown'])
   })
 
   it('선택형 판단의 정답 인덱스가 선택지 범위 안이다', () => {
