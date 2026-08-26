@@ -3493,9 +3493,13 @@ describe('scoreDecision', () => {
       .toThrow(/3개.*2개/)
   })
 
-  it('필드보다 값이 적어도 던진다', () => {
-    expect(() => scoreDecision(numberDp, { type: 'number', values: [24200] }))
-      .toThrow(/1개.*2개/)
+  it('필드보다 값이 적으면 던지지 않고 빈 칸을 오답으로 센다', () => {
+    // `values: number[]` 는 빈 칸을 undefined 로 담지 못한다. 2칸 중 뒤 칸을 비운 학습자의 답은
+    // `[24200]` 이 되는데, 이는 평범한 학습자 행동이므로 던지면 정상 조작에서 크래시한다.
+    // 없는 값은 `undefined !== 9000` 으로 오답이 되어 2필드 중 1개 정답 = 50점이다.
+    const r = scoreDecision(numberDp, { type: 'number', values: [24200] })
+    expect(r.score).toBe(50)
+    expect(r.correct).toBe(false)
   })
 })
 
@@ -3620,11 +3624,19 @@ export function scoreDecision(dp: DecisionPoint, answer: Answer): DecisionResult
   // number — 필드별 부분 점수
   if (answer.type !== 'number') return fail
   const fields = dp.input.fields
-  // 값 개수가 필드 수와 다르면 던진다. UI 는 정확히 fields.length 개의 입력만 그리므로
-  // 길이 불일치는 학습자가 만들 수 없다 — 호출자 버그다. 0점으로 삼키면 우리 UI 의 버그로
-  // 학습자를 오답 처리하게 된다. 답 *종류* 불일치(choice 문제에 seat 답)를 0점으로 두는 것과
-  // 다른 판단이다: 그쪽은 디스패치 오류고 이쪽은 옳은 분기 안의 형태 오류다.
-  if (answer.values.length !== fields.length) {
+  // 이 가드는 **비대칭**이다. 값이 필드보다 많으면 던지고, 적으면 던지지 않고 감점한다.
+  //
+  // 많은 쪽(초과)은 어떤 학습자 행동으로도 만들 수 없다 — UI 는 정확히 fields.length 개의
+  // 입력만 그린다. 호출자 버그이고, 삼키면 초과분이 비교되지 않아 만점이 나와 결함이 숨는다.
+  //
+  // 적은 쪽(부족)은 반대로 평범한 학습자 행동이다. `values: number[]` 는 빈 칸을 `undefined`
+  // 로 담을 수 없으므로, 2칸 중 뒤 칸을 비운 답의 유일한 타입 합법 표현이 `[24200]` 이다.
+  // 여기서 던지면 정상 조작에서 크래시한다. 아래 산술이 이미 옳게 처리한다 —
+  // `undefined !== f.answer` 라 빈 칸은 오답으로 세어져 2필드 중 1개 정답 = 50점이 된다.
+  //
+  // 초과를 던지는 것은 답 *종류* 불일치(choice 문제에 seat 답)를 0점으로 두는 것과도 다른
+  // 판단이다: 그쪽은 디스패치 오류고 이쪽은 옳은 분기 안의 형태 오류다.
+  if (answer.values.length > fields.length) {
     throw new Error(`답 값 ${answer.values.length}개가 필드 ${fields.length}개와 맞지 않는다`)
   }
   const hits = fields.filter((f, i) => answer.values[i] === f.answer).length
@@ -3677,7 +3689,9 @@ export function gradeFrom(recent: HandScore[]): 'junior' | 'senior' | 'master' {
   const c = avg('calculation')
 
   // 문턱은 설계 문서 §등급 정의 표(docs/superpowers/specs/2026-08-25-dealer-simulator-design.md:251-255)
-  // 를 그대로 옮긴 것이다: junior = 절차 축, senior = 절차+계산+유효성 3축, master = 3축 90%.
+  // 에서 왔다: senior = 절차+계산+유효성 3축 80%, master = 3축 90%. 다만 junior 는 표와 형태가
+  // 다르다 — 표는 junior 를 "절차 축 80% 이상"이라는 *조건*으로 적지만 여기서는 조건 없는
+  // 폴백이다(아래 `return 'junior'`). 절차 축 30% 인 학습자도 junior 로 떨어진다.
   // `showdown` 을 읽지 않는 것은 누락이 아니라 그 표의 정의다 — scoreHand 는 축을 계산하지만
   // 등급 조건에는 세 축만 들어간다. 다시 열지 말 것.
   //

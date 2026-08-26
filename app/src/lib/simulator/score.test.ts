@@ -80,9 +80,13 @@ describe('scoreDecision', () => {
       .toThrow(/3개.*2개/)
   })
 
-  it('필드보다 값이 적어도 던진다', () => {
-    expect(() => scoreDecision(numberDp, { type: 'number', values: [24200] }))
-      .toThrow(/1개.*2개/)
+  it('필드보다 값이 적으면 던지지 않고 빈 칸을 오답으로 센다', () => {
+    // `values: number[]` 는 빈 칸을 undefined 로 담지 못한다. 2칸 중 뒤 칸을 비운 학습자의 답은
+    // `[24200]` 이 되는데, 이는 평범한 학습자 행동이므로 던지면 정상 조작에서 크래시한다.
+    // 없는 값은 `undefined !== 9000` 으로 오답이 되어 2필드 중 1개 정답 = 50점이다.
+    const r = scoreDecision(numberDp, { type: 'number', values: [24200] })
+    expect(r.score).toBe(50)
+    expect(r.correct).toBe(false)
   })
 })
 
