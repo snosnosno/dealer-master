@@ -3399,7 +3399,7 @@ git commit -m "feat: 핸드에서 판단 지점 추출"
 **Interfaces:**
 - Consumes: `DecisionPoint` (Task 8)
 - Produces:
-  - `type Answer = { type: 'choice'; index: number } | { type: 'number'; values: number[] } | { type: 'seat'; seat: number } | { type: 'timeout' }`
+  - `type Answer = { type: 'choice'; index: number } | { type: 'number'; values: number[] } | { type: 'seat'; seats: number[] } | { type: 'timeout' }`
   - `type DecisionResult = { kind: DecisionKind; score: number; correct: boolean }`
   - `scoreDecision(dp: DecisionPoint, answer: Answer): DecisionResult`
   - `type HandScore = { procedure: number | null; action_validity: number | null; calculation: number | null; showdown: number | null; average: number }`
