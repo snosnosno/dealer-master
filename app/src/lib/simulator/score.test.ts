@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { scoreDecision, scoreHand, gradeFrom } from './score'
+import type { HandScore } from './score'
 import type { DecisionPoint } from './decisions'
 
 const choiceDp: DecisionPoint = {
@@ -72,6 +73,17 @@ describe('scoreDecision', () => {
   it('답 종류가 판단 지점과 안 맞으면 0점', () => {
     expect(scoreDecision(choiceDp, { type: 'seat', seats: [3] }).score).toBe(0)
   })
+
+  it('필드보다 값이 많으면 던진다', () => {
+    // 삼키면 초과분이 비교되지 않아 100점이 된다. 학습자가 만들 수 없는 입력이므로 호출자 버그다.
+    expect(() => scoreDecision(numberDp, { type: 'number', values: [24200, 9000, 999] }))
+      .toThrow(/3개.*2개/)
+  })
+
+  it('필드보다 값이 적어도 던진다', () => {
+    expect(() => scoreDecision(numberDp, { type: 'number', values: [24200] }))
+      .toThrow(/1개.*2개/)
+  })
 })
 
 describe('scoreHand', () => {
@@ -121,5 +133,22 @@ describe('gradeFrom', () => {
 
   it('최근 기록의 평균으로 판단한다', () => {
     expect(gradeFrom([mk(100, 100, 100, 100), mk(0, 0, 0, 0)])).toBe('junior')
+  })
+
+  // mk 는 null 축을 만들지 못한다. 결측 축이 있는 창은 아래 헬퍼로 만든다.
+  // average 는 0 으로 둔다 — gradeFrom 은 축 키만 읽고 average 를 보지 않는다.
+  const withNulls = (p: number | null, v: number | null, c: number | null): HandScore =>
+    ({ procedure: p, action_validity: v, calculation: c, showdown: null, average: 0 })
+
+  it('창 전체에서 결측인 축은 0으로 평균되어 승급을 막는다', () => {
+    // action_validity 를 한 번도 묻지 않은 창. 나머지 두 축이 만점이어도 junior 다 —
+    // "측정 안 됨"이 "측정했고 0점"과 구별되지 않기 때문이다.
+    expect(gradeFrom([withNulls(100, null, 100), withNulls(100, null, 100)])).toBe('junior')
+  })
+
+  it('일부 핸드에서만 결측인 축은 측정된 핸드들만으로 평균낸다', () => {
+    // action_validity 가 두 핸드 중 하나에만 있고 그 값이 90 이다. 결측을 0 으로 세면 45 가 되어
+    // junior 지만, 결측 핸드는 평균에서 빠지므로 90 이 남아 master 다.
+    expect(gradeFrom([withNulls(90, 90, 90), withNulls(90, null, 90)])).toBe('master')
   })
 })

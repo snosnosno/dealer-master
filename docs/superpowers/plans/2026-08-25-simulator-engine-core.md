@@ -3413,6 +3413,7 @@ git commit -m "feat: 핸드에서 판단 지점 추출"
 ```ts
 import { describe, it, expect } from 'vitest'
 import { scoreDecision, scoreHand, gradeFrom } from './score'
+import type { HandScore } from './score'
 import type { DecisionPoint } from './decisions'
 
 const choiceDp: DecisionPoint = {
@@ -3485,6 +3486,17 @@ describe('scoreDecision', () => {
   it('답 종류가 판단 지점과 안 맞으면 0점', () => {
     expect(scoreDecision(choiceDp, { type: 'seat', seats: [3] }).score).toBe(0)
   })
+
+  it('필드보다 값이 많으면 던진다', () => {
+    // 삼키면 초과분이 비교되지 않아 100점이 된다. 학습자가 만들 수 없는 입력이므로 호출자 버그다.
+    expect(() => scoreDecision(numberDp, { type: 'number', values: [24200, 9000, 999] }))
+      .toThrow(/3개.*2개/)
+  })
+
+  it('필드보다 값이 적어도 던진다', () => {
+    expect(() => scoreDecision(numberDp, { type: 'number', values: [24200] }))
+      .toThrow(/1개.*2개/)
+  })
 })
 
 describe('scoreHand', () => {
@@ -3534,6 +3546,23 @@ describe('gradeFrom', () => {
 
   it('최근 기록의 평균으로 판단한다', () => {
     expect(gradeFrom([mk(100, 100, 100, 100), mk(0, 0, 0, 0)])).toBe('junior')
+  })
+
+  // mk 는 null 축을 만들지 못한다. 결측 축이 있는 창은 아래 헬퍼로 만든다.
+  // average 는 0 으로 둔다 — gradeFrom 은 축 키만 읽고 average 를 보지 않는다.
+  const withNulls = (p: number | null, v: number | null, c: number | null): HandScore =>
+    ({ procedure: p, action_validity: v, calculation: c, showdown: null, average: 0 })
+
+  it('창 전체에서 결측인 축은 0으로 평균되어 승급을 막는다', () => {
+    // action_validity 를 한 번도 묻지 않은 창. 나머지 두 축이 만점이어도 junior 다 —
+    // "측정 안 됨"이 "측정했고 0점"과 구별되지 않기 때문이다.
+    expect(gradeFrom([withNulls(100, null, 100), withNulls(100, null, 100)])).toBe('junior')
+  })
+
+  it('일부 핸드에서만 결측인 축은 측정된 핸드들만으로 평균낸다', () => {
+    // action_validity 가 두 핸드 중 하나에만 있고 그 값이 90 이다. 결측을 0 으로 세면 45 가 되어
+    // junior 지만, 결측 핸드는 평균에서 빠지므로 90 이 남아 master 다.
+    expect(gradeFrom([withNulls(90, 90, 90), withNulls(90, null, 90)])).toBe('master')
   })
 })
 ```
@@ -3591,6 +3620,13 @@ export function scoreDecision(dp: DecisionPoint, answer: Answer): DecisionResult
   // number — 필드별 부분 점수
   if (answer.type !== 'number') return fail
   const fields = dp.input.fields
+  // 값 개수가 필드 수와 다르면 던진다. UI 는 정확히 fields.length 개의 입력만 그리므로
+  // 길이 불일치는 학습자가 만들 수 없다 — 호출자 버그다. 0점으로 삼키면 우리 UI 의 버그로
+  // 학습자를 오답 처리하게 된다. 답 *종류* 불일치(choice 문제에 seat 답)를 0점으로 두는 것과
+  // 다른 판단이다: 그쪽은 디스패치 오류고 이쪽은 옳은 분기 안의 형태 오류다.
+  if (answer.values.length !== fields.length) {
+    throw new Error(`답 값 ${answer.values.length}개가 필드 ${fields.length}개와 맞지 않는다`)
+  }
   const hits = fields.filter((f, i) => answer.values[i] === f.answer).length
   const score = Math.round((hits / fields.length) * 100)
   return { kind: dp.kind, score, correct: hits === fields.length }
@@ -3618,10 +3654,19 @@ export function scoreHand(results: DecisionResult[]): HandScore {
   return out
 }
 
-/** 등급은 최근 핸드들의 축별 이동 평균으로 정한다. 누적으로 하면 초기 실수가 영구히 발목을 잡는다. */
+/**
+ * 등급은 최근 핸드들의 축별 이동 평균으로 정한다. 누적으로 하면 초기 실수가 영구히 발목을 잡는다.
+ *
+ * 창 크기 N 은 이 함수가 정하지 않는다 — 호출부가 잘라 넘긴 배열이 곧 창이다. N 을 정하는 쪽이
+ * 아래 두 가지를 함께 결정해야 한다. 지금은 어느 쪽도 방어하지 않는다.
+ *
+ * 1. 창 안에서 한 번도 측정되지 않은 축은 0 으로 평균된다. "측정 안 됨"과 "측정했고 0점"이
+ *    구별되지 않는다. `action_validity` 는 설계상 생성 핸드의 약 24% 에서 아예 나타나지 않으므로,
+ *    창이 작으면 학습자가 자기 잘못 없이 승급이 막힌다.
+ * 2. 최소 표본 규정이 없다. 창에서 한 번 측정된 축이 스무 번 측정된 축과 같은 무게로 등급을
+ *    인증한다.
+ */
 export function gradeFrom(recent: HandScore[]): 'junior' | 'senior' | 'master' {
-  if (recent.length === 0) return 'junior'
-
   const avg = (k: Exclude<keyof HandScore, 'average'>) => {
     const vals = recent.map((h) => h[k]).filter((v): v is number => v !== null)
     return vals.length === 0 ? 0 : vals.reduce((a, v) => a + v, 0) / vals.length
@@ -3631,6 +3676,15 @@ export function gradeFrom(recent: HandScore[]): 'junior' | 'senior' | 'master' {
   const v = avg('action_validity')
   const c = avg('calculation')
 
+  // 문턱은 설계 문서 §등급 정의 표(docs/superpowers/specs/2026-08-25-dealer-simulator-design.md:251-255)
+  // 를 그대로 옮긴 것이다: junior = 절차 축, senior = 절차+계산+유효성 3축, master = 3축 90%.
+  // `showdown` 을 읽지 않는 것은 누락이 아니라 그 표의 정의다 — scoreHand 는 축을 계산하지만
+  // 등급 조건에는 세 축만 들어간다. 다시 열지 말 것.
+  //
+  // 미구현 갭: 같은 표의 master 조건은 "3축 90% 이상 + B 모드 이상 검출률 70% 이상" 인데
+  // 뒤쪽 절반이 여기 없다. 이상(anomaly) 삽입 자체가 3단계 범위라(설계 문서 §구현 순서)
+  // 이 코드베이스에 존재하지 않는다. 3단계가 이상 모드를 들여올 때 검출률 조건을 이 문턱에
+  // 함께 배선해야 한다.
   if (p >= 90 && v >= 90 && c >= 90) return 'master'
   if (p >= 80 && v >= 80 && c >= 80) return 'senior'
   return 'junior'
@@ -3640,7 +3694,7 @@ export function gradeFrom(recent: HandScore[]): 'junior' | 'senior' | 'master' {
 - [ ] **Step 4: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- score`
-Expected: PASS, 18 tests
+Expected: PASS, 22 tests
 
 - [ ] **Step 5: 커밋**
 
@@ -3924,6 +3978,7 @@ git commit -m "feat: 시뮬레이터 엔진 진입점과 통합 테스트"
 
 | 항목 | 이 계획의 잠정값 | 확정 시점 |
 |---|---|---|
-| 등급 이동 평균의 N | `gradeFrom`이 받은 배열 전부. 호출부가 최근 20개를 잘라 넘긴다 | 3단계, 실제 기록이 쌓일 때 |
+| 등급 이동 평균의 N | `gradeFrom`이 받은 배열 전부. 호출부가 최근 20개를 잘라 넘긴다. **N 이 만족해야 할 제약:** (1) 설계상 약 24% 의 핸드에 없는 `action_validity` 축이 창 안에서 충분히 자주 측정될 만큼 커야 한다 — 창 전체에서 결측이면 `gradeFrom`이 그 축을 0 으로 평균해 학습자가 자기 잘못 없이 승급이 막힌다. (2) 동시에 초기 실수가 창 밖으로 밀려날 만큼 작아야 한다. 축별 최소 표본 규정도 이 결정에 딸려 온다 — 지금은 없어서 1회 측정된 축이 20회 측정된 축과 같은 무게로 등급을 인증한다 | 3단계, 실제 기록이 쌓일 때 |
 | 이상 상황 발생 빈도 | 해당 없음 | 3단계 |
 | `detectWindow` 폭 | 해당 없음 | 3단계 |
+| master 등급의 "B 모드 이상 검출률 70% 이상" 조건 | **미구현.** 설계 문서 §등급 정의는 master 를 "3축 90% 이상 + B 모드 이상 검출률 70% 이상"으로 정의하지만 `gradeFrom`은 앞 절반만 본다. 이상(anomaly) 삽입 자체가 이 계획의 범위 밖이라 여기서는 구현할 수 없다 | 3단계, 이상감지 모드를 만들 때 `gradeFrom` 문턱에 함께 배선 |
