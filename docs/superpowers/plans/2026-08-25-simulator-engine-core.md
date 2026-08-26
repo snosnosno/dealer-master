@@ -395,9 +395,7 @@ export function parseCard(s: string): Card {
 - [ ] **Step 4: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- cards`
-Expected: PASS, 16 tests
-
-(브리프의 최초 추정은 9개였다. 컨트롤러가 통합 단계에서 함께 확인하라고 지정한 항목 — 중복 카드, 홀카드 커버리지, 팟 칩 단위·전액 지급·자격자, 미콜 벳, 결정성, `require` 계약 — 이 7개를 더해 16개가 된다. 테스트를 지워 9에 맞추지 않고 숫자를 정정한다 (컨트롤러 판정 R3).)
+Expected: PASS, 9 tests
 
 - [ ] **Step 5: 커밋**
 
