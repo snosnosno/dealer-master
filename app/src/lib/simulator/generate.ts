@@ -69,13 +69,29 @@ function actableSeats(s: HandState): number[] {
  * 종료 조건: 생존자가 1명이 되거나, 액션 가능한 좌석이 전부 한 번 이상 액션했고
  * 그들의 벳이 전부 현재 벳과 같아질 때.
  */
-function runBettingRound(
+export type BettingRoundResult = {
+  events: HandEvent[]
+  state: HandState
+  lastAggressor: number | null
+  /**
+   * decideAction 을 부를 때마다 그 시점의 isOpenBet — player_action 이벤트와 1:1 이다.
+   *
+   * 이벤트가 아니라 관측용 부산물이다. 핸드 출력(Hand)에는 들어가지 않고
+   * generateHand 는 이 값을 읽지 않으므로 생성 결과는 이 필드가 없을 때와 같다.
+   * 밖으로 내보내는 유일한 이유는 회귀 테스트가 이 플래그를 **라운드가 실제로
+   * 만들어내는 대로** 봐야 하기 때문이다 — 순수 헬퍼로 뽑아 단위 테스트하면
+   * 값의 반전은 잡아도 호출 지점의 문장 순서(currentBet 갱신 앞/뒤)는 못 잡는다.
+   */
+  openBetTrajectory: boolean[]
+}
+
+export function runBettingRound(
   state: HandState,
   rng: Rng,
   bb: number,
   street: Street,
   plan: StackPlan,
-): { events: HandEvent[]; state: HandState; lastAggressor: number | null } {
+): BettingRoundResult {
   const n = state.seats.length
   const events: HandEvent[] = []
   let s = state
@@ -92,6 +108,7 @@ function runBettingRound(
    * 시작해 첫 벳이 깔려도 그 벳이 오픈 벳이므로 참이 유지된다.
    */
   let isOpenBet = true
+  const openBetTrajectory: boolean[] = []
 
   const acted = new Set<number>()
   /** 마지막 "풀 레이즈" 이후 이미 액션한 좌석. 이들에게는 레이즈 권리가 없다. */
@@ -114,6 +131,7 @@ function runBettingRound(
       continue
     }
 
+    openBetTrajectory.push(isOpenBet)
     const e = decideAction(s, seat, {
       rng, bb, currentBet, lastRaiseSize, isOpenBet, street, plan,
       canRaise: !actedSinceFullRaise.has(seat),
@@ -162,7 +180,7 @@ function runBettingRound(
     s = applyEvent(s, e)
   }
 
-  return { events, state: s, lastAggressor }
+  return { events, state: s, lastAggressor, openBetTrajectory }
 }
 
 export function generateHand(opts: GenerateOptions): Hand {

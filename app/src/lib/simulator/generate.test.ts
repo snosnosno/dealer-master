@@ -1,10 +1,16 @@
+/**
+ * 생성기가 **명세대로 행동하는가**를 묻는 테스트.
+ *
+ * 룰셋을 판정자로 부르지 않는다 — "생성된 액션이 규칙에 맞는가"와 그 판정의
+ * 입력(베팅 컨텍스트, 오픈 벳 플래그)은 `generate.rules.test.ts` 의 몫이다.
+ * 여기 남은 것은 결정론, 이벤트 구조, require 계약, 쇼다운 절차, 팟 무결성처럼
+ * 핸드 출력만 보면 답이 나오는 질문들이다.
+ */
 import { describe, it, expect } from 'vitest'
 import { generateHand } from './generate'
-import { initialState, stateAt, applyEvent } from './reduce'
+import { initialState, stateAt } from './reduce'
 import { buildPots } from './pots'
-import { nlh } from './rulesets/nlh'
-import type { HandState } from './types'
-import type { DecisionKind, Hand } from './generate'
+import type { Hand } from './generate'
 
 describe('generateHand — 결정론', () => {
   it('같은 시드는 같은 핸드를 만든다', () => {
@@ -17,6 +23,21 @@ describe('generateHand — 결정론', () => {
     const a = generateHand({ seed: 'seed-a' })
     const b = generateHand({ seed: 'seed-b' })
     expect(JSON.stringify(a)).not.toBe(JSON.stringify(b))
+  })
+
+  it('좌석 수와 옵션이 달라도 같은 시드는 두 번 다 같은 이벤트 배열을 만든다', () => {
+    // 골든값(시드 X 는 이런 배열)이 아니라 두 번 호출 비교로 본다.
+    // 골든값은 구현 출력을 베낀 것이라 구현이 바뀌면 같이 바뀌어 회귀를 못 잡는다.
+    for (let seatCount = 3; seatCount <= 9; seatCount++) {
+      for (const require of [undefined, ['calculation'] as const]) {
+        const seed = `det-${seatCount}-${require ? 'calc' : 'plain'}`
+        const a = generateHand({ seed, seatCount, require: require ? [...require] : undefined })
+        const b = generateHand({ seed, seatCount, require: require ? [...require] : undefined })
+        expect(a.events).toEqual(b.events)
+        expect(a.seats).toEqual(b.seats)
+        expect(a.buttonSeat).toBe(b.buttonSeat)
+      }
+    }
   })
 })
 
@@ -105,6 +126,21 @@ describe('generateHand — 구조', () => {
     expect(() => generateHand({ seed: 'hu', seatCount: 2 })).toThrow()
     expect(() => generateHand({ seed: 'big', seatCount: 10 })).toThrow()
   })
+
+  it('좌석 수 3~9 전 구간에서 핸드가 끝까지 만들어진다', () => {
+    for (let seatCount = 3; seatCount <= 9; seatCount++) {
+      for (let n = 0; n < 25; n++) {
+        const hd = generateHand({ seed: `seats-${seatCount}-${n}`, seatCount })
+        expect(hd.seats).toHaveLength(seatCount)
+        const init = initialState(hd.seats, hd.buttonSeat)
+        const final = stateAt(init, hd.events, hd.events.length)
+        expect(final.pot).toBe(0)
+        expect(final.seats.reduce((a, s) => a + s.stack, 0)).toBe(
+          hd.seats.reduce((a, s) => a + s.stack, 0),
+        )
+      }
+    }
+  })
 })
 
 describe('generateHand — 제약', () => {
@@ -122,115 +158,10 @@ describe('generateHand — 제약', () => {
 })
 
 /*
- * 아래 세 묶음은 브리프의 13개에 더해, 통합 태스크가 지켜야 한다고 넘겨받은
+ * 아래 두 묶음은 브리프의 13개에 더해, 통합 태스크가 지켜야 한다고 넘겨받은
  * 항목들을 좁게 겨냥한다. 골든값(시드 X 는 이런 배열)을 쓰지 않는다 —
  * 그건 구현 출력을 베낀 것이라 회귀를 못 잡는다.
  */
-
-/**
- * 생성기가 봇 액션을 만들 때 쓴 것과 같은 규칙으로 베팅 컨텍스트를 다시 세운다.
- * lastRaiseSize·canRaise 는 상태에 남지 않고 라운드 진행에서만 나오는 값이라
- * 이벤트 열을 걸으며 재구성하는 것 말고는 밖에서 알 방법이 없다.
- */
-function assertEveryActionLegal(seed: string, opts: { require?: DecisionKind[] } = {}) {
-  const hand = generateHand({ seed, ...opts })
-  const bb = hand.blinds.bb
-  let state: HandState = initialState(hand.seats, hand.buttonSeat)
-
-  let lastRaiseSize = bb // 프리플랍은 빅블라인드가 오픈 벳 역할을 한다
-  let isOpenBet = false
-  let actedSinceFullRaise = new Set<number>()
-  let checked = 0
-
-  for (const e of hand.events) {
-    if (e.type === 'collect_bets') {
-      lastRaiseSize = 0
-      isOpenBet = true
-      actedSinceFullRaise = new Set<number>()
-      state = applyEvent(state, e)
-      continue
-    }
-    if (e.type !== 'player_action') {
-      state = applyEvent(state, e)
-      continue
-    }
-
-    const currentBet = Math.max(...state.seats.map((x) => x.bet))
-    const seat = state.seats[e.seat]
-    const result = nlh.validateAction(
-      {
-        currentBet,
-        lastRaiseSize,
-        bigBlind: bb,
-        seatBet: seat.bet,
-        seatStack: seat.stack,
-        isOpenBet,
-        canRaise: !actedSinceFullRaise.has(e.seat),
-      },
-      e.action,
-    )
-    expect(result.valid, `시드 ${seed} 좌석 ${e.seat} ${JSON.stringify(e.action)}`).toBe(true)
-    checked++
-
-    state = applyEvent(state, e)
-    actedSinceFullRaise.add(e.seat)
-
-    const newBet = state.seats[e.seat].bet
-    if (newBet > currentBet) {
-      isOpenBet = false
-      const raiseSize = newBet - currentBet
-      if (raiseSize >= Math.max(lastRaiseSize, bb)) {
-        lastRaiseSize = raiseSize
-        actedSinceFullRaise = new Set([e.seat])
-      }
-    }
-  }
-
-  return checked
-}
-
-describe('generateHand — 규칙 준수', () => {
-  it('생성된 모든 플레이어 액션이 룰셋 판정을 통과한다', () => {
-    let total = 0
-    for (let n = 0; n < 200; n++) total += assertEveryActionLegal('legal-' + n)
-    for (let n = 0; n < 60; n++) {
-      total += assertEveryActionLegal('legal-calc-' + n, { require: ['calculation'] })
-      total += assertEveryActionLegal('legal-sd-' + n, { require: ['showdown'] })
-    }
-    // 액션이 거의 없는 핸드만 뽑혔다면 위 단언들이 아무것도 안 본 것이다.
-    expect(total).toBeGreaterThan(1000)
-  })
-
-  it('좌석 수와 옵션이 달라도 같은 시드는 두 번 다 같은 이벤트 배열을 만든다', () => {
-    // 골든값(시드 X 는 이런 배열)이 아니라 두 번 호출 비교로 본다.
-    // 골든값은 구현 출력을 베낀 것이라 구현이 바뀌면 같이 바뀌어 회귀를 못 잡는다.
-    for (let seatCount = 3; seatCount <= 9; seatCount++) {
-      for (const require of [undefined, ['calculation'] as const]) {
-        const seed = `det-${seatCount}-${require ? 'calc' : 'plain'}`
-        const a = generateHand({ seed, seatCount, require: require ? [...require] : undefined })
-        const b = generateHand({ seed, seatCount, require: require ? [...require] : undefined })
-        expect(a.events).toEqual(b.events)
-        expect(a.seats).toEqual(b.seats)
-        expect(a.buttonSeat).toBe(b.buttonSeat)
-      }
-    }
-  })
-
-  it('좌석 수 3~9 전 구간에서 핸드가 끝까지 만들어진다', () => {
-    for (let seatCount = 3; seatCount <= 9; seatCount++) {
-      for (let n = 0; n < 25; n++) {
-        const hand = generateHand({ seed: `seats-${seatCount}-${n}`, seatCount })
-        expect(hand.seats).toHaveLength(seatCount)
-        const init = initialState(hand.seats, hand.buttonSeat)
-        const final = stateAt(init, hand.events, hand.events.length)
-        expect(final.pot).toBe(0)
-        expect(final.seats.reduce((a, s) => a + s.stack, 0)).toBe(
-          hand.seats.reduce((a, s) => a + s.stack, 0),
-        )
-      }
-    }
-  })
-})
 
 /**
  * 마지막으로 "베팅이 있었던" 라운드의 마지막 공격자를 이벤트 열에서 되찾는다.
