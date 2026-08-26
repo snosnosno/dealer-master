@@ -2347,7 +2347,13 @@ function runBettingRound(
   let currentBet = Math.max(...s.seats.map((x) => x.bet))
   // 프리플랍은 빅블라인드가 오픈 벳 역할을 하므로 레이즈 폭의 출발점이 bb 다.
   let lastRaiseSize = street === 'preflop' ? bb : 0
-  let isOpenBet = currentBet === 0
+  /*
+   * "지금 마주한 벳이 이 라운드의 첫 벳인가" (Rule 51-B, rulesets/types.ts).
+   * 마주한 쪽의 성질이지 "아직 벳이 없다"가 아니다 — 프리플랍은 빅블라인드가
+   * 곧 오픈 벳이므로 참으로 시작하고, 플랍 이후는 마주한 벳이 없는 상태로
+   * 시작해 첫 벳이 깔려도 그 벳이 오픈 벳이므로 참이 유지된다.
+   */
+  let isOpenBet = true
 
   const acted = new Set<number>()
   /** 마지막 "풀 레이즈" 이후 이미 액션한 좌석. 이들에게는 레이즈 권리가 없다. */
@@ -2382,8 +2388,16 @@ function runBettingRound(
     const newBet = s.seats[seat].bet
     if (newBet > currentBet) {
       const raiseSize = newBet - currentBet
+      /*
+       * 오픈 벳 자격을 없애는 것은 "벳이 있었다" 위에 얹힌 레이즈뿐이다.
+       * 벳이 없던 자리에 깔린 첫 벳은 그 자신이 오픈 벳이므로 참을 유지한다.
+       *
+       * ⚠️ 반드시 currentBet 갱신 **앞**에서 판단한다. 아래 줄로 내려가면
+       * currentBet 은 이미 새 값(항상 양수)이라 이 검사가 매번 참이 되어
+       * 고쳐진 모습 그대로 늘 false 를 세운다 — 원래 버그가 되돌아온다.
+       */
+      if (currentBet > 0) isOpenBet = false
       currentBet = newBet
-      isOpenBet = false
       // 풀 레이즈에 못 미치는 올인도 공격이다 — 리오픈 권리와 공개 순서는 다른 규칙이다.
       lastAggressor = seat
       /*
@@ -3871,6 +3885,18 @@ describe('엔진 통합 — 핸드 100개', () => {
         paid.set(e.potIndex, (paid.get(e.potIndex) ?? 0) + e.amount)
       })
       built.forEach((p, i) => {
+        /*
+         * ⚠️ 이 단언은 파수꾼이 아니라 **문서 등급의 불변식**이다 (컨트롤러 판정 R34).
+         * 반증하는 구현 변형을 찾지 못했다 — 현재 생성기는 R18(자격자 0인 팟)에
+         * 도달할 수 없다. 그러려면 폴드한 좌석이 살아 있는 모든 좌석보다 많이 낸
+         * 상태여야 하는데, 봇은 마주한 벳이 없는 자리에서 폴드하지 않으므로
+         * 미콜 초과분을 낸 채 폴드하는 경로가 애초에 생기지 않는다.
+         * (`pots.ts` 의 빈-자격자 층 병합을 제거해도 16개가 전부 통과한다.)
+         *
+         * 미콜 벳 전제를 실제로 지키는 단언은 위의 `:70` "정산 직전에 아무도
+         * 맞추지 않은 벳이 남아 있지 않다" 다 — 그쪽은 반증 변형이 확인돼 있다.
+         * 여기는 남겨두되, 초록이라고 해서 R18 이 검증됐다고 읽지 말 것.
+         */
         expect(p.eligibleSeats.length, `${seed} 팟 ${i}: 자격자 없음`).toBeGreaterThan(0)
         expect(p.amount % ODD_CHIP_UNIT, `${seed} 팟 ${i}: ${p.amount}`).toBe(0)
         expect(paid.get(i) ?? 0, `${seed} 팟 ${i} 지급 합계`).toBe(p.amount)

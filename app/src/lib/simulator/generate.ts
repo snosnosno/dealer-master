@@ -85,7 +85,13 @@ function runBettingRound(
   let currentBet = Math.max(...s.seats.map((x) => x.bet))
   // 프리플랍은 빅블라인드가 오픈 벳 역할을 하므로 레이즈 폭의 출발점이 bb 다.
   let lastRaiseSize = street === 'preflop' ? bb : 0
-  let isOpenBet = currentBet === 0
+  /*
+   * "지금 마주한 벳이 이 라운드의 첫 벳인가" (Rule 51-B, rulesets/types.ts).
+   * 마주한 쪽의 성질이지 "아직 벳이 없다"가 아니다 — 프리플랍은 빅블라인드가
+   * 곧 오픈 벳이므로 참으로 시작하고, 플랍 이후는 마주한 벳이 없는 상태로
+   * 시작해 첫 벳이 깔려도 그 벳이 오픈 벳이므로 참이 유지된다.
+   */
+  let isOpenBet = true
 
   const acted = new Set<number>()
   /** 마지막 "풀 레이즈" 이후 이미 액션한 좌석. 이들에게는 레이즈 권리가 없다. */
@@ -120,8 +126,16 @@ function runBettingRound(
     const newBet = s.seats[seat].bet
     if (newBet > currentBet) {
       const raiseSize = newBet - currentBet
+      /*
+       * 오픈 벳 자격을 없애는 것은 "벳이 있었다" 위에 얹힌 레이즈뿐이다.
+       * 벳이 없던 자리에 깔린 첫 벳은 그 자신이 오픈 벳이므로 참을 유지한다.
+       *
+       * ⚠️ 반드시 currentBet 갱신 **앞**에서 판단한다. 아래 줄로 내려가면
+       * currentBet 은 이미 새 값(항상 양수)이라 이 검사가 매번 참이 되어
+       * 고쳐진 모습 그대로 늘 false 를 세운다 — 원래 버그가 되돌아온다.
+       */
+      if (currentBet > 0) isOpenBet = false
       currentBet = newBet
-      isOpenBet = false
       // 풀 레이즈에 못 미치는 올인도 공격이다 — 리오픈 권리와 공개 순서는 다른 규칙이다.
       lastAggressor = seat
       /*
