@@ -72,27 +72,52 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
   // ── 1. 딜링 절차: 첫 홀카드를 받는 좌석
   const firstDealIdx = hand.events.findIndex((e) => e.type === 'deal_hole')
   if (firstDealIdx >= 0) {
-    const choices = [
-      `스몰블라인드 — ${hand.seats[sbSeat].name} (버튼 왼쪽 첫 좌석)`,
-      `빅블라인드 — ${hand.seats[bbSeat].name}`,
-      `언더더건 — ${hand.seats[utgSeat].name} (빅블라인드 다음)`,
-      `버튼 — ${hand.seats[hand.buttonSeat].name}`,
-    ]
-    dps.push({
-      atEventIndex: firstDealIdx,
-      kind: 'procedure',
-      prompt: '블라인드가 포스팅됐습니다. 첫 홀카드를 받는 좌석은?',
-      // 선택지에 이미 각 좌석이 누구인지 적혀 있으므로 sub 에서 반복하지 않는다.
-      // 정답을 sub 에 그대로 써두면 문제가 성립하지 않는다.
-      sub: `버튼은 ${hand.seats[hand.buttonSeat].name}(${hand.buttonSeat + 1}번)입니다.`,
-      input: { type: 'choice', ...shuffleChoices(createRng(`${hand.seed}:dp-deal`), choices, 0) },
-      // ⚠️ 조항 번호 확인 필요: 파일럿 문서에서 Rule 34-A 는 "버튼 위치와 이동" 이다.
-      // 딜링 순서의 근거 조항을 TDA 2024 PDF 에서 확인해 이 문자열을 확정할 것.
-      ruleRef: 'TDA Rule 34 · 딜링 순서',
-      explanation:
-        '홀카드는 항상 버튼 왼쪽 첫 좌석, 즉 스몰블라인드부터 시계방향으로 한 장씩 두 바퀴 돌립니다. 액션 순서(프리플랍은 UTG부터)와 딜링 순서를 혼동하는 것이 신입 딜러의 가장 흔한 실수입니다.',
-      timeLimitSec: TIME_LIMITS.procedure,
-    })
+    /*
+     * 오답 후보는 좌석으로 걸러야 한다. 좌석이 적으면 역할이 겹치기 때문이다 —
+     * 3인 테이블은 (버튼+3)%3 = 버튼이라 "언더더건" 과 "버튼" 이 같은 사람을 가리킨다.
+     * `generate.ts` 의 MIN_SEATS 가 3 이므로 이건 지원되는 입력이고, 같은 좌석을
+     * 두 번 내놓는 문제는 성립하지 않는다. 최소 레이즈 문제가 금액으로 겹침을 거르듯
+     * 여기서는 좌석으로 거른다 — 정답 좌석을 미리 넣어 두면 오답이 정답과 같아질 수도 없다.
+     */
+    const seenSeats = new Set<number>([sbSeat])
+    const distractors: string[] = []
+    for (const opt of [
+      { seat: bbSeat, label: `빅블라인드 — ${hand.seats[bbSeat].name}` },
+      { seat: utgSeat, label: `언더더건 — ${hand.seats[utgSeat].name} (빅블라인드 다음)` },
+      { seat: hand.buttonSeat, label: `버튼 — ${hand.seats[hand.buttonSeat].name}` },
+    ]) {
+      if (seenSeats.has(opt.seat)) continue
+      seenSeats.add(opt.seat)
+      distractors.push(opt.label)
+    }
+
+    // 서로 다른 오답을 두 개 못 만들면 이 핸드에서는 출제하지 않는다
+    if (distractors.length >= 2) {
+      const choices = [
+        `스몰블라인드 — ${hand.seats[sbSeat].name} (버튼 왼쪽 첫 좌석)`,
+        ...distractors,
+      ]
+      dps.push({
+        atEventIndex: firstDealIdx,
+        kind: 'procedure',
+        prompt: '블라인드가 포스팅됐습니다. 첫 홀카드를 받는 좌석은?',
+        // 선택지에 이미 각 좌석이 누구인지 적혀 있으므로 sub 에서 반복하지 않는다.
+        // 정답을 sub 에 그대로 써두면 문제가 성립하지 않는다.
+        sub: `버튼은 ${hand.seats[hand.buttonSeat].name}(${hand.buttonSeat + 1}번)입니다.`,
+        input: { type: 'choice', ...shuffleChoices(createRng(`${hand.seed}:dp-deal`), choices, 0) },
+        /*
+         * 조항 번호를 뺀 상태다. 레포의 파일럿 문서가 Rule 34 를 버튼에 배정하기 때문이다 —
+         * `05_pilot_cases_v1.md:100` 은 "Rule 34-A (Button Placement and Movement)",
+         * `11_pilot_cases_v2.md:32` 는 헤즈업 버튼·액션 순서에 34-B 를 쓴다.
+         * 딜링 순서의 근거로 34 를 붙이면 레포가 가진 근거와 정면으로 어긋나므로 숫자를 뺐다.
+         * TDA 2024 PDF 로 확인한 뒤에만 번호를 되살릴 것.
+         */
+        ruleRef: 'TDA · 딜링 순서',
+        explanation:
+          '홀카드는 항상 버튼 왼쪽 첫 좌석, 즉 스몰블라인드부터 시계방향으로 한 장씩 두 바퀴 돌립니다. 액션 순서(프리플랍은 UTG부터)와 딜링 순서를 혼동하는 것이 신입 딜러의 가장 흔한 실수입니다.',
+        timeLimitSec: TIME_LIMITS.procedure,
+      })
+    }
   }
 
   /*

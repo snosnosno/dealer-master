@@ -7,13 +7,24 @@
  * 한 시드에서 맞는지가 아니라 여러 시드에서 구조적으로 보장되는지를 본다.
  */
 import { describe, it, expect } from 'vitest'
-import { generateHand, type Hand } from './generate'
+import { generateHand, MAX_SEATS, MIN_SEATS, type Hand } from './generate'
 import { extractDecisions } from './decisions'
 import { parseCard } from './cards'
 import type { HandEvent } from './types'
 
 /** 선택지 문자열 앞머리의 금액을 숫자로 되돌린다. */
 const amountOf = (choice: string) => Number(choice.split(' —')[0].replace(/,/g, ''))
+
+/**
+ * 선택지를 실제로 구별하는 값. 금액 문제는 숫자가, 절차 문제는 좌석이 정체다
+ * (좌석은 이름으로 식별한다 — 한 핸드 안에서 이름은 좌석마다 다르다).
+ * 역할 이름("스몰블라인드"…)으로 키를 잡으면 서로 다른 역할이 같은 좌석을 가리켜도
+ * 넷 다 달라 보인다. 그러면 겹침 검사가 절차 문제에서는 어떤 좌석 수에서도 실패할 수 없다.
+ */
+const identityOf = (choice: string) => {
+  const head = choice.split(' —')[0]
+  return /^[\d,]+$/.test(head) ? head : choice.split('— ')[1].split(' (')[0]
+}
 
 /** 이벤트 열에서 첫 벳·레이즈의 위치. 최소 레이즈 문제가 붙는 자리다. */
 const firstAggressionIndex = (events: HandEvent[]) =>
@@ -67,7 +78,7 @@ describe('extractDecisions — 최소 레이즈 정답의 독립 대조', () => 
 })
 
 describe('extractDecisions — 선택지 겹침', () => {
-  it('여러 시드·여러 require 조합에서 같은 금액이 두 번 나오지 않는다', () => {
+  it('여러 시드·여러 require 조합에서 같은 대상이 두 번 나오지 않는다', () => {
     const variants: Parameters<typeof generateHand>[0][] = []
     for (let i = 0; i < 120; i++) {
       variants.push({ seed: 'ov-' + i })
@@ -78,11 +89,35 @@ describe('extractDecisions — 선택지 겹침', () => {
     variants.forEach((opts) => {
       extractDecisions(generateHand(opts)).forEach((d) => {
         if (d.input.type !== 'choice') return
-        const nums = d.input.choices.map((c) => c.split(' —')[0])
-        expect(new Set(nums).size).toBe(nums.length)
+        const ids = d.input.choices.map(identityOf)
+        expect(new Set(ids).size).toBe(ids.length)
         seen++
       })
     })
+    expect(seen).toBeGreaterThan(0)
+  })
+
+  it('좌석이 적어 역할이 겹치는 테이블에서도 같은 좌석을 두 번 내지 않는다', () => {
+    /*
+     * 3인 테이블은 (버튼+3)%3 = 버튼이라 "언더더건" 과 "버튼" 이 같은 좌석이다.
+     * `generate.ts` 의 MIN_SEATS 가 3 이므로 이건 지원되는 입력이고, 겹친 역할을
+     * 그대로 내보내면 같은 사람이 두 번 적힌 문제가 학습자에게 나간다.
+     * 지원 범위(MIN_SEATS~MAX_SEATS) 전체를 돌아 좌석 기준으로 본다.
+     */
+    let seen = 0
+    for (let seatCount = MIN_SEATS; seatCount <= MAX_SEATS; seatCount++) {
+      for (let i = 0; i < 20; i++) {
+        const dp = extractDecisions(
+          generateHand({ seed: `seats-${seatCount}-${i}`, seatCount }),
+        ).find((d) => d.kind === 'procedure')
+        if (!dp || dp.input.type !== 'choice') continue
+        const ids = dp.input.choices.map(identityOf)
+        expect(new Set(ids).size).toBe(ids.length)
+        // 오답이 둘 미만이면 출제하지 않는다 — 나왔다면 선택지가 최소 셋이다
+        expect(ids.length).toBeGreaterThanOrEqual(3)
+        seen++
+      }
+    }
     expect(seen).toBeGreaterThan(0)
   })
 

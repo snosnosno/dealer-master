@@ -3,6 +3,17 @@ import { generateHand, type Hand } from './generate'
 import { initialState, stateAt } from './reduce'
 import { extractDecisions, TIME_LIMITS } from './decisions'
 
+/**
+ * 선택지를 실제로 구별하는 값. 금액 문제는 숫자가, 절차 문제는 좌석이 정체다
+ * (좌석은 이름으로 식별한다 — 한 핸드 안에서 이름은 좌석마다 다르다).
+ * 역할 이름("스몰블라인드"…)으로 키를 잡으면 서로 다른 역할이 같은 좌석을 가리켜도
+ * 넷 다 달라 보인다. 그러면 겹침 검사가 절차 문제에서는 어떤 좌석 수에서도 실패할 수 없다.
+ */
+const identityOf = (choice: string) => {
+  const head = choice.split(' —')[0]
+  return /^[\d,]+$/.test(head) ? head : choice.split('— ')[1].split(' (')[0]
+}
+
 describe('extractDecisions', () => {
   const hand = generateHand({ seed: 'dp-1', require: ['calculation'] })
   const dps = extractDecisions(hand)
@@ -56,13 +67,13 @@ describe('extractDecisions', () => {
     })
   })
 
-  it('선택지에 같은 금액이 두 번 나오지 않는다', () => {
-    // 같은 숫자가 두 개면 정답이 둘이거나 문제가 성립하지 않는다
+  it('선택지가 같은 대상을 두 번 가리키지 않는다', () => {
+    // 같은 금액·같은 좌석이 두 개면 정답이 둘이거나 문제가 성립하지 않는다
     for (let i = 0; i < 60; i++) {
       extractDecisions(generateHand({ seed: 'dup-' + i })).forEach((d) => {
         if (d.input.type !== 'choice') return
-        const nums = d.input.choices.map((c) => c.split(' —')[0])
-        expect(new Set(nums).size).toBe(nums.length)
+        const ids = d.input.choices.map(identityOf)
+        expect(new Set(ids).size).toBe(ids.length)
       })
     }
   })

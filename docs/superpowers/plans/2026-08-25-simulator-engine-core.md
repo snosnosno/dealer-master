@@ -2574,7 +2574,7 @@ git commit -m "feat: 결정론적 핸드 생성기"
 **Files:**
 - Create: `src/lib/simulator/decisions.ts`
 - Test: `src/lib/simulator/decisions.test.ts` (계약 16개)
-- Test: `src/lib/simulator/decisions.answers.test.ts` (정답 정확성 회귀 9개)
+- Test: `src/lib/simulator/decisions.answers.test.ts` (정답 정확성 회귀 10개)
 
 **Interfaces:**
 - Consumes: `Hand` (Task 7), `buildPots`/`awardPots` (Task 5), `nlh` (Task 6)
@@ -2593,6 +2593,17 @@ import { describe, it, expect } from 'vitest'
 import { generateHand, type Hand } from './generate'
 import { initialState, stateAt } from './reduce'
 import { extractDecisions, TIME_LIMITS } from './decisions'
+
+/**
+ * 선택지를 실제로 구별하는 값. 금액 문제는 숫자가, 절차 문제는 좌석이 정체다
+ * (좌석은 이름으로 식별한다 — 한 핸드 안에서 이름은 좌석마다 다르다).
+ * 역할 이름("스몰블라인드"…)으로 키를 잡으면 서로 다른 역할이 같은 좌석을 가리켜도
+ * 넷 다 달라 보인다. 그러면 겹침 검사가 절차 문제에서는 어떤 좌석 수에서도 실패할 수 없다.
+ */
+const identityOf = (choice: string) => {
+  const head = choice.split(' —')[0]
+  return /^[\d,]+$/.test(head) ? head : choice.split('— ')[1].split(' (')[0]
+}
 
 describe('extractDecisions', () => {
   const hand = generateHand({ seed: 'dp-1', require: ['calculation'] })
@@ -2647,13 +2658,13 @@ describe('extractDecisions', () => {
     })
   })
 
-  it('선택지에 같은 금액이 두 번 나오지 않는다', () => {
-    // 같은 숫자가 두 개면 정답이 둘이거나 문제가 성립하지 않는다
+  it('선택지가 같은 대상을 두 번 가리키지 않는다', () => {
+    // 같은 금액·같은 좌석이 두 개면 정답이 둘이거나 문제가 성립하지 않는다
     for (let i = 0; i < 60; i++) {
       extractDecisions(generateHand({ seed: 'dup-' + i })).forEach((d) => {
         if (d.input.type !== 'choice') return
-        const nums = d.input.choices.map((c) => c.split(' —')[0])
-        expect(new Set(nums).size).toBe(nums.length)
+        const ids = d.input.choices.map(identityOf)
+        expect(new Set(ids).size).toBe(ids.length)
       })
     }
   })
@@ -2750,7 +2761,7 @@ describe('extractDecisions — 정답 검증', () => {
 })
 ```
 
-`src/lib/simulator/decisions.answers.test.ts` — 정답 정확성 회귀 (9개):
+`src/lib/simulator/decisions.answers.test.ts` — 정답 정확성 회귀 (10개):
 
 정답이 규칙과 맞는가·채점 가능한 형태인가를 여러 시드에서 본다.
 검토가 발견한 최소 레이즈 정답 불일치(221/296)와 선택지 겹침(296/296)의 회귀 방어선이라
@@ -2766,13 +2777,24 @@ describe('extractDecisions — 정답 검증', () => {
  * 한 시드에서 맞는지가 아니라 여러 시드에서 구조적으로 보장되는지를 본다.
  */
 import { describe, it, expect } from 'vitest'
-import { generateHand, type Hand } from './generate'
+import { generateHand, MAX_SEATS, MIN_SEATS, type Hand } from './generate'
 import { extractDecisions } from './decisions'
 import { parseCard } from './cards'
 import type { HandEvent } from './types'
 
 /** 선택지 문자열 앞머리의 금액을 숫자로 되돌린다. */
 const amountOf = (choice: string) => Number(choice.split(' —')[0].replace(/,/g, ''))
+
+/**
+ * 선택지를 실제로 구별하는 값. 금액 문제는 숫자가, 절차 문제는 좌석이 정체다
+ * (좌석은 이름으로 식별한다 — 한 핸드 안에서 이름은 좌석마다 다르다).
+ * 역할 이름("스몰블라인드"…)으로 키를 잡으면 서로 다른 역할이 같은 좌석을 가리켜도
+ * 넷 다 달라 보인다. 그러면 겹침 검사가 절차 문제에서는 어떤 좌석 수에서도 실패할 수 없다.
+ */
+const identityOf = (choice: string) => {
+  const head = choice.split(' —')[0]
+  return /^[\d,]+$/.test(head) ? head : choice.split('— ')[1].split(' (')[0]
+}
 
 /** 이벤트 열에서 첫 벳·레이즈의 위치. 최소 레이즈 문제가 붙는 자리다. */
 const firstAggressionIndex = (events: HandEvent[]) =>
@@ -2826,7 +2848,7 @@ describe('extractDecisions — 최소 레이즈 정답의 독립 대조', () => 
 })
 
 describe('extractDecisions — 선택지 겹침', () => {
-  it('여러 시드·여러 require 조합에서 같은 금액이 두 번 나오지 않는다', () => {
+  it('여러 시드·여러 require 조합에서 같은 대상이 두 번 나오지 않는다', () => {
     const variants: Parameters<typeof generateHand>[0][] = []
     for (let i = 0; i < 120; i++) {
       variants.push({ seed: 'ov-' + i })
@@ -2837,11 +2859,35 @@ describe('extractDecisions — 선택지 겹침', () => {
     variants.forEach((opts) => {
       extractDecisions(generateHand(opts)).forEach((d) => {
         if (d.input.type !== 'choice') return
-        const nums = d.input.choices.map((c) => c.split(' —')[0])
-        expect(new Set(nums).size).toBe(nums.length)
+        const ids = d.input.choices.map(identityOf)
+        expect(new Set(ids).size).toBe(ids.length)
         seen++
       })
     })
+    expect(seen).toBeGreaterThan(0)
+  })
+
+  it('좌석이 적어 역할이 겹치는 테이블에서도 같은 좌석을 두 번 내지 않는다', () => {
+    /*
+     * 3인 테이블은 (버튼+3)%3 = 버튼이라 "언더더건" 과 "버튼" 이 같은 좌석이다.
+     * `generate.ts` 의 MIN_SEATS 가 3 이므로 이건 지원되는 입력이고, 겹친 역할을
+     * 그대로 내보내면 같은 사람이 두 번 적힌 문제가 학습자에게 나간다.
+     * 지원 범위(MIN_SEATS~MAX_SEATS) 전체를 돌아 좌석 기준으로 본다.
+     */
+    let seen = 0
+    for (let seatCount = MIN_SEATS; seatCount <= MAX_SEATS; seatCount++) {
+      for (let i = 0; i < 20; i++) {
+        const dp = extractDecisions(
+          generateHand({ seed: `seats-${seatCount}-${i}`, seatCount }),
+        ).find((d) => d.kind === 'procedure')
+        if (!dp || dp.input.type !== 'choice') continue
+        const ids = dp.input.choices.map(identityOf)
+        expect(new Set(ids).size).toBe(ids.length)
+        // 오답이 둘 미만이면 출제하지 않는다 — 나왔다면 선택지가 최소 셋이다
+        expect(ids.length).toBeGreaterThanOrEqual(3)
+        seen++
+      }
+    }
     expect(seen).toBeGreaterThan(0)
   })
 
@@ -3114,27 +3160,52 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
   // ── 1. 딜링 절차: 첫 홀카드를 받는 좌석
   const firstDealIdx = hand.events.findIndex((e) => e.type === 'deal_hole')
   if (firstDealIdx >= 0) {
-    const choices = [
-      `스몰블라인드 — ${hand.seats[sbSeat].name} (버튼 왼쪽 첫 좌석)`,
-      `빅블라인드 — ${hand.seats[bbSeat].name}`,
-      `언더더건 — ${hand.seats[utgSeat].name} (빅블라인드 다음)`,
-      `버튼 — ${hand.seats[hand.buttonSeat].name}`,
-    ]
-    dps.push({
-      atEventIndex: firstDealIdx,
-      kind: 'procedure',
-      prompt: '블라인드가 포스팅됐습니다. 첫 홀카드를 받는 좌석은?',
-      // 선택지에 이미 각 좌석이 누구인지 적혀 있으므로 sub 에서 반복하지 않는다.
-      // 정답을 sub 에 그대로 써두면 문제가 성립하지 않는다.
-      sub: `버튼은 ${hand.seats[hand.buttonSeat].name}(${hand.buttonSeat + 1}번)입니다.`,
-      input: { type: 'choice', ...shuffleChoices(createRng(`${hand.seed}:dp-deal`), choices, 0) },
-      // ⚠️ 조항 번호 확인 필요: 파일럿 문서에서 Rule 34-A 는 "버튼 위치와 이동" 이다.
-      // 딜링 순서의 근거 조항을 TDA 2024 PDF 에서 확인해 이 문자열을 확정할 것.
-      ruleRef: 'TDA Rule 34 · 딜링 순서',
-      explanation:
-        '홀카드는 항상 버튼 왼쪽 첫 좌석, 즉 스몰블라인드부터 시계방향으로 한 장씩 두 바퀴 돌립니다. 액션 순서(프리플랍은 UTG부터)와 딜링 순서를 혼동하는 것이 신입 딜러의 가장 흔한 실수입니다.',
-      timeLimitSec: TIME_LIMITS.procedure,
-    })
+    /*
+     * 오답 후보는 좌석으로 걸러야 한다. 좌석이 적으면 역할이 겹치기 때문이다 —
+     * 3인 테이블은 (버튼+3)%3 = 버튼이라 "언더더건" 과 "버튼" 이 같은 사람을 가리킨다.
+     * `generate.ts` 의 MIN_SEATS 가 3 이므로 이건 지원되는 입력이고, 같은 좌석을
+     * 두 번 내놓는 문제는 성립하지 않는다. 최소 레이즈 문제가 금액으로 겹침을 거르듯
+     * 여기서는 좌석으로 거른다 — 정답 좌석을 미리 넣어 두면 오답이 정답과 같아질 수도 없다.
+     */
+    const seenSeats = new Set<number>([sbSeat])
+    const distractors: string[] = []
+    for (const opt of [
+      { seat: bbSeat, label: `빅블라인드 — ${hand.seats[bbSeat].name}` },
+      { seat: utgSeat, label: `언더더건 — ${hand.seats[utgSeat].name} (빅블라인드 다음)` },
+      { seat: hand.buttonSeat, label: `버튼 — ${hand.seats[hand.buttonSeat].name}` },
+    ]) {
+      if (seenSeats.has(opt.seat)) continue
+      seenSeats.add(opt.seat)
+      distractors.push(opt.label)
+    }
+
+    // 서로 다른 오답을 두 개 못 만들면 이 핸드에서는 출제하지 않는다
+    if (distractors.length >= 2) {
+      const choices = [
+        `스몰블라인드 — ${hand.seats[sbSeat].name} (버튼 왼쪽 첫 좌석)`,
+        ...distractors,
+      ]
+      dps.push({
+        atEventIndex: firstDealIdx,
+        kind: 'procedure',
+        prompt: '블라인드가 포스팅됐습니다. 첫 홀카드를 받는 좌석은?',
+        // 선택지에 이미 각 좌석이 누구인지 적혀 있으므로 sub 에서 반복하지 않는다.
+        // 정답을 sub 에 그대로 써두면 문제가 성립하지 않는다.
+        sub: `버튼은 ${hand.seats[hand.buttonSeat].name}(${hand.buttonSeat + 1}번)입니다.`,
+        input: { type: 'choice', ...shuffleChoices(createRng(`${hand.seed}:dp-deal`), choices, 0) },
+        /*
+         * 조항 번호를 뺀 상태다. 레포의 파일럿 문서가 Rule 34 를 버튼에 배정하기 때문이다 —
+         * `05_pilot_cases_v1.md:100` 은 "Rule 34-A (Button Placement and Movement)",
+         * `11_pilot_cases_v2.md:32` 는 헤즈업 버튼·액션 순서에 34-B 를 쓴다.
+         * 딜링 순서의 근거로 34 를 붙이면 레포가 가진 근거와 정면으로 어긋나므로 숫자를 뺐다.
+         * TDA 2024 PDF 로 확인한 뒤에만 번호를 되살릴 것.
+         */
+        ruleRef: 'TDA · 딜링 순서',
+        explanation:
+          '홀카드는 항상 버튼 왼쪽 첫 좌석, 즉 스몰블라인드부터 시계방향으로 한 장씩 두 바퀴 돌립니다. 액션 순서(프리플랍은 UTG부터)와 딜링 순서를 혼동하는 것이 신입 딜러의 가장 흔한 실수입니다.',
+        timeLimitSec: TIME_LIMITS.procedure,
+      })
+    }
   }
 
   /*
@@ -3302,7 +3373,7 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
 - [ ] **Step 4: 테스트 실행 — 통과 확인**
 
 Run: `npm test -- decisions`
-Expected: PASS, 25 tests (`decisions.test.ts` 16 + `decisions.answers.test.ts` 9)
+Expected: PASS, 26 tests (`decisions.test.ts` 16 + `decisions.answers.test.ts` 10)
 
 일부 시드에서 사이드팟이나 쇼다운이 안 나와 테스트가 실패하면, 테스트의 시드를 바꾸지 말고 `generateHand`에 `require: ['calculation']`이 제대로 동작하는지 먼저 확인할 것. 그래도 안 나오면 Task 7의 `pickStacks`가 심는 배역을 확인한다.
 
