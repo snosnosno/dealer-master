@@ -345,19 +345,38 @@ Expected: FAIL — `Failed to resolve import "./cards"`
 `src/lib/simulator/cards.ts`:
 
 ```ts
+/**
+ * 카드 타입과 덱 조작.
+ *
+ * 셔플은 Rng 를 통해서만 무작위성을 얻는다. Math.random() 을 쓰면
+ * 같은 시드가 다른 덱을 만들어 핸드 재현이 불가능해진다.
+ */
 import type { Rng } from './rng'
 
 export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'T' | 'J' | 'Q' | 'K' | 'A'
 export type Suit = 's' | 'h' | 'd' | 'c'
 export type Card = { rank: Rank; suit: Suit }
 
-export const RANKS: readonly Rank[] = ['2','3','4','5','6','7','8','9','T','J','Q','K','A']
-export const SUITS: readonly Suit[] = ['s','h','d','c']
+export const RANKS: readonly Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
+export const SUITS: readonly Suit[] = ['s', 'h', 'd', 'c']
 
 export const RANK_VALUE: Record<Rank, number> = {
-  '2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'T':10,'J':11,'Q':12,'K':13,'A':14,
+  '2': 2,
+  '3': 3,
+  '4': 4,
+  '5': 5,
+  '6': 6,
+  '7': 7,
+  '8': 8,
+  '9': 9,
+  T: 10,
+  J: 11,
+  Q: 12,
+  K: 13,
+  A: 14,
 }
 
+/** 52장을 수트 → 랭크 순서로 정렬해서 만든다. */
 export function makeDeck(): Card[] {
   const deck: Card[] = []
   for (const suit of SUITS) {
@@ -378,10 +397,12 @@ export function shuffle(deck: readonly Card[], rng: Rng): Card[] {
   return out
 }
 
+/** 'As', 'Th' 형태로 직렬화한다. */
 export function cardToString(c: Card): string {
   return c.rank + c.suit
 }
 
+/** cardToString 의 역변환. 형식이 어긋나면 던진다. */
 export function parseCard(s: string): Card {
   if (s.length !== 2) throw new Error(`카드 문자열 길이가 2가 아님: ${s}`)
   const rank = s[0] as Rank
@@ -429,84 +450,84 @@ git commit -m "feat: 카드 타입과 결정론적 셔플"
 
 ```ts
 import { describe, it, expect } from 'vitest'
-import { evaluateHand, compareHands } from './evaluate'
-import { parseCard } from './cards'
+import { evaluateHand, compareHands, CATEGORY_LABEL, type HandCategory } from './evaluate'
+import { parseCard, type Card } from './cards'
 
 const h = (...s: string[]) => s.map(parseCard)
 
 describe('evaluateHand — 카테고리 판정', () => {
   it('스트레이트 플러시', () => {
-    expect(evaluateHand(h('9s','8s','7s','6s','5s','2d','Kh')).category).toBe(8)
+    expect(evaluateHand(h('9s', '8s', '7s', '6s', '5s', '2d', 'Kh')).category).toBe(8)
   })
   it('포카드', () => {
-    expect(evaluateHand(h('9s','9h','9d','9c','5s','2d','Kh')).category).toBe(7)
+    expect(evaluateHand(h('9s', '9h', '9d', '9c', '5s', '2d', 'Kh')).category).toBe(7)
   })
   it('풀하우스', () => {
-    expect(evaluateHand(h('9s','9h','9d','5c','5s','2d','Kh')).category).toBe(6)
+    expect(evaluateHand(h('9s', '9h', '9d', '5c', '5s', '2d', 'Kh')).category).toBe(6)
   })
   it('플러시', () => {
-    expect(evaluateHand(h('As','Js','8s','5s','2s','9d','Kh')).category).toBe(5)
+    expect(evaluateHand(h('As', 'Js', '8s', '5s', '2s', '9d', 'Kh')).category).toBe(5)
   })
   it('스트레이트', () => {
-    expect(evaluateHand(h('9s','8h','7d','6c','5s','2d','Kh')).category).toBe(4)
+    expect(evaluateHand(h('9s', '8h', '7d', '6c', '5s', '2d', 'Kh')).category).toBe(4)
   })
   it('휠 스트레이트 — A 를 1로 쓴다', () => {
-    const r = evaluateHand(h('As','2h','3d','4c','5s','9d','Kh'))
+    const r = evaluateHand(h('As', '2h', '3d', '4c', '5s', '9d', 'Kh'))
     expect(r.category).toBe(4)
     expect(r.tiebreak[0]).toBe(5) // 5-high
   })
   it('A-high 스트레이트는 top 이 14다', () => {
-    const r = evaluateHand(h('As','Kh','Qd','Jc','Ts','2d','3h'))
+    const r = evaluateHand(h('As', 'Kh', 'Qd', 'Jc', 'Ts', '2d', '3h'))
     expect(r.category).toBe(4)
     expect(r.tiebreak[0]).toBe(14)
   })
   it('휠 스트레이트 플러시', () => {
-    const r = evaluateHand(h('As','2s','3s','4s','5s','9d','Kh'))
+    const r = evaluateHand(h('As', '2s', '3s', '4s', '5s', '9d', 'Kh'))
     expect(r.category).toBe(8)
     expect(r.tiebreak[0]).toBe(5)
   })
   it('플러시와 스트레이트가 따로 있으면 스트레이트 플러시가 아니다', () => {
     // 스페이드 5장(플러시)이지만 그 5장이 연속이 아니다
-    expect(evaluateHand(h('9s','8s','7s','6s','2s','5d','Kh')).category).toBe(5)
+    expect(evaluateHand(h('9s', '8s', '7s', '6s', '2s', '5d', 'Kh')).category).toBe(5)
   })
   it('트리플', () => {
-    expect(evaluateHand(h('9s','9h','9d','5c','3s','2d','Kh')).category).toBe(3)
+    expect(evaluateHand(h('9s', '9h', '9d', '5c', '3s', '2d', 'Kh')).category).toBe(3)
   })
   it('투페어', () => {
-    expect(evaluateHand(h('9s','9h','5d','5c','3s','2d','Kh')).category).toBe(2)
+    expect(evaluateHand(h('9s', '9h', '5d', '5c', '3s', '2d', 'Kh')).category).toBe(2)
   })
   it('원페어', () => {
-    expect(evaluateHand(h('9s','9h','5d','4c','3s','2d','Kh')).category).toBe(1)
+    expect(evaluateHand(h('9s', '9h', '5d', '4c', '3s', '2d', 'Kh')).category).toBe(1)
   })
   it('하이카드', () => {
-    expect(evaluateHand(h('9s','7h','5d','4c','3s','2d','Kh')).category).toBe(0)
+    expect(evaluateHand(h('9s', '7h', '5d', '4c', '3s', '2d', 'Kh')).category).toBe(0)
   })
 })
 
 describe('compareHands', () => {
   it('킥커로 승부가 갈린다', () => {
-    const a = evaluateHand(h('Ks','Kh','Ad','7c','5s','2d','3h')) // KK + A 킥커
-    const b = evaluateHand(h('Ks','Kh','Qd','7c','5s','2d','3h')) // KK + Q 킥커
+    const a = evaluateHand(h('Ks', 'Kh', 'Ad', '7c', '5s', '2d', '3h')) // KK + A 킥커
+    const b = evaluateHand(h('Ks', 'Kh', 'Qd', '7c', '5s', '2d', '3h')) // KK + Q 킥커
     expect(compareHands(a, b)).toBeGreaterThan(0)
   })
 
   it('완전히 같은 족보는 0을 돌려준다', () => {
-    const a = evaluateHand(h('Ks','Kh','Ad','7c','5s'))
-    const b = evaluateHand(h('Kd','Kc','Ah','7s','5d'))
+    const a = evaluateHand(h('Ks', 'Kh', 'Ad', '7c', '5s'))
+    const b = evaluateHand(h('Kd', 'Kc', 'Ah', '7s', '5d'))
     expect(compareHands(a, b)).toBe(0)
   })
 
   it('카테고리가 다르면 카테고리가 이긴다', () => {
-    const trips = evaluateHand(h('7s','7h','7d','Kc','5s'))
-    const twoPair = evaluateHand(h('As','Ah','Kd','Kc','5s'))
+    const trips = evaluateHand(h('7s', '7h', '7d', 'Kc', '5s'))
+    const twoPair = evaluateHand(h('As', 'Ah', 'Kd', 'Kc', '5s'))
     expect(compareHands(trips, twoPair)).toBeGreaterThan(0)
   })
 
   it('포카드 옆에 페어가 있어도 키커는 가장 높은 랭크다', () => {
     // 보드 9999 2, 한쪽은 2K, 다른쪽은 2Q. 최선의 5장은 9999K vs 9999Q.
     // 개수 우선 정렬 배열에서 키커를 뽑으면 둘 다 키커를 2로 잡아 무승부가 된다.
-    const withK = evaluateHand(h('9s','9h','9d','9c','2d','2h','Kh'))
-    const withQ = evaluateHand(h('9s','9h','9d','9c','2d','2h','Qh'))
+    const withK = evaluateHand(h('9s', '9h', '9d', '9c', '2d', '2h', 'Kh'))
+    const withQ = evaluateHand(h('9s', '9h', '9d', '9c', '2d', '2h', 'Qh'))
     expect(withK.tiebreak).toEqual([9, 13])
     expect(compareHands(withK, withQ)).toBeGreaterThan(0)
   })
@@ -514,10 +535,10 @@ describe('compareHands', () => {
 
 describe('목업 핸드 — 설계 문서의 검증 시나리오', () => {
   // 보드 Kd 9s 7h 2c Qs
-  const board = h('Kd','9s','7h','2c','Qs')
-  const choi = evaluateHand([...h('9h','9d'), ...board])   // 트리플 9
-  const park = evaluateHand([...h('As','Ks'), ...board])   // K 원페어
-  const lee  = evaluateHand([...h('7c','7s'), ...board])   // 트리플 7
+  const board = h('Kd', '9s', '7h', '2c', 'Qs')
+  const choi = evaluateHand([...h('9h', '9d'), ...board]) // 트리플 9
+  const park = evaluateHand([...h('As', 'Ks'), ...board]) // K 원페어
+  const lee = evaluateHand([...h('7c', '7s'), ...board]) // 트리플 7
 
   it('최우진이 트리플 9로 가장 세다', () => {
     expect(compareHands(choi, park)).toBeGreaterThan(0)
@@ -532,6 +553,46 @@ describe('목업 핸드 — 설계 문서의 검증 시나리오', () => {
     expect(park.category).toBe(1)
   })
 })
+
+describe('CATEGORY_LABEL 과 HandRank.label', () => {
+  it('0~8 아홉 카테고리 전부에 서로 다른 라벨이 빠짐없이 붙어 있다', () => {
+    const keys = Object.keys(CATEGORY_LABEL)
+      .map(Number)
+      .sort((a, b) => a - b)
+    expect(keys).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+
+    const labels = Object.values(CATEGORY_LABEL)
+    expect(labels.filter((l) => l.trim().length > 0)).toHaveLength(9) // 빈 라벨 없음
+    expect(new Set(labels).size).toBe(9) // 복붙으로 두 카테고리가 같은 이름을 갖지 않음
+  })
+
+  it('평가한 핸드의 label 은 자기 카테고리의 라벨을 그대로 갖는다', () => {
+    const fixtures: [HandCategory, Card[]][] = [
+      [8, h('9s', '8s', '7s', '6s', '5s', '2d', 'Kh')],
+      [7, h('9s', '9h', '9d', '9c', '5s', '2d', 'Kh')],
+      [6, h('9s', '9h', '9d', '5c', '5s', '2d', 'Kh')],
+      [5, h('As', 'Js', '8s', '5s', '2s', '9d', 'Kh')],
+      [4, h('9s', '8h', '7d', '6c', '5s', '2d', 'Kh')],
+      [3, h('9s', '9h', '9d', '5c', '3s', '2d', 'Kh')],
+      [2, h('9s', '9h', '5d', '5c', '3s', '2d', 'Kh')],
+      [1, h('9s', '9h', '5d', '4c', '3s', '2d', 'Kh')],
+      [0, h('9s', '7h', '5d', '4c', '3s', '2d', 'Kh')],
+    ]
+    for (const [category, cards] of fixtures) {
+      const r = evaluateHand(cards)
+      expect(r.category).toBe(category)
+      expect(r.label).toBe(CATEGORY_LABEL[category])
+    }
+  })
+
+  it('카테고리 번호와 라벨의 짝이 뒤바뀌지 않았다', () => {
+    // 아홉 개를 통째로 옮겨 적으면 CATEGORY_LABEL 정의를 복사한 것일 뿐이라
+    // 강도 순서가 어긋났는지만 낮음/중간/높음 세 지점에서 고정한다.
+    expect(evaluateHand(h('9s', '9h', '5d', '4c', '3s', '2d', 'Kh')).label).toBe('원페어')
+    expect(evaluateHand(h('9s', '9h', '9d', '5c', '5s', '2d', 'Kh')).label).toBe('풀하우스')
+    expect(evaluateHand(h('9s', '8s', '7s', '6s', '5s', '2d', 'Kh')).label).toBe('스트레이트 플러시')
+  })
+})
 ```
 
 - [ ] **Step 2: 테스트 실행 — 실패 확인**
@@ -544,13 +605,27 @@ Expected: FAIL — `Failed to resolve import "./evaluate"`
 `src/lib/simulator/evaluate.ts`:
 
 ```ts
+/**
+ * 핸드 족보 평가.
+ *
+ * 7장(홀 2 + 보드 5)에서 최선의 5장을 골라 순위를 매긴다.
+ * 승자 판정이 틀리면 훈련용 제품이 오답을 가르치게 되므로,
+ * 카테고리와 타이브레이커 모두 포커 규칙 그대로여야 한다.
+ */
 import { RANK_VALUE, type Card } from './cards'
 
 export type HandCategory = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
 
 export const CATEGORY_LABEL: Record<HandCategory, string> = {
-  0: '하이카드', 1: '원페어', 2: '투페어', 3: '트리플', 4: '스트레이트',
-  5: '플러시', 6: '풀하우스', 7: '포카드', 8: '스트레이트 플러시',
+  0: '하이카드',
+  1: '원페어',
+  2: '투페어',
+  3: '트리플',
+  4: '스트레이트',
+  5: '플러시',
+  6: '풀하우스',
+  7: '포카드',
+  8: '스트레이트 플러시',
 }
 
 /**
@@ -614,9 +689,7 @@ export function evaluateHand(cards: Card[]): HandRank {
   for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1)
 
   // 개수 내림차순, 같으면 값 내림차순
-  const groups = Array.from(counts.entries()).sort((a, b) =>
-    b[1] - a[1] || b[0] - a[0],
-  )
+  const groups = Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || b[0] - a[0])
 
   const quad = groups.find((g) => g[1] === 4)
   if (quad) {
@@ -657,6 +730,7 @@ export function evaluateHand(cards: Card[]): HandRank {
   return make(0, uniqDesc.slice(0, 5))
 }
 
+/** a 가 세면 양수, b 가 세면 음수, 완전히 같으면 0. */
 export function compareHands(a: HandRank, b: HandRank): number {
   if (a.category !== b.category) return a.category - b.category
   const len = Math.max(a.tiebreak.length, b.tiebreak.length)
@@ -709,7 +783,7 @@ git commit -m "feat: 핸드 족보 평가 및 비교"
 ```ts
 import { describe, it, expect } from 'vitest'
 import { initialState, applyEvent, stateAt } from './reduce'
-import type { HandEvent } from './types'
+import type { HandEvent, HandState } from './types'
 import { parseCard } from './cards'
 
 const seats = [
@@ -799,6 +873,156 @@ describe('stateAt', () => {
     }
   })
 })
+
+/** 상태의 중첩 구조까지 전부 얼린다. 제자리 수정이 있으면 strict mode 에서 던진다. */
+function deepFreeze(s: HandState): HandState {
+  s.seats.forEach((seat) => {
+    Object.freeze(seat.hole)
+    Object.freeze(seat)
+  })
+  Object.freeze(s.seats)
+  Object.freeze(s.board)
+  Object.freeze(s.contributed)
+  return Object.freeze(s)
+}
+
+describe('불변성', () => {
+  it('얼린 상태에 이벤트를 적용해도 제자리 수정이 일어나지 않는다', () => {
+    const all: HandEvent[] = [
+      ...events,
+      { type: 'burn' },
+      { type: 'deal_board', street: 'flop', cards: [parseCard('7c'), parseCard('8d'), parseCard('9h')] },
+      { type: 'player_action', seat: 1, action: { kind: 'bet', to: 1000 } },
+      { type: 'return_uncalled', seat: 1, amount: 600 },
+      { type: 'collect_bets' },
+      { type: 'showdown_reveal', seat: 1 },
+      { type: 'award_pot', potIndex: 0, seat: 1, amount: 2500 },
+      { type: 'move_button', toSeat: 1 },
+    ]
+    let s = deepFreeze(initialState(seats, 0))
+    for (const e of all) s = deepFreeze(applyEvent(s, e))
+    expect(s.seats[1].revealed).toBe(true)
+  })
+
+  it('바뀐 중첩 배열이 입력과 같은 참조를 공유하지 않는다', () => {
+    const before = initialState(seats, 0)
+    const dealt = applyEvent(before, { type: 'deal_hole', seat: 0, card: parseCard('As') })
+    expect(dealt.seats).not.toBe(before.seats)
+    expect(dealt.seats[0].hole).not.toBe(before.seats[0].hole)
+    expect(before.seats[0].hole).toHaveLength(0)
+
+    const posted = applyEvent(before, events[0])
+    expect(posted.contributed).not.toBe(before.contributed)
+    expect(before.contributed[1]).toBe(0)
+
+    const boarded = applyEvent(before, {
+      type: 'deal_board',
+      street: 'flop',
+      cards: [parseCard('7c'), parseCard('8d'), parseCard('9h')],
+    })
+    expect(boarded.board).not.toBe(before.board)
+    expect(before.board).toHaveLength(0)
+  })
+})
+
+describe('칩 보존 가드', () => {
+  it('현재 벳보다 낮은 레이즈·벳은 던진다 — 음수 delta 로 칩이 생기는 것을 막는다', () => {
+    // 이미 200 을 벳한 좌석의 목표를 50 으로 낮추면 delta 가 음수가 되어
+    // 스택이 늘고 투입액이 줄어든다. post_blind 는 가산이라 이 경로로 못 들어오므로
+    // 가드를 실제로 지키는 것은 player_action 쪽이다.
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'post_blind', seat: 2, amount: 200, kind: 'bb' })
+    expect(() =>
+      applyEvent(s, { type: 'player_action', seat: 2, action: { kind: 'raise', to: 50 } }),
+    ).toThrow(/좌석 2\(0-based\) 의 목표 벳 50 이 현재 벳 200 보다 작다/)
+    expect(() =>
+      applyEvent(s, { type: 'player_action', seat: 2, action: { kind: 'bet', to: 0 } }),
+    ).toThrow(/목표 벳 0 이 현재 벳 200 보다 작다/)
+  })
+
+  it('같은 금액으로의 재지정은 던지지 않는다 — 이미 맞춘 벳에 콜하는 정상 경로', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'post_blind', seat: 2, amount: 200, kind: 'bb' })
+    const same = applyEvent(s, { type: 'player_action', seat: 2, action: { kind: 'call', to: 200 } })
+    expect(same.seats[2].bet).toBe(200)
+    expect(same.contributed[2]).toBe(200)
+  })
+
+  it('팟보다 큰 지급은 던진다 — 클램프로 초과분을 감추지 않는다', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'post_blind', seat: 1, amount: 100, kind: 'sb' })
+    s = applyEvent(s, { type: 'collect_bets' })
+    expect(s.pot).toBe(100)
+    expect(() => applyEvent(s, { type: 'award_pot', potIndex: 0, seat: 1, amount: 101 })).toThrow(
+      /지급하려는 101 이 남은 팟 100 보다 크다/,
+    )
+    // 팟 전액 지급은 정상 경로다
+    const paid = applyEvent(s, { type: 'award_pot', potIndex: 0, seat: 1, amount: 100 })
+    expect(paid.pot).toBe(0)
+    expect(paid.seats[1].stack).toBe(12500)
+  })
+})
+
+describe('post_blind 가산 의미론', () => {
+  // amount 는 '이만큼 낸다' 는 가산액이다. 앤티와 블라인드를 같은 좌석이 낼 때
+  // 순서와 무관하게 합계가 같아야 한다 — 25 + 200 = 225.
+  it('앤티를 먼저 내도 블라인드와 합산된다', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'post_blind', seat: 2, amount: 25, kind: 'ante' })
+    s = applyEvent(s, { type: 'post_blind', seat: 2, amount: 200, kind: 'bb' })
+    expect(s.contributed[2]).toBe(225)
+    expect(s.seats[2].bet).toBe(225)
+    expect(s.seats[2].stack).toBe(47000 - 225)
+  })
+
+  it('블라인드를 먼저 내도 앤티와 합산된다 — 순서가 결과를 바꾸지 않는다', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'post_blind', seat: 2, amount: 200, kind: 'bb' })
+    s = applyEvent(s, { type: 'post_blind', seat: 2, amount: 25, kind: 'ante' })
+    expect(s.contributed[2]).toBe(225)
+    expect(s.seats[2].bet).toBe(225)
+    expect(s.seats[2].stack).toBe(47000 - 225)
+  })
+})
+
+describe('return_uncalled 의 allIn 유도', () => {
+  it('0원 반환은 올인 상태를 풀지 않는다', () => {
+    // amount 0 은 무의미한 이벤트지만, 그것 때문에 allIn 이 풀리면
+    // 스택이 0 인 좌석이 아직 액션할 수 있는 것처럼 보인다.
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'player_action', seat: 1, action: { kind: 'allin', to: 12500 } })
+    s = applyEvent(s, { type: 'return_uncalled', seat: 1, amount: 0 })
+    expect(s.seats[1].stack).toBe(0)
+    expect(s.seats[1].allIn).toBe(true)
+  })
+
+  it('양수 반환은 올인을 푼다 — 기존 동작이 유지된다', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'player_action', seat: 1, action: { kind: 'allin', to: 12500 } })
+    s = applyEvent(s, { type: 'return_uncalled', seat: 1, amount: 1 })
+    expect(s.seats[1].stack).toBe(1)
+    expect(s.seats[1].allIn).toBe(false)
+  })
+})
+
+describe('return_uncalled 무결성 가드', () => {
+  it('낸 것보다 많이 되돌리면 던진다 — bet·contributed 가 음수로 내려가는 것을 막는다', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'player_action', seat: 2, action: { kind: 'bet', to: 200 } })
+    expect(() => applyEvent(s, { type: 'return_uncalled', seat: 2, amount: 201 })).toThrow(
+      /좌석 2\(0-based\) 에 되돌리려는 201 이 현재 벳 200 보다 크다/,
+    )
+  })
+
+  it('벳 전액 반환은 통과한다 — 가장 흔한 정상 경로', () => {
+    let s = initialState(seats, 0)
+    s = applyEvent(s, { type: 'player_action', seat: 2, action: { kind: 'bet', to: 200 } })
+    const back = applyEvent(s, { type: 'return_uncalled', seat: 2, amount: 200 })
+    expect(back.seats[2].bet).toBe(0)
+    expect(back.seats[2].stack).toBe(47000)
+    expect(back.contributed[2]).toBe(0)
+  })
+})
 ```
 
 - [ ] **Step 2: 테스트 실행 — 실패 확인**
@@ -811,6 +1035,13 @@ Expected: FAIL — `Failed to resolve import "./reduce"`
 `src/lib/simulator/types.ts`:
 
 ```ts
+/**
+ * 시뮬레이터 엔진의 공용 타입.
+ *
+ * 핸드 진행은 HandEvent 배열이고, 화면에 보이는 HandState 는 그 이벤트들을
+ * 접어서(reduce) 만든다. 상태를 직접 고치지 않고 이벤트로만 전진하기 때문에
+ * 되감기·재생이 공짜로 나오고, 같은 시드가 항상 같은 핸드를 만든다.
+ */
 import type { Card } from './cards'
 
 export type Street = 'preflop' | 'flop' | 'turn' | 'river'
@@ -825,9 +1056,6 @@ export type PlayerAction =
 
 export type HandEvent =
   | { type: 'move_button'; toSeat: number }
-  /** amount 는 목표치가 아니라 '이만큼 낸다' 는 **가산액**이다. 앤티와 블라인드를
-   *  같은 좌석이 낼 때 순서와 무관하게 합산돼야 한다 (25 + 200 = 225).
-   *  목표치로 다루면 앤티가 블라인드에 흡수되거나(과소 징수) 음수 delta 가 된다. */
   | { type: 'post_blind'; seat: number; amount: number; kind: 'sb' | 'bb' | 'ante' }
   | { type: 'deal_hole'; seat: number; card: Card }
   | { type: 'burn' }
@@ -871,13 +1099,25 @@ export type SeatInit = { name: string; stack: number }
 `src/lib/simulator/reduce.ts`:
 
 ```ts
-import type { HandEvent, HandState, SeatInit } from './types'
+/**
+ * 이벤트 리듀서.
+ *
+ * applyEvent 는 입력 상태를 절대 제자리에서 고치지 않는다. 중첩 배열까지
+ * 새로 만들어 돌려준다. 얕은 복사만 하고 seats·board·contributed 를 공유하면
+ * 되감기로 만든 과거 상태가 조용히 오염돼서, 재현이 안 되는 버그가 된다.
+ */
+import type { HandEvent, HandState, SeatInit, SeatState } from './types'
 
 export function initialState(seats: SeatInit[], buttonSeat: number): HandState {
   return {
     seats: seats.map((s) => ({
-      name: s.name, stack: s.stack, bet: 0,
-      folded: false, allIn: false, hole: [], revealed: false,
+      name: s.name,
+      stack: s.stack,
+      bet: 0,
+      folded: false,
+      allIn: false,
+      hole: [],
+      revealed: false,
     })),
     buttonSeat,
     board: [],
@@ -888,13 +1128,28 @@ export function initialState(seats: SeatInit[], buttonSeat: number): HandState {
 }
 
 /** 좌석 하나만 바꾼 새 seats 배열을 만든다. */
-function withSeat(state: HandState, i: number, patch: Partial<HandState['seats'][number]>) {
+function withSeat(state: HandState, i: number, patch: Partial<SeatState>): SeatState[] {
   return state.seats.map((s, idx) => (idx === i ? { ...s, ...patch } : s))
 }
 
 /** 좌석 i 의 벳을 to 까지 올린다. 스택보다 크면 스택 전액(올인)으로 자른다. */
-function raiseBetTo(state: HandState, i: number, to: number) {
+function raiseBetTo(
+  state: HandState,
+  i: number,
+  to: number,
+): { seats: SeatState[]; contributed: number[] } {
   const seat = state.seats[i]
+  // 목표 벳이 현재 벳보다 작으면 delta 가 음수가 되어 스택이 늘고 벳·투입액이 줄어든다.
+  // 칩 총액은 보존된다(스택이 는 만큼 벳이 준다) — 깨지는 것은 contributed 원장이다.
+  // 그 원장이 Task 5 사이드팟의 근거이므로, 어긋난 채 진행하면 사이드팟이 조용히 틀어진다.
+  // 생성기 버그를 흡수하지 말고 여기서 fail-fast 한다.
+  // 미콜 벳을 되돌리는 것은 return_uncalled 의 일이다.
+  if (to < seat.bet) {
+    throw new Error(
+      `좌석 ${i}(0-based) 의 목표 벳 ${to} 이 현재 벳 ${seat.bet} 보다 작다. ` +
+        `벳은 되돌릴 수 없다 — 미콜 벳 반환은 return_uncalled 를 쓸 것.`,
+    )
+  }
   const want = to - seat.bet
   const delta = Math.min(want, seat.stack)
   const contributed = state.contributed.slice()
@@ -915,7 +1170,9 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
       return { ...state, buttonSeat: e.toSeat }
 
     case 'post_blind': {
-      // amount 는 가산액이다 — 목표치가 아니다 (위 HandEvent 주석 참조)
+      // amount 는 목표치가 아니라 '이만큼 낸다' 는 가산액이다. 블라인드는 bet 이 0 일 때
+      // 내므로 sb/bb 는 동작이 같고, 앤티는 블라인드와 어느 순서로 와도 합계가 옳아진다.
+      // 목표치로 다루면 앤티가 블라인드에 흡수되거나(과소 징수) 음수 delta 가 된다.
       const { seats, contributed } = raiseBetTo(state, e.seat, state.seats[e.seat].bet + e.amount)
       return { ...state, seats, contributed }
     }
@@ -944,7 +1201,9 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
 
     case 'return_uncalled': {
       const seat = state.seats[e.seat]
-      // 낸 것보다 많이 되돌리면 bet 과 contributed 가 음수가 된다 — 원장이 깨진다
+      // 낸 것보다 많이 되돌리면 bet 과 contributed 가 음수로 내려간다.
+      // 여기도 칩 총액은 보존되고 깨지는 것은 원장이다 — raiseBetTo 와 같은 계열이다.
+      // amount === seat.bet(벳 전액 반환)은 가장 흔한 정상 경로이므로 통과시킨다.
       if (e.amount > seat.bet) {
         throw new Error(
           `좌석 ${e.seat}(0-based) 에 되돌리려는 ${e.amount} 이 현재 벳 ${seat.bet} 보다 크다. ` +
@@ -958,7 +1217,9 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
         seats: withSeat(state, e.seat, {
           stack: seat.stack + e.amount,
           bet: seat.bet - e.amount,
-          // 결과 스택에서 유도한다 — 무조건 false 면 amount 가 0 일 때 올인이 잘못 풀린다
+          // 결과 스택에서 유도한다. 무조건 false 로 두면 amount 가 0 일 때
+          // 올인 좌석의 플래그가 잘못 풀려, 이후 액션 유효성(Task 6)과
+          // 사이드팟 자격(Task 5)이 그 좌석을 전혀 다르게 취급한다.
           allIn: seat.stack + e.amount === 0,
         }),
         contributed,
@@ -977,12 +1238,21 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
     case 'showdown_reveal':
       return { ...state, seats: withSeat(state, e.seat, { revealed: true }) }
 
-    case 'award_pot':
+    case 'award_pot': {
+      // 클램프로 팟을 0 에서 멈추면 좌석 스택에는 전액이 들어가면서 초과분이 감춰진다.
+      // 리듀서에서 칩 총액이 문자 그대로 늘어나는 곳은 여기 하나뿐이다
+      // (팟은 pot 만큼만 줄고 스택은 amount 만큼 는다). 감추지 말고 터뜨린다.
+      if (e.amount > state.pot) {
+        throw new Error(
+          `좌석 ${e.seat}(0-based) 에 지급하려는 ${e.amount} 이 남은 팟 ${state.pot} 보다 크다.`,
+        )
+      }
       return {
         ...state,
-        pot: Math.max(0, state.pot - e.amount),
+        pot: state.pot - e.amount,
         seats: withSeat(state, e.seat, { stack: state.seats[e.seat].stack + e.amount }),
       }
+    }
   }
 }
 
@@ -1226,6 +1496,13 @@ Expected: FAIL — `Failed to resolve import "./pots"`
 `src/lib/simulator/pots.ts`:
 
 ```ts
+/**
+ * 사이드팟 분리와 팟 지급 계산.
+ *
+ * 딜러 실무에서 가장 자주 틀리는 계산이고, 이 서비스가 가르치려는 바로 그 내용이다.
+ * 여기가 틀리면 사용자가 틀린 분할을 정답으로 배우게 되므로
+ * 팟의 "금액"뿐 아니라 "개수"와 "자격자 집합"까지 규칙 그대로여야 한다.
+ */
 import type { Card } from './cards'
 import { compareHands, evaluateHand } from './evaluate'
 
@@ -1276,7 +1553,9 @@ export function buildPots(contributed: number[], folded: boolean[]): Pot[] {
    * 사이드팟은 "올인으로 더 적게 낸 사람 때문에 참가 자격이 갈릴 때"만 생긴다.
    * 폴드한 사람이 만든 층은 자격자 집합을 바꾸지 않으므로 팟을 새로 만들지 않고
    * 앞 팟에 얹히는 데드머니일 뿐이다.
-   * ⚠️ 조항 번호는 TDA 2024 PDF 원문으로 확인할 것 (기존 "TDA Rule 21" 표기는 미검증).
+   * TDA 2024 규정집 원문 대조 완료 — "21: Side Pots / 각 사이드 팟은 분리해서 두어야 합니다"
+   * (영문 Longform v1.0, 한글 번역본 둘 다 21번). 다만 조항 본문은 "분리해서 둔다"는
+   * 한 문장이고, 아래 층 자르기·데드머니 병합 절차 자체를 규정하지는 않는다.
    *
    * 이 병합을 빼면 폴드한 빅블라인드의 200 하나가 별도 팟을 만들어
    * 목업 핸드가 [800, 23400, 9000] 세 팟이 된다 (정답은 [24200, 9000]).
@@ -1357,7 +1636,8 @@ export function awardPots(
      * 낮은 좌석 인덱스부터 주면 좌석 번호가 규칙인 것처럼 가르치게 된다 —
      * 실제 기준은 버튼이다. 그리고 8,100 을 둘로 나눠 4,050 씩 주는 것은
      * 테이블에 50 칩이 없으므로 현장에서 불가능하다. 4,100 / 4,000 이 정답이다.
-     * ⚠️ 조항 번호는 TDA 2024 PDF 원문으로 확인해 채울 것 (기존 "Rule 20" 표기는 미검증).
+     * TDA 2024 규정집 원문 대조 완료 — "20: Awarding Odd Chips". A) 보드 게임에서 하이/로우
+     * 핸드가 둘 이상이면 나머지 칩은 버튼 왼쪽 첫 좌석부터. 위 서술과 일치한다.
      */
     const ordered = orderFromButton(winners, buttonSeat, seatCount)
     const units = Math.floor(pot.amount / ODD_CHIP_UNIT)
@@ -3971,7 +4251,7 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
         bigBlind: hand.blinds.bb,
         /*
          * 아래 세 필드는 특정 좌석이 아니라 "규정이 정하는 최소 총액"을 묻기 위한
-         * 중립값이다. 문제 문구(:191)가 다음 행동할 사람을 지목하지 않는 이유가 이것이다 —
+         * 중립값이다. 문제 문구(:192)가 다음 행동할 사람을 지목하지 않는 이유가 이것이다 —
          * 지목하면 답이 그 사람의 스택에 매이는데(짧은 스택은 최소 레이즈를 못 하고
          * 올인만 가능하다) 여기 계산은 스택을 일부러 보지 않는다. 문구를 좌석에
          * 매는 순간 이 중립값들이 조작된 컨텍스트가 된다.
@@ -4425,7 +4705,7 @@ export function scoreHand(results: DecisionResult[]): HandScore {
  * 아래 두 가지를 함께 결정해야 한다. 지금은 어느 쪽도 방어하지 않는다.
  *
  * 1. 창 안에서 한 번도 측정되지 않은 축은 0 으로 평균된다. "측정 안 됨"과 "측정했고 0점"이
- *    구별되지 않는다. `action_validity` 는 설계상 생성 핸드의 약 24% 에서 아예 나타나지 않으므로,
+ *    구별되지 않는다. `action_validity` 는 설계상 생성 핸드의 약 32.7% 에서 아예 나타나지 않으므로(300시드 실측 98건),
  *    창이 작으면 학습자가 자기 잘못 없이 승급이 막힌다.
  * 2. 최소 표본 규정이 없다. 창에서 한 번 측정된 축이 스무 번 측정된 축과 같은 무게로 등급을
  *    인증한다.
