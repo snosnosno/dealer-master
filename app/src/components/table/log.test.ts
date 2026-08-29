@@ -66,4 +66,18 @@ describe('학습자용 이벤트 문구', () => {
     }
     expect(describeForLearner(e, seats)).toBe('플랍 8♥ A♣ Q♦')
   })
+
+  test('홀카드 딜은 좌석만 쓴다 — 카드를 적지 않는다 (쇼다운 답 유출 방지)', () => {
+    const line = describeForLearner(
+      { type: 'deal_hole', seat: 2, card: { rank: 'A', suit: 's' } }, seats)
+    expect(line).toBe('이민아(3번)에게 홀카드')
+    expect(line).not.toContain('A')
+    expect(line).not.toContain('♠')
+    expect(line).not.toContain('#')
+  })
+
+  test('핸드 공개도 1-based 다', () => {
+    expect(describeForLearner({ type: 'showdown_reveal', seat: 0 }, seats))
+      .toBe('김도현(1번) 핸드 공개')
+  })
 })
