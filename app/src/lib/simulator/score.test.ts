@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { scoreDecision, scoreHand, gradeFrom } from './score'
+import { scoreDecision, scoreHand, gradeFrom, GRADE_WINDOW } from './score'
 import type { HandScore } from './score'
 import type { DecisionPoint } from './decisions'
+import { extractDecisions } from './decisions'
+import { generateHand } from './generate'
 
 const choiceDp: DecisionPoint = {
   atEventIndex: 0, kind: 'procedure', prompt: 'q', sub: '',
@@ -81,12 +83,41 @@ describe('scoreDecision', () => {
   })
 
   it('필드보다 값이 적으면 던지지 않고 빈 칸을 오답으로 센다', () => {
-    // `values: number[]` 는 빈 칸을 undefined 로 담지 못한다. 2칸 중 뒤 칸을 비운 학습자의 답은
-    // `[24200]` 이 되는데, 이는 평범한 학습자 행동이므로 던지면 정상 조작에서 크래시한다.
-    // 없는 값은 `undefined !== 9000` 으로 오답이 되어 2필드 중 1개 정답 = 50점이다.
+    // 꼬리 빈 칸은 짧은 배열로도 표현된다. 평범한 학습자 행동이므로 던지면 정상 조작에서
+    // 크래시한다. 없는 값은 `undefined !== 9000` 으로 오답이 되어 2필드 중 1개 정답 = 50점이다.
     const r = scoreDecision(numberDp, { type: 'number', values: [24200] })
     expect(r.score).toBe(50)
     expect(r.correct).toBe(false)
+  })
+
+  it('중간 빈 칸을 null 로 표현하고, 비운 칸만 오답으로 센다', () => {
+    /*
+     * `number[]` 였을 때는 "1번 칸을 비우고 2번 칸만 입력"을 인덱스 정렬대로 보낼 방법이
+     * 없었다. UI 가 0 으로 메꾸면 "0 이라고 답했다"로 채점되고, 배열을 앞으로 당기면
+     * 사이드팟 답이 메인팟 칸과 대조된다 — 둘 다 조용히 틀린 점수를 낸다.
+     *
+     * 반증하는 구현 변경: null 을 0 으로 강제하면 첫 필드가 24200 이 아니므로 여전히 50점이
+     * 나오지만 아래 두 번째 단언(꽉 채운 답이 100점)과 짝지어 위치 정렬이 유지됨을 본다.
+     * 채점이 null 을 건너뛰고 배열을 당기면 `9000` 이 메인팟과 비교돼 0점으로 빨개진다.
+     */
+    const r = scoreDecision(numberDp, { type: 'number', values: [null, 9000] })
+    expect(r.score).toBe(50)
+    expect(r.correct).toBe(false)
+
+    // 같은 위치 정렬로 둘 다 채우면 100점 — 위 50점이 "우연히 절반"이 아님을 고정한다.
+    expect(scoreDecision(numberDp, { type: 'number', values: [24200, 9000] }).score).toBe(100)
+    // 반대쪽 칸만 채우면 역시 50점. 두 칸이 각각 독립으로 채점된다.
+    expect(scoreDecision(numberDp, { type: 'number', values: [24200, null] }).score).toBe(50)
+  })
+
+  it('null 은 정답 0 과 구별된다 — 빈 칸이 0 을 맞힌 것으로 세어지면 안 된다', () => {
+    const zeroDp: DecisionPoint = {
+      ...numberDp,
+      input: { type: 'number', fields: [{ label: '메인팟', answer: 0 }, { label: '사이드팟', answer: 9000 }] },
+    }
+    // 빈 칸을 0 으로 메꾸는 구현이면 이 단언이 100점을 내며 빨개진다.
+    expect(scoreDecision(zeroDp, { type: 'number', values: [null, 9000] }).score).toBe(50)
+    expect(scoreDecision(zeroDp, { type: 'number', values: [0, 9000] }).score).toBe(100)
   })
 })
 
@@ -154,5 +185,29 @@ describe('gradeFrom', () => {
     // action_validity 가 두 핸드 중 하나에만 있고 그 값이 90 이다. 결측을 0 으로 세면 45 가 되어
     // junior 지만, 결측 핸드는 평균에서 빠지므로 90 이 남아 master 다.
     expect(gradeFrom([withNulls(90, 90, 90), withNulls(90, null, 90)])).toBe('master')
+  })
+})
+
+describe('GRADE_WINDOW', () => {
+  it('창 안에서 action_validity 축이 충분히 측정된다 — 창이 좁으면 빨개진다', () => {
+    /*
+     * `gradeFrom` 은 창을 자르지 않는다. 자르는 쪽(호출부)이 크기를 정해야 하고 그 크기가
+     * GRADE_WINDOW 다. 이 축은 설계상 핸드의 약 32.7% 에서 아예 나오지 않으므로(300시드
+     * 실측 98건), 창이 좁으면 학습자가 자기 잘못 없이 축 점수 0 으로 승급이 막히거나
+     * 표본 한 개짜리 축이 스무 개짜리 축과 같은 무게로 등급을 인증한다.
+     *
+     * 부재율 0.327 에서 창 전체 결측 확률은 N=3 이면 3.5%, N=5 면 0.37%, N=20 이면
+     * 사실상 0 이다. 표본 1개 이하 확률은 N=3 이면 25%, N=5 면 4.2%, N=20 이면 사실상 0.
+     *
+     * 반증하는 구현 변경: GRADE_WINDOW 를 5 이하로 낮추면 이 표본에서 실제로 빨개진다.
+     * 발행 게이트가 좁아져 축이 덜 나오게 되어도 빨개진다 — 그때는 창을 다시 정하라는 신호다.
+     */
+    let handsWithAxis = 0
+    for (let i = 0; i < GRADE_WINDOW; i++) {
+      const dps = extractDecisions(generateHand({ seed: `window-${i}` }))
+      if (dps.some((d) => d.kind === 'action_validity')) handsWithAxis++
+    }
+    // 최소 표본 규정의 대용: 창 안에 이 축이 여러 번 들어와야 평균이 의미를 갖는다.
+    expect(handsWithAxis).toBeGreaterThanOrEqual(5)
   })
 })

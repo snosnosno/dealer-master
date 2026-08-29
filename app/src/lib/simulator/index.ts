@@ -36,6 +36,6 @@ export {
   type DecisionPoint, type DecisionInput,
 } from './decisions'
 export {
-  scoreDecision, scoreHand, gradeFrom,
+  scoreDecision, scoreHand, gradeFrom, GRADE_WINDOW,
   type Answer, type DecisionResult, type HandScore,
 } from './score'

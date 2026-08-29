@@ -3634,6 +3634,29 @@ describe('extractDecisions', () => {
     })
   })
 
+  it('최소 레이즈 선택지는 전부 금액만이다 — 정답만 규칙 어휘를 쓰면 산술 없이 골린다', () => {
+    /*
+     * 이전에는 정답만 "600 — 직전 레이즈 폭 200만큼 추가" 처럼 규칙의 어휘를 그대로 쓰고
+     * 오답은 "레이즈 폭의 절반만 추가" 같은 다른 방법명을 썼다. 규칙을 아는 학습자는
+     * 금액을 계산하지 않고 문구만 보고 정답을 집을 수 있었다 — 문제가 묻는 것이 총액인데
+     * 총액을 구하지 않아도 맞는다. 네 선택지를 같은 형태(금액만)로 통일해 그 우회로를 막는다.
+     *
+     * 반증하는 구현 변경: 어느 한 선택지에라도 설명 꼬리를 붙이면 빨개진다. 정답에만
+     * 붙이는 원래 형태도 당연히 빨개진다. 마지막 단언이 0건 통과를 막는다.
+     */
+    let checked = 0
+    for (let i = 0; i < 60; i++) {
+      for (const d of extractDecisions(generateHand({ seed: `label-${i}` }))) {
+        if (d.kind !== 'action_validity' || d.input.type !== 'choice') continue
+        for (const c of d.input.choices) {
+          expect(c, `label-${i}`).toMatch(/^[\d,]+$/)
+        }
+        checked++
+      }
+    }
+    expect(checked).toBeGreaterThan(20)
+  })
+
   it('조항 근거가 종류별로 정확히 이 문구다', () => {
     /*
      * ruleRef 는 조항 번호를 학습자에게 말하는 유일한 필드인데 위 테스트가 길이만
@@ -3641,9 +3664,12 @@ describe('extractDecisions', () => {
      * 통과했다 — 팟이 하나뿐인 핸드에도 붙는 질문인데도. 인용을 바꾸려면 이제
      * 이 테스트를 일부러 고쳐야 한다.
      *
-     * 숫자가 없는 둘은 확인되지 않은 번호를 쓰지 않는다는 이 브랜치의 방침이다:
-     * 딜링 순서는 레포 파일럿 문서가 Rule 34 를 버튼에 배정하고(`decisions.ts` 의
-     * 해당 주석), 쇼다운 승자 판정의 근거는 핸드 랭킹이지 사이드팟 지급 순서가 아니다.
+     * 번호는 TDA 2024 규정집 원문(영문 Longform v1.0 / 한글 번역본)으로 대조된 것만 쓴다.
+     * 딜링 순서는 "첫 홀카드는 SB부터"를 명시한 번호 조항이 TDA 2024 에 **없어서** 번호가
+     * 없다 — 34 는 버튼 배치 조항이라 인용처가 아니다(대조 완료). 쇼다운은 원문 대조로
+     * `12: Declarations. Cards Speak at Showdown` — "Cards speak to determine the winner"
+     * 가 승자 판정의 근거임이 확인돼 번호를 붙였다. 근거가 핸드 랭킹이라는 판단은 그대로고,
+     * 12 번이 바로 그 족보 판정 조항이다.
      *
      * 반증하는 구현 변경: 네 문구 중 하나라도 바꾸면 빨개진다. 종류를 하나도
      * 못 본 채로 통과하는 것은 마지막 단언이 막는다.
@@ -3652,7 +3678,7 @@ describe('extractDecisions', () => {
       procedure: 'TDA · 딜링 순서',
       action_validity: 'TDA Rule 43-A · Raise Amounts',
       calculation: 'TDA Rule 21 · Side Pots',
-      showdown: 'TDA · 쇼다운 승자 판정',
+      showdown: 'TDA Rule 12 · Cards Speak at Showdown',
     }
     const seen = new Set<DecisionKind>()
     for (let i = 0; i < 40; i++) {
@@ -4287,10 +4313,14 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
 
       // 서로 다른 오답을 두 개 못 만들면 이 핸드에서는 출제하지 않는다
       if (wrong.length === 2) {
-        const choices = [
-          `${fmt(answer)} — 직전 레이즈 폭 ${fmt(step)}만큼 추가`,
-          ...wrong.map((c) => `${fmt(c.to)} — ${c.why}`),
-        ]
+        /*
+         * 선택지는 **금액만** 쓴다. 방법 설명을 붙이면 정답만 규칙의 어휘를 그대로 말하게
+         * 되고("직전 레이즈 폭 200만큼 추가"), 규칙을 아는 학습자가 총액을 계산하지 않고
+         * 문구만 보고 집을 수 있다 — 이 문제가 묻는 것이 총액인데 총액을 구하지 않아도
+         * 맞는다. 오답 후보의 `why` 는 여기서 쓰지 않지만 남겨 둔다: 어떤 착각을 재현한
+         * 금액인지가 후보 설계의 근거고, 그것이 사라지면 다음 사람이 임의의 숫자를 넣는다.
+         */
+        const choices = [answer, ...wrong.map((c) => c.to)].map(fmt)
         dps.push({
           atEventIndex: raiseIdx + 1,
           kind: 'action_validity',
@@ -4385,9 +4415,17 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
          * `pots.length >= 2` 가 아니라 `eligibleSeats.length >= 2` 라 사이드팟이
          * 없는 핸드에도 붙고(측정: 쇼다운 문제 955건 중 555건, 58.1%), 그때
          * 21 을 인용하면 훈련생이 조항을 찾아가도 승자 판정 근거가 없다.
-         * 딜링 순서 문제(:115)와 같은 기준으로 숫자를 뺐다 — 확인한 번호만 쓴다.
+         *
+         * 처음에는 번호 자체를 뺐다 — 확인한 번호만 쓴다는 방침이었고 당시 원문이
+         * 없었다. 2026-08-29 에 TDA 2024 규정집 원문으로 대조해 `12: Declarations.
+         * Cards Speak at Showdown` — "Cards speak to determine the winner" 가 승자
+         * 판정 조항임을 확인했다. 근거가 핸드 랭킹이라는 판단은 그대로이고, 12 번이
+         * 바로 그 족보 판정 조항이라 오히려 정확히 맞는다.
+         *
+         * 딜링 순서 문제(:115)는 여전히 번호가 없다. 그쪽은 대조 결과 **해당 번호
+         * 조항이 TDA 2024 에 존재하지 않기 때문**이지 미확인이어서가 아니다.
          */
-        ruleRef: 'TDA · 쇼다운 승자 판정',
+        ruleRef: 'TDA Rule 12 · Cards Speak at Showdown',
         explanation: split
           ? `${named}이 ${category}로 동일해 메인팟을 나눠 갖습니다. 나눠떨어지지 않는 홀칩은 버튼 왼쪽 첫 자격자에게 갑니다.`
           : pots.length >= 2
@@ -4444,9 +4482,11 @@ git commit -m "feat: 핸드에서 판단 지점 추출"
 
 ```ts
 import { describe, it, expect } from 'vitest'
-import { scoreDecision, scoreHand, gradeFrom } from './score'
+import { scoreDecision, scoreHand, gradeFrom, GRADE_WINDOW } from './score'
 import type { HandScore } from './score'
 import type { DecisionPoint } from './decisions'
+import { extractDecisions } from './decisions'
+import { generateHand } from './generate'
 
 const choiceDp: DecisionPoint = {
   atEventIndex: 0, kind: 'procedure', prompt: 'q', sub: '',
@@ -4526,12 +4566,41 @@ describe('scoreDecision', () => {
   })
 
   it('필드보다 값이 적으면 던지지 않고 빈 칸을 오답으로 센다', () => {
-    // `values: number[]` 는 빈 칸을 undefined 로 담지 못한다. 2칸 중 뒤 칸을 비운 학습자의 답은
-    // `[24200]` 이 되는데, 이는 평범한 학습자 행동이므로 던지면 정상 조작에서 크래시한다.
-    // 없는 값은 `undefined !== 9000` 으로 오답이 되어 2필드 중 1개 정답 = 50점이다.
+    // 꼬리 빈 칸은 짧은 배열로도 표현된다. 평범한 학습자 행동이므로 던지면 정상 조작에서
+    // 크래시한다. 없는 값은 `undefined !== 9000` 으로 오답이 되어 2필드 중 1개 정답 = 50점이다.
     const r = scoreDecision(numberDp, { type: 'number', values: [24200] })
     expect(r.score).toBe(50)
     expect(r.correct).toBe(false)
+  })
+
+  it('중간 빈 칸을 null 로 표현하고, 비운 칸만 오답으로 센다', () => {
+    /*
+     * `number[]` 였을 때는 "1번 칸을 비우고 2번 칸만 입력"을 인덱스 정렬대로 보낼 방법이
+     * 없었다. UI 가 0 으로 메꾸면 "0 이라고 답했다"로 채점되고, 배열을 앞으로 당기면
+     * 사이드팟 답이 메인팟 칸과 대조된다 — 둘 다 조용히 틀린 점수를 낸다.
+     *
+     * 반증하는 구현 변경: null 을 0 으로 강제하면 첫 필드가 24200 이 아니므로 여전히 50점이
+     * 나오지만 아래 두 번째 단언(꽉 채운 답이 100점)과 짝지어 위치 정렬이 유지됨을 본다.
+     * 채점이 null 을 건너뛰고 배열을 당기면 `9000` 이 메인팟과 비교돼 0점으로 빨개진다.
+     */
+    const r = scoreDecision(numberDp, { type: 'number', values: [null, 9000] })
+    expect(r.score).toBe(50)
+    expect(r.correct).toBe(false)
+
+    // 같은 위치 정렬로 둘 다 채우면 100점 — 위 50점이 "우연히 절반"이 아님을 고정한다.
+    expect(scoreDecision(numberDp, { type: 'number', values: [24200, 9000] }).score).toBe(100)
+    // 반대쪽 칸만 채우면 역시 50점. 두 칸이 각각 독립으로 채점된다.
+    expect(scoreDecision(numberDp, { type: 'number', values: [24200, null] }).score).toBe(50)
+  })
+
+  it('null 은 정답 0 과 구별된다 — 빈 칸이 0 을 맞힌 것으로 세어지면 안 된다', () => {
+    const zeroDp: DecisionPoint = {
+      ...numberDp,
+      input: { type: 'number', fields: [{ label: '메인팟', answer: 0 }, { label: '사이드팟', answer: 9000 }] },
+    }
+    // 빈 칸을 0 으로 메꾸는 구현이면 이 단언이 100점을 내며 빨개진다.
+    expect(scoreDecision(zeroDp, { type: 'number', values: [null, 9000] }).score).toBe(50)
+    expect(scoreDecision(zeroDp, { type: 'number', values: [0, 9000] }).score).toBe(100)
   })
 })
 
@@ -4601,6 +4670,30 @@ describe('gradeFrom', () => {
     expect(gradeFrom([withNulls(90, 90, 90), withNulls(90, null, 90)])).toBe('master')
   })
 })
+
+describe('GRADE_WINDOW', () => {
+  it('창 안에서 action_validity 축이 충분히 측정된다 — 창이 좁으면 빨개진다', () => {
+    /*
+     * `gradeFrom` 은 창을 자르지 않는다. 자르는 쪽(호출부)이 크기를 정해야 하고 그 크기가
+     * GRADE_WINDOW 다. 이 축은 설계상 핸드의 약 32.7% 에서 아예 나오지 않으므로(300시드
+     * 실측 98건), 창이 좁으면 학습자가 자기 잘못 없이 축 점수 0 으로 승급이 막히거나
+     * 표본 한 개짜리 축이 스무 개짜리 축과 같은 무게로 등급을 인증한다.
+     *
+     * 부재율 0.327 에서 창 전체 결측 확률은 N=3 이면 3.5%, N=5 면 0.37%, N=20 이면
+     * 사실상 0 이다. 표본 1개 이하 확률은 N=3 이면 25%, N=5 면 4.2%, N=20 이면 사실상 0.
+     *
+     * 반증하는 구현 변경: GRADE_WINDOW 를 5 이하로 낮추면 이 표본에서 실제로 빨개진다.
+     * 발행 게이트가 좁아져 축이 덜 나오게 되어도 빨개진다 — 그때는 창을 다시 정하라는 신호다.
+     */
+    let handsWithAxis = 0
+    for (let i = 0; i < GRADE_WINDOW; i++) {
+      const dps = extractDecisions(generateHand({ seed: `window-${i}` }))
+      if (dps.some((d) => d.kind === 'action_validity')) handsWithAxis++
+    }
+    // 최소 표본 규정의 대용: 창 안에 이 축이 여러 번 들어와야 평균이 의미를 갖는다.
+    expect(handsWithAxis).toBeGreaterThanOrEqual(5)
+  })
+})
 ```
 
 - [ ] **Step 2: 테스트 실행 — 실패 확인**
@@ -4618,7 +4711,15 @@ import type { DecisionKind } from './generate'
 
 export type Answer =
   | { type: 'choice'; index: number }
-  | { type: 'number'; values: number[] }
+  /**
+   * 빈 칸은 `null` 이다. `number[]` 로는 "1번 칸을 비우고 2번 칸만 입력"을 인덱스 정렬대로
+   * 보낼 수 없어서, UI 가 0 으로 메꾸거나(→ "0 이라고 답했다"로 채점) 배열을 앞으로
+   * 당기는 수밖에 없었다(→ 사이드팟 답이 메인팟 칸과 대조된다). 둘 다 조용히 틀린 점수를 낸다.
+   *
+   * 꼬리 빈 칸은 짧은 배열로도 표현되지만(아래 비대칭 가드 참조) 중간 빈 칸은 `null` 만이
+   * 표현한다. 채점은 `null !== f.answer` 로 자연히 오답이 되므로 산술을 바꾸지 않는다.
+   */
+  | { type: 'number'; values: (number | null)[] }
   /** 팟이 갈리면 승자가 여럿이다. 한 명만 고르면 그것도 오답이다. */
   | { type: 'seat'; seats: number[] }
   | { type: 'timeout' }
@@ -4661,10 +4762,10 @@ export function scoreDecision(dp: DecisionPoint, answer: Answer): DecisionResult
   // 많은 쪽(초과)은 어떤 학습자 행동으로도 만들 수 없다 — UI 는 정확히 fields.length 개의
   // 입력만 그린다. 호출자 버그이고, 삼키면 초과분이 비교되지 않아 만점이 나와 결함이 숨는다.
   //
-  // 적은 쪽(부족)은 반대로 평범한 학습자 행동이다. `values: number[]` 는 빈 칸을 `undefined`
-  // 로 담을 수 없으므로, 2칸 중 뒤 칸을 비운 답의 유일한 타입 합법 표현이 `[24200]` 이다.
-  // 여기서 던지면 정상 조작에서 크래시한다. 아래 산술이 이미 옳게 처리한다 —
-  // `undefined !== f.answer` 라 빈 칸은 오답으로 세어져 2필드 중 1개 정답 = 50점이 된다.
+  // 적은 쪽(부족)은 반대로 평범한 학습자 행동이다. 2칸 중 뒤 칸을 비운 답은 `[24200]` 로도
+  // `[24200, null]` 로도 올 수 있다 — UI 가 꼬리를 자르든 null 을 채우든 같은 점수가 나와야
+  // 한다. 여기서 던지면 정상 조작에서 크래시한다. 아래 산술이 두 형태를 모두 옳게 처리한다 —
+  // `undefined !== f.answer` 와 `null !== f.answer` 가 똑같이 오답이라 2필드 중 1개 정답 = 50점.
   //
   // 초과를 던지는 것은 답 *종류* 불일치(choice 문제에 seat 답)를 0점으로 두는 것과도 다른
   // 판단이다: 그쪽은 디스패치 오류고 이쪽은 옳은 분기 안의 형태 오류다.
@@ -4699,10 +4800,26 @@ export function scoreHand(results: DecisionResult[]): HandScore {
 }
 
 /**
+ * 등급 이동평균의 창 크기. 호출부가 최근 핸드를 이 개수만큼 잘라 `gradeFrom` 에 넘긴다.
+ *
+ * 20 으로 정한 근거(2026-08-29 결정): `action_validity` 축이 설계상 핸드의 약 32.7% 에서
+ * 나오지 않는다(300시드 실측 98건). 부재율 0.327 에서 창 전체가 결측일 확률은
+ * N=3 이면 3.5%, N=5 면 0.37%, N=20 이면 사실상 0(1.6e-10)이다. 표본이 1개 이하일 확률도
+ * N=3 이면 25%, N=5 면 4.2%인데 N=20 이면 사실상 0 이다. 즉 **N=20 은 아래 두 결함을
+ * 실질적으로 무력화한다** — 좁은 창에서만 문제가 된다.
+ *
+ * 이 상수는 창을 자를 책임을 지지 않는다. 자르는 것은 호출부이고 여기는 그 크기의 정본이다.
+ * 바꾸려면 위 확률을 다시 계산하라. `score.test.ts` 의 GRADE_WINDOW 테스트가 창이 좁아지면
+ * 빨개진다.
+ */
+export const GRADE_WINDOW = 20
+
+/**
  * 등급은 최근 핸드들의 축별 이동 평균으로 정한다. 누적으로 하면 초기 실수가 영구히 발목을 잡는다.
  *
- * 창 크기 N 은 이 함수가 정하지 않는다 — 호출부가 잘라 넘긴 배열이 곧 창이다. N 을 정하는 쪽이
- * 아래 두 가지를 함께 결정해야 한다. 지금은 어느 쪽도 방어하지 않는다.
+ * 창 크기 N 은 이 함수가 정하지 않는다 — 호출부가 잘라 넘긴 배열이 곧 창이다. 정본은 위
+ * `GRADE_WINDOW` 다. 아래 두 가지는 창이 좁을 때만 실제 위험이고, N=20 에서는 확률적으로
+ * 무력화된다. 그래도 코드가 방어하지는 않으므로 기록해 둔다.
  *
  * 1. 창 안에서 한 번도 측정되지 않은 축은 0 으로 평균된다. "측정 안 됨"과 "측정했고 0점"이
  *    구별되지 않는다. `action_validity` 는 설계상 생성 핸드의 약 32.7% 에서 아예 나타나지 않으므로(300시드 실측 98건),
@@ -4731,6 +4848,12 @@ export function gradeFrom(recent: HandScore[]): 'junior' | 'senior' | 'master' {
   // 뒤쪽 절반이 여기 없다. 이상(anomaly) 삽입 자체가 3단계 범위라(설계 문서 §구현 순서)
   // 이 코드베이스에 존재하지 않는다. 3단계가 이상 모드를 들여올 때 검출률 조건을 이 문턱에
   // 함께 배선해야 한다.
+  //
+  // 그때까지의 결정(2026-08-29): **UI 는 master 를 노출하지 않는다.** 이 함수는 계속
+  // 'master' 를 반환한다 — 반환값을 senior 로 눌러 담으면 3단계가 조건을 마저 배선했을 때
+  // 되돌릴 자리를 잃고, 지금 초록인 문턱 테스트도 의미를 잃는다. 대신 소비하는 쪽이
+  // 최고 표시 등급을 senior 로 둔다. 이상 검출을 한 번도 시험받지 않은 학습자에게
+  // master 를 인증하지 않기 위해서다.
   if (p >= 90 && v >= 90 && c >= 90) return 'master'
   if (p >= 80 && v >= 80 && c >= 80) return 'senior'
   return 'junior'
@@ -5167,7 +5290,7 @@ export {
   type DecisionPoint, type DecisionInput,
 } from './decisions'
 export {
-  scoreDecision, scoreHand, gradeFrom,
+  scoreDecision, scoreHand, gradeFrom, GRADE_WINDOW,
   type Answer, type DecisionResult, type HandScore,
 } from './score'
 ```

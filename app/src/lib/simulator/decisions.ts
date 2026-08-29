@@ -182,10 +182,14 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
 
       // 서로 다른 오답을 두 개 못 만들면 이 핸드에서는 출제하지 않는다
       if (wrong.length === 2) {
-        const choices = [
-          `${fmt(answer)} — 직전 레이즈 폭 ${fmt(step)}만큼 추가`,
-          ...wrong.map((c) => `${fmt(c.to)} — ${c.why}`),
-        ]
+        /*
+         * 선택지는 **금액만** 쓴다. 방법 설명을 붙이면 정답만 규칙의 어휘를 그대로 말하게
+         * 되고("직전 레이즈 폭 200만큼 추가"), 규칙을 아는 학습자가 총액을 계산하지 않고
+         * 문구만 보고 집을 수 있다 — 이 문제가 묻는 것이 총액인데 총액을 구하지 않아도
+         * 맞는다. 오답 후보의 `why` 는 여기서 쓰지 않지만 남겨 둔다: 어떤 착각을 재현한
+         * 금액인지가 후보 설계의 근거고, 그것이 사라지면 다음 사람이 임의의 숫자를 넣는다.
+         */
+        const choices = [answer, ...wrong.map((c) => c.to)].map(fmt)
         dps.push({
           atEventIndex: raiseIdx + 1,
           kind: 'action_validity',
@@ -280,9 +284,17 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
          * `pots.length >= 2` 가 아니라 `eligibleSeats.length >= 2` 라 사이드팟이
          * 없는 핸드에도 붙고(측정: 쇼다운 문제 955건 중 555건, 58.1%), 그때
          * 21 을 인용하면 훈련생이 조항을 찾아가도 승자 판정 근거가 없다.
-         * 딜링 순서 문제(:115)와 같은 기준으로 숫자를 뺐다 — 확인한 번호만 쓴다.
+         *
+         * 처음에는 번호 자체를 뺐다 — 확인한 번호만 쓴다는 방침이었고 당시 원문이
+         * 없었다. 2026-08-29 에 TDA 2024 규정집 원문으로 대조해 `12: Declarations.
+         * Cards Speak at Showdown` — "Cards speak to determine the winner" 가 승자
+         * 판정 조항임을 확인했다. 근거가 핸드 랭킹이라는 판단은 그대로이고, 12 번이
+         * 바로 그 족보 판정 조항이라 오히려 정확히 맞는다.
+         *
+         * 딜링 순서 문제(:115)는 여전히 번호가 없다. 그쪽은 대조 결과 **해당 번호
+         * 조항이 TDA 2024 에 존재하지 않기 때문**이지 미확인이어서가 아니다.
          */
-        ruleRef: 'TDA · 쇼다운 승자 판정',
+        ruleRef: 'TDA Rule 12 · Cards Speak at Showdown',
         explanation: split
           ? `${named}이 ${category}로 동일해 메인팟을 나눠 갖습니다. 나눠떨어지지 않는 홀칩은 버튼 왼쪽 첫 자격자에게 갑니다.`
           : pots.length >= 2

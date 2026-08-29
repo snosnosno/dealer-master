@@ -58,6 +58,29 @@ describe('extractDecisions', () => {
     })
   })
 
+  it('최소 레이즈 선택지는 전부 금액만이다 — 정답만 규칙 어휘를 쓰면 산술 없이 골린다', () => {
+    /*
+     * 이전에는 정답만 "600 — 직전 레이즈 폭 200만큼 추가" 처럼 규칙의 어휘를 그대로 쓰고
+     * 오답은 "레이즈 폭의 절반만 추가" 같은 다른 방법명을 썼다. 규칙을 아는 학습자는
+     * 금액을 계산하지 않고 문구만 보고 정답을 집을 수 있었다 — 문제가 묻는 것이 총액인데
+     * 총액을 구하지 않아도 맞는다. 네 선택지를 같은 형태(금액만)로 통일해 그 우회로를 막는다.
+     *
+     * 반증하는 구현 변경: 어느 한 선택지에라도 설명 꼬리를 붙이면 빨개진다. 정답에만
+     * 붙이는 원래 형태도 당연히 빨개진다. 마지막 단언이 0건 통과를 막는다.
+     */
+    let checked = 0
+    for (let i = 0; i < 60; i++) {
+      for (const d of extractDecisions(generateHand({ seed: `label-${i}` }))) {
+        if (d.kind !== 'action_validity' || d.input.type !== 'choice') continue
+        for (const c of d.input.choices) {
+          expect(c, `label-${i}`).toMatch(/^[\d,]+$/)
+        }
+        checked++
+      }
+    }
+    expect(checked).toBeGreaterThan(20)
+  })
+
   it('조항 근거가 종류별로 정확히 이 문구다', () => {
     /*
      * ruleRef 는 조항 번호를 학습자에게 말하는 유일한 필드인데 위 테스트가 길이만
@@ -65,9 +88,12 @@ describe('extractDecisions', () => {
      * 통과했다 — 팟이 하나뿐인 핸드에도 붙는 질문인데도. 인용을 바꾸려면 이제
      * 이 테스트를 일부러 고쳐야 한다.
      *
-     * 숫자가 없는 둘은 확인되지 않은 번호를 쓰지 않는다는 이 브랜치의 방침이다:
-     * 딜링 순서는 레포 파일럿 문서가 Rule 34 를 버튼에 배정하고(`decisions.ts` 의
-     * 해당 주석), 쇼다운 승자 판정의 근거는 핸드 랭킹이지 사이드팟 지급 순서가 아니다.
+     * 번호는 TDA 2024 규정집 원문(영문 Longform v1.0 / 한글 번역본)으로 대조된 것만 쓴다.
+     * 딜링 순서는 "첫 홀카드는 SB부터"를 명시한 번호 조항이 TDA 2024 에 **없어서** 번호가
+     * 없다 — 34 는 버튼 배치 조항이라 인용처가 아니다(대조 완료). 쇼다운은 원문 대조로
+     * `12: Declarations. Cards Speak at Showdown` — "Cards speak to determine the winner"
+     * 가 승자 판정의 근거임이 확인돼 번호를 붙였다. 근거가 핸드 랭킹이라는 판단은 그대로고,
+     * 12 번이 바로 그 족보 판정 조항이다.
      *
      * 반증하는 구현 변경: 네 문구 중 하나라도 바꾸면 빨개진다. 종류를 하나도
      * 못 본 채로 통과하는 것은 마지막 단언이 막는다.
@@ -76,7 +102,7 @@ describe('extractDecisions', () => {
       procedure: 'TDA · 딜링 순서',
       action_validity: 'TDA Rule 43-A · Raise Amounts',
       calculation: 'TDA Rule 21 · Side Pots',
-      showdown: 'TDA · 쇼다운 승자 판정',
+      showdown: 'TDA Rule 12 · Cards Speak at Showdown',
     }
     const seen = new Set<DecisionKind>()
     for (let i = 0; i < 40; i++) {
