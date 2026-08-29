@@ -357,12 +357,16 @@ export function reduce(
 
     case 'continue': {
       if (state.phase !== 'feedback') return state
-      return settle(config, {
+      // 여기서 settle 하지 않는다. 다음 문항의 앵커가 지금 커서와 같으면(계산·쇼다운이
+      // 둘 다 봉인 경계에 걸리는 경우) 곧장 awaiting 이 되어, 화면이 문항을 그리기도
+      // 전에 제한시간이 흐르기 시작한다. 카운트다운의 시작은 "재생이 정지점에 닿는
+      // 순간"이어야 하므로 다음 tick 의 settle 에 맡긴다.
+      return {
         ...state,
         phase: 'playing',
         pending: state.pending.slice(1),
         elapsedMs: 0,
-      })
+      }
     }
 
     case 'tick':
@@ -2018,6 +2022,10 @@ export function HandPlayer({ seed, onNext }: { seed: string; onNext: () => void 
   const [state, dispatch] = useReducer(boundReduce, initial)
 
   // 실제 시계는 여기 하나뿐이다. 리듀서는 ms 만 받는다.
+  //
+  // 이 가드에서 'playing' 을 빼지 말 것. `continue` 가 settle 하지 않으므로(Task 1)
+  // 마지막 문항에 답한 뒤 phase 는 'playing' 으로 남고, review 로 넘기는 것은 그
+  // 다음 tick 이다. playing 에서 틱을 멈추면 리뷰 화면에 영원히 도달하지 못한다.
   useEffect(() => {
     if (state.phase !== 'playing' && state.phase !== 'awaiting') return
     let last = performance.now()
