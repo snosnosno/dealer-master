@@ -72,8 +72,8 @@ export function PokerTable({
             key={i}
             className="sim-move absolute"
             style={{
-              left: WIDTH / 2 + x - 48,
-              top: HEIGHT / 2 + y - 30,
+              left: Math.round(WIDTH / 2 + x - 48),
+              top: Math.round(HEIGHT / 2 + y - 30),
             }}
           >
             <Seat
@@ -101,7 +101,7 @@ export function PokerTable({
 
       {/* 딜러 자리 — 하단 중앙. 카드가 여기서 나간다 */}
       <div
-        className="absolute text-[9px] font-bold text-white/70"
+        className="absolute text-[9px] font-bold text-zinc-500"
         style={{ left: WIDTH / 2 - 16, top: HEIGHT - 14 }}
       >
         딜러(나)
