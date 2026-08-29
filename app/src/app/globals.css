@@ -24,3 +24,42 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/*
+ * 시뮬레이터 전이.
+ *
+ * 애니메이션 라이브러리를 쓰지 않는다 — 전부 위치 이동이라 transform 으로 충분하다.
+ * 길이는 --tempo 하나로 통제하고, HandPlayer 가 재생 속도에 따라 세팅한다.
+ * 컴포넌트가 duration 을 하드코딩하지 않는다.
+ */
+.sim-root {
+  --tempo: 120ms;
+  --felt: #085041;
+  --felt-edge: #04342C;
+  --amber: #EF9F27;
+}
+
+.sim-move {
+  transition:
+    transform var(--tempo) ease-out,
+    opacity var(--tempo) ease-out;
+}
+
+.sim-flip {
+  transition: transform var(--tempo) ease-out;
+  transform-style: preserve-3d;
+}
+
+/*
+ * reduced-motion 은 움직임만 지운다. 재생 박자(player.ts 의 EVENT_MS)는 그대로다 —
+ * 이때 로그가 주 채널이 되는데, 로그가 한 줄씩 쌓이려면 시간이 있어야 한다.
+ *
+ * !important 는 HandPlayer 가 같은 .sim-root 에 --tempo 를 **인라인 스타일**로
+ * 얹기 때문이다. 인라인이 미디어쿼리를 이기므로 이게 없으면 이 분기는 죽은 코드가
+ * 되고 reduced-motion 이 조용히 무시된다.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .sim-root {
+    --tempo: 0ms !important;
+  }
+}
