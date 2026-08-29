@@ -746,7 +746,7 @@ export function chipBreakdown(amount: number): { chips: ChipPile[]; remainder: n
 cd app && npx vitest run src/components/table && npm run typecheck && npm run lint
 ```
 
-기대: 9 passed, typecheck·lint exit 0.
+기대: 10 passed (좌표 5 + 칩 5), typecheck·lint exit 0.
 
 - [ ] **Step 9: 커밋**
 
