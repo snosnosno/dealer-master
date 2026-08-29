@@ -36,12 +36,17 @@ export function HandReview({
   onNext: () => void
 }) {
   const score = scoreHand(results)
+  // scoreHand([]) 의 average 는 0 이지만, 표본이 0개라는 뜻이지 0점을 받았다는 뜻이 아니다.
+  // 이 값이 없으면 판단 지점이 0개인 정상 핸드에서 헤더가 거짓으로 "0점"을 찍는다.
+  const measured = AXES.some((a) => score[a] !== null)
 
   return (
     <section className="space-y-4">
       <div className="rounded-2xl bg-[#085041] p-5 text-white">
         <p className="text-[11px] font-bold uppercase tracking-wide text-white/60">핸드 결과</p>
-        <p className="mt-1 text-3xl font-extrabold">{score.average}점</p>
+        <p className="mt-1 text-3xl font-extrabold">
+          {measured ? `${score.average}점` : '채점 항목 없음'}
+        </p>
         <p className="mt-1 text-xs text-white/70">시드 {seed}</p>
       </div>
 
