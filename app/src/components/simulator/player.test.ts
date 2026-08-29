@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { extractDecisions, generateHand } from '@/lib/simulator'
-import { initPlayer, reduce, stopAt, type PlayerCommand, type PlayerState } from './player'
+import { initPlayer, reduce, stopAt, type PlayerState } from './player'
 
 /** 정답이든 오답이든 상관없이 현재 문항에 답하고 피드백을 넘긴다. */
 function answerAndContinue(
