@@ -101,7 +101,7 @@ export function PokerTable({
 
       {/* 딜러 자리 — 하단 중앙. 카드가 여기서 나간다 */}
       <div
-        className="absolute text-[9px] font-bold text-zinc-500"
+        className="absolute text-[9px] font-bold text-zinc-500 dark:text-zinc-400"
         style={{ left: WIDTH / 2 - 16, top: HEIGHT - 14 }}
       >
         딜러(나)
