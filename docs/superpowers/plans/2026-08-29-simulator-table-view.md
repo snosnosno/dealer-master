@@ -2107,6 +2107,12 @@ export function HandPlayer({ seed, onNext }: { seed: string; onNext: () => void 
 
       {(state.phase === 'awaiting' || state.phase === 'feedback') && state.pending[0] ? (
         <DecisionPrompt
+          // 문항이 바뀌면 새로 마운트해 입력 상태를 버린다. 지금은 이 key 가 없어도
+          // 동작한다 — 문항 사이에 반드시 'playing' 렌더가 끼어(continue 가 settle
+          // 하지 않으므로) 컴포넌트가 언마운트되기 때문이다. 그 보호는 **창발적**이라,
+          // 위 조건식에 'playing' 을 넣어 깜빡임을 줄이는 순간 조용히 사라진다.
+          // 그러면 칸 수가 같은 연속 숫자 문항에서 앞 문항의 입력이 남아 오답이 된다.
+          key={`${state.pending[0].kind}-${state.pending[0].atEventIndex}`}
           dp={state.pending[0]}
           phase={state.phase}
           remainingMs={state.remainingMs}
