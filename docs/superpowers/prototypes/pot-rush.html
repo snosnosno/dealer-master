@@ -212,7 +212,7 @@ body {
 .seat {
   display: flex; flex-direction: column;
   align-items: center; gap: 3px;
-  padding: 5px 4px 6px;
+  padding: 5px 2px 6px;
   border-radius: 12px;
   border: 2px solid transparent;
   background: rgba(0,0,0,.19);
@@ -260,7 +260,7 @@ button.seat:hover, button.seat:focus-visible {
   flex: none;
 }
 
-.shand { display: flex; gap: 3px; }
+.shand { display: flex; gap: 2px; }
 .pamt {
   font-family: var(--mono);
   font-size: 12px; font-weight: 800;
@@ -303,57 +303,36 @@ button.seat:hover, button.seat:focus-visible {
 .deck .pcard { animation: none; position: relative; }
 .cutcard {
   position: absolute; left: 6px; top: 5px;
-  width: clamp(25px, 6.6vw, 33px);
-  height: calc(clamp(25px, 6.6vw, 33px) * 1.42);
+  width: clamp(27px, 7vw, 34px);
+  height: calc(clamp(27px, 7vw, 34px) * 1.5);
   border-radius: 4px;
   background: linear-gradient(150deg, #F5C349, #DB9C19);
   box-shadow: 0 2px 5px rgba(0,0,0,.4), inset 0 0 0 1px rgba(0,0,0,.2);
 }
 
-/* ── 카드 ─────────────────────────────────────── */
+/* ── 플레잉 카드 ─────────────────────────────── */
 
+/*
+ * 카드 그림은 CC0 에셋이다 (문서 맨 위 인라인 스프라이트, assets/CREDITS.md).
+ * 원본 캔버스가 360×540 이라 **세로비가 1.5** — 1.42 로 잡으면 그림이 눌린다.
+ * 표준 인덱스라 작게 그리면 랭크가 안 읽힌다. 실측으로 19px 는 판독 불가, 24px 부터 읽힌다.
+ * 그래서 홀카드 최소가 24px 이고, 그만큼 좌석 여백을 줄여 360px 화면에 맞춘다.
+ */
 .pcard {
-  position: relative;
-  --cw: clamp(25px, 6.6vw, 33px);
-  width: var(--cw);
-  height: calc(var(--cw) * 1.42);
+  --cw: clamp(27px, 7vw, 34px);
   display: inline-block;
   vertical-align: top;
-  border-radius: 4px;
-  background: linear-gradient(#FFFFFF, #F1F2EC);
-  color: #14231D;
-  box-shadow: 0 2px 5px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.14);
+  width: var(--cw);
+  height: calc(var(--cw) * 1.5);
+  border-radius: calc(var(--cw) * .083);   /* 원본 rx 30/360 과 같은 비율 */
+  box-shadow: 0 2px 5px rgba(0,0,0,.38);
   flex: none;
   overflow: hidden;
 }
-/* 실물 카드처럼 코너 인덱스(랭크 위, 무늬 아래)와 반대편 미러 인덱스 */
-.pcard .idx {
-  position: absolute; top: 2px; left: 3px;
-  display: flex; flex-direction: column; align-items: center;
-  line-height: .92;
-  font-weight: 900;
-  letter-spacing: -.04em;
-  font-size: calc(var(--cw) * .40);
-}
-.pcard .idx .s { font-size: calc(var(--cw) * .33); }
-.pcard .idx2 {
-  position: absolute; bottom: 2px; right: 3px;
-  transform: rotate(180deg);
-  top: auto; left: auto;
-  opacity: .95;
-}
-.pcard .pip {
-  position: absolute;
-  right: calc(var(--cw) * .08); top: 50%;
-  transform: translateY(-50%);
-  font-size: calc(var(--cw) * .58);
-  opacity: .92;
-}
-.pcard.red { color: #B23A2E; }
-.shand .pcard { --cw: clamp(19px, 5vw, 25px); }
-.shand .pcard .idx2, .deck .pcard .idx2 { display: none; }
+.shand .pcard { --cw: clamp(24px, 6.2vw, 28px); }
 
-/* 카드 뒷면 — 사이드팟 문제에서 살아있는 좌석은 아직 카드를 덮고 있다 */
+/* 카드 뒷면 — 사이드팟 문제에서 살아있는 좌석은 아직 카드를 덮고 있다.
+   에셋 덱에는 뒷면이 없다(Commons 뒷면은 LGPL) — 여기만 CSS 로 그린다. */
 .pcard.back {
   background:
     repeating-linear-gradient(45deg, rgba(255,255,255,.15) 0 2px, rgba(255,255,255,0) 2px 5px),
@@ -1014,15 +993,13 @@ button.seat:hover, button.seat:focus-visible {
     }).join('') + '</span>';
   }
 
+  /** 무늬 인덱스는 SUITS(['♠','♥','♦','♣']) 순서와 같아야 한다 — 어긋나면 조용히 틀린 카드가 나온다. */
+  var SUIT_ID = ['S', 'H', 'D', 'C'];
+
   function cardHtml(c, order) {
-    var red = c.s === 1 || c.s === 2;
     var delay = order ? ' style="animation-delay:' + (order * 45) + 'ms"' : '';
-    var idx = '<span class="r">' + RANKS[c.r] + '</span><span class="s">' + SUITS[c.s] + '</span>';
-    return '<span class="pcard' + (red ? ' red' : '') + '"' + delay + '>' +
-      '<span class="idx">' + idx + '</span>' +
-      '<span class="idx idx2">' + idx + '</span>' +
-      '<span class="pip">' + SUITS[c.s] + '</span>' +
-      '</span>';
+    return '<svg class="pcard"' + delay + ' aria-label="' + RANKS[c.r] + SUITS[c.s] + '">' +
+      '<use href="#c-' + RANKS[c.r] + SUIT_ID[c.s] + '"/></svg>';
   }
 
   function backHtml(order) {
