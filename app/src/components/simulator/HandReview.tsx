@@ -42,7 +42,7 @@ export function HandReview({
 
   return (
     <section className="space-y-4">
-      <div className="rounded-2xl bg-[#085041] p-5 text-white">
+      <div className="rounded-2xl bg-dm-teal-800 p-5 text-white">
         <p className="text-[11px] font-bold uppercase tracking-wide text-white/60">핸드 결과</p>
         <p className="mt-1 text-3xl font-extrabold">
           {measured ? `${score.average}점` : '채점 항목 없음'}
@@ -60,7 +60,7 @@ export function HandReview({
             {score[axis] === null ? (
               <p className="mt-1 text-xs font-semibold text-zinc-400">이 핸드에 없었음</p>
             ) : (
-              <p className="mt-1 text-lg font-extrabold text-[#0F6E56]">{score[axis]}점</p>
+              <p className="mt-1 text-lg font-extrabold text-dm-accent">{score[axis]}점</p>
             )}
           </div>
         ))}
@@ -101,7 +101,7 @@ function ReviewRow({
   return (
     <li className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
       <div className="mb-2 flex items-center gap-2">
-        <span className={`text-sm font-black ${correct ? 'text-[#0F6E56]' : 'text-[#B23A2E]'}`}>
+        <span className={`text-sm font-black ${correct ? 'text-dm-accent' : 'text-dm-danger'}`}>
           {correct ? '✓' : '✗'}
         </span>
         <span className="text-[11px] font-bold text-zinc-500">{AXIS_LABEL[dp.kind]}</span>
@@ -114,10 +114,10 @@ function ReviewRow({
         </div>
         <div className="flex gap-2">
           <dt className="w-12 shrink-0 text-zinc-500">정답</dt>
-          <dd className="font-semibold text-[#0F6E56]">{formatCorrect(dp)}</dd>
+          <dd className="font-semibold text-dm-accent">{formatCorrect(dp)}</dd>
         </div>
       </dl>
-      <p className="mt-2 text-[11px] font-bold uppercase tracking-wide text-[#0F6E56]">
+      <p className="mt-2 text-[11px] font-bold uppercase tracking-wide text-dm-accent">
         {dp.ruleRef}
       </p>
       <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">

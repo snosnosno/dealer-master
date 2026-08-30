@@ -39,7 +39,7 @@ export default function SimulatorPage() {
         <Link href="/" className="text-sm text-zinc-500">
           ← 돌아가기
         </Link>
-        <span className="text-[11px] font-bold uppercase tracking-wide text-[#0F6E56]">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-dm-accent">
           딜러 교육 · 노리밋 홀덤
         </span>
       </div>

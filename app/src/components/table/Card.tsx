@@ -27,8 +27,8 @@ export function Card({
     <div
       className={`sim-flip flex items-center justify-center rounded font-bold ${SIZE[size]} ${
         showFace
-          ? `border border-zinc-300 bg-white ${red ? 'text-[#B23A2E]' : 'text-zinc-900'}`
-          : 'border border-white/30 bg-gradient-to-br from-[#0F6E56] to-[#04342C]'
+          ? `border border-zinc-300 bg-white ${red ? 'text-dm-red' : 'text-zinc-900'}`
+          : 'border border-white/30 bg-gradient-to-br from-dm-teal-600 to-dm-teal-900'
       }`}
       aria-label={showFace ? cardText(card) : '뒷면 카드'}
     >

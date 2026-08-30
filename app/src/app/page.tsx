@@ -34,13 +34,13 @@ export default function Home() {
             <Link
               key={axis.title}
               href={axis.href}
-              className="block rounded-2xl border border-[#0F6E56] bg-[#E1F5EE] p-5 dark:bg-zinc-900"
+              className="block rounded-2xl border border-dm-teal-600 bg-dm-teal-50 p-5 dark:bg-zinc-900"
             >
               <span className="text-2xl">{axis.icon}</span>
-              <p className="mt-2 text-base font-bold text-[#085041] dark:text-[#9FE1CB]">
+              <p className="mt-2 text-base font-bold text-dm-teal-800 dark:text-dm-teal-100">
                 {axis.title}
               </p>
-              <p className="text-xs text-[#0F6E56] dark:text-zinc-400">{axis.desc}</p>
+              <p className="text-xs text-dm-teal-600 dark:text-zinc-400">{axis.desc}</p>
             </Link>
           ),
         )}

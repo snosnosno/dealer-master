@@ -6,12 +6,12 @@ import { chipBreakdown, type ChipUnit } from './chips'
 
 /** `12_design_system.md` §5-1 의 6색. */
 const CHIP_COLOR: Record<ChipUnit, string> = {
-  100: '#B4B2A9',
-  500: '#378ADD',
-  1000: '#1D9E75',
-  5000: '#2C2C2A',
-  25000: '#7F77DD',
-  100000: '#EF9F27',
+  100: 'var(--color-dm-chip-100)',
+  500: 'var(--color-dm-chip-500)',
+  1000: 'var(--color-dm-chip-1000)',
+  5000: 'var(--color-dm-chip-5000)',
+  25000: 'var(--color-dm-chip-25000)',
+  100000: 'var(--color-dm-chip-100000)',
 }
 
 const LABEL: Record<ChipUnit, string> = {
