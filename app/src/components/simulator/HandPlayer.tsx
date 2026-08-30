@@ -105,7 +105,7 @@ export function HandPlayer({ seed, onNext }: { seed: string; onNext: () => void 
               onClick={() => dispatch({ type: 'setSpeed', speed: s.value })}
               className={`rounded-lg border px-3 py-1.5 text-xs font-bold disabled:opacity-40 ${
                 state.speed === s.value
-                  ? 'border-[#085041] bg-[#085041] text-white'
+                  ? 'border-dm-teal-800 bg-dm-teal-800 text-white'
                   : 'border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-400'
               }`}
             >

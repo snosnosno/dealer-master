@@ -15,7 +15,70 @@
     sans-serif;
 }
 
+/*
+ * 브랜드 토큰. **정본은 dealermaster_mockup.html 의 :root 스케일이다** —
+ * 구현이 그 스케일에서 나온 hex 를 손으로 베껴 컴포넌트에 14종이 흩어져 있었다.
+ * 12_design_system.md §2 는 역할("딥 틸", "따뜻한 앰버")만 적고 값이 없으므로,
+ * 값의 출처는 목업이고 이 블록이 코드 쪽 정본이다.
+ *
+ * dm- 접두사는 Tailwind 기본 팔레트(teal-600 등)와 섞이지 않게 하려는 것이다.
+ */
+@theme {
+  --color-dm-teal-50: #e1f5ee;
+  --color-dm-teal-100: #9fe1cb;
+  --color-dm-teal-400: #1d9e75;
+  --color-dm-teal-600: #0f6e56;
+  --color-dm-teal-800: #085041;
+  --color-dm-teal-900: #04342c;
+
+  --color-dm-amber-50: #faeeda;
+  --color-dm-amber-400: #ef9f27;
+  --color-dm-amber-600: #854f0b;
+  --color-dm-amber-800: #4a2f02;
+
+  --color-dm-red: #b23a2e;
+  --color-dm-red-50: #fbebe8;
+}
+
+/*
+ * 칩 단위 색. 12_design_system.md §5-1 의 회색/블루/틸/블랙/퍼플/앰버.
+ * @theme 이 아니라 :root 에 둔다 — ChipStack 이 유틸리티 클래스가 아니라 인라인
+ * 스타일의 var() 로 읽는데, @theme 안의 변수는 스캐너가 클래스를 못 찾으면
+ * 통째로 트리셰이킹돼서 칩이 색을 잃는다(실제로 한 번 사라졌다).
+ */
+:root {
+  --color-dm-chip-100: #b4b2a9;
+  --color-dm-chip-500: #378add;
+  --color-dm-chip-1000: #1d9e75;
+  --color-dm-chip-5000: #2c2c2a;
+  --color-dm-chip-25000: #7f77dd;
+  --color-dm-chip-100000: #ef9f27;
+}
+
+/*
+ * 역할 토큰. 페이지 배경 위에 얹히는 색만 여기 있다 — 라이트/다크에서 값이 갈려야
+ * AA 를 넘기기 때문이다. 실측(대비비, 검정 #0a0a0a / 흰색 기준):
+ *   teal-600  라이트 6.20 · 다크 3.19(미달) → 다크는 teal-400 5.85
+ *   red       라이트 5.94 · 다크 3.34(미달) → 다크는 #e8877a 7.71
+ * 자기 배경을 들고 다니는 색(펠트 위 흰 글씨, 흰 알약 위 틸)은 뒤집을 필요가 없어
+ * 여기 넣지 않는다.
+ */
+:root {
+  --dm-accent: #0f6e56;
+  --dm-danger: #b23a2e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --dm-accent: #1d9e75;
+    --dm-danger: #e8877a;
+  }
+}
+
 @theme inline {
+  --color-dm-accent: var(--dm-accent);
+  --color-dm-danger: var(--dm-danger);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-app-sans);
@@ -44,9 +107,9 @@ body {
  */
 .sim-root {
   --tempo: 120ms;
-  --felt: #085041;
-  --felt-edge: #04342C;
-  --amber: #EF9F27;
+  --felt: var(--color-dm-teal-800);
+  --felt-edge: var(--color-dm-teal-900);
+  --amber: var(--color-dm-amber-400);
 }
 
 .sim-move {

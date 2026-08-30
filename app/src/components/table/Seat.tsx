@@ -32,7 +32,7 @@ export function Seat({
       </div>
 
       <div className="relative flex items-center gap-1 rounded-full bg-white/95 px-2 py-0.5">
-        <span className="text-[10px] font-bold text-[#085041]">
+        <span className="text-[10px] font-bold text-dm-teal-800">
           {seat.name}({displaySeat(seatIndex)})
         </span>
         {hasButton ? (
@@ -41,13 +41,24 @@ export function Seat({
           </span>
         ) : null}
         {positionTag ? (
-          <span className="rounded bg-[#EF9F27] px-1 text-[7px] font-extrabold text-[#4A2F02]">
+          <span className="rounded bg-dm-amber-400 px-1 text-[7px] font-extrabold text-dm-amber-800">
             {positionTag}
           </span>
         ) : null}
       </div>
 
-      <span className={`text-[9px] font-bold ${seat.allIn ? 'text-[#B23A2E]' : 'text-[#EF9F27]'}`}>
+      {/*
+        * 스택 숫자는 좌석 위치에 따라 펠트 위에도, 펠트 밖 페이지 배경 위에도 놓인다.
+        * 배경이 정해지지 않으면 어떤 앰버도 양쪽을 통과하지 못한다 — 실측으로
+        * #EF9F27 은 흰 배경 2.17:1(미달), #854F0B 은 펠트 위 1.40:1(미달)이었다.
+        * 색이 아니라 배경을 확정한다: 이름 알약과 같은 흰 알약을 깔고 진한 앰버를
+        * 얹으면 어디에 놓이든 6.73:1 이다(올인 빨강은 5.94:1).
+        */}
+      <span
+        className={`rounded-full bg-white/95 px-1.5 text-[9px] font-bold ${
+          seat.allIn ? 'text-dm-red' : 'text-dm-amber-600'
+        }`}
+      >
         {seat.allIn ? '올인 ' : ''}
         {seat.stack.toLocaleString('ko-KR')}
       </span>

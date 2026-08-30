@@ -54,7 +54,7 @@ export function ActionLog({
               key={i}
               className={
                 i === shown.length - 1
-                  ? 'font-bold text-[#EF9F27]'
+                  ? 'font-bold text-dm-amber-400'
                   : 'text-zinc-400 motion-reduce:text-zinc-300'
               }
             >

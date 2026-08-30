@@ -41,7 +41,7 @@ export function DecisionPrompt({
   return (
     <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
       <div className="mb-2 flex items-center justify-between">
-        <span className="rounded-full bg-[#E1F5EE] px-2.5 py-1 text-[11px] font-bold text-[#085041]">
+        <span className="rounded-full bg-dm-teal-50 px-2.5 py-1 text-[11px] font-bold text-dm-teal-800">
           {KIND_LABEL[dp.kind]}
         </span>
         {phase === 'awaiting' ? <Countdown remainingMs={remainingMs} limitSec={dp.timeLimitSec} /> : null}
@@ -69,11 +69,11 @@ function Countdown({ remainingMs, limitSec }: { remainingMs: number; limitSec: n
     <div className="flex items-center gap-2">
       <div className="h-1.5 w-24 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
         <div
-          className={`h-full ${urgent ? 'bg-[#B23A2E]' : 'bg-[#0F6E56]'}`}
+          className={`h-full ${urgent ? 'bg-dm-red' : 'bg-dm-teal-600'}`}
           style={{ width: `${ratio * 100}%` }}
         />
       </div>
-      <span className={`text-xs font-bold ${urgent ? 'text-[#B23A2E]' : 'text-zinc-500'}`}>
+      <span className={`text-xs font-bold ${urgent ? 'text-dm-danger' : 'text-zinc-500'}`}>
         {sec}초
       </span>
     </div>
@@ -82,7 +82,7 @@ function Countdown({ remainingMs, limitSec }: { remainingMs: number; limitSec: n
 
 const BTN =
   'w-full rounded-xl border border-zinc-300 px-4 py-3 text-left text-sm font-semibold ' +
-  'hover:border-[#0F6E56] hover:bg-[#E1F5EE] dark:border-zinc-700 dark:hover:bg-zinc-900'
+  'hover:border-dm-teal-600 hover:bg-dm-teal-50 dark:border-zinc-700 dark:hover:bg-zinc-900'
 
 function Inputs({ dp, onAnswer }: { dp: DecisionPoint; onAnswer: (a: Answer) => void }) {
   if (dp.input.type === 'choice') {
@@ -114,7 +114,7 @@ function SeatInput({ dp, onAnswer }: { dp: DecisionPoint; onAnswer: (a: Answer) 
       {options.map((opt) => (
         <button
           key={opt.seat}
-          className={`${BTN} ${picked.includes(opt.seat) ? 'border-[#0F6E56] bg-[#E1F5EE] dark:bg-zinc-900' : ''}`}
+          className={`${BTN} ${picked.includes(opt.seat) ? 'border-dm-teal-600 bg-dm-teal-50 dark:bg-zinc-900' : ''}`}
           onClick={() => toggle(opt.seat)}
         >
           <span className="mr-2 text-xs text-zinc-500">{displaySeat(opt.seat)}번</span>
@@ -122,7 +122,7 @@ function SeatInput({ dp, onAnswer }: { dp: DecisionPoint; onAnswer: (a: Answer) 
         </button>
       ))}
       <button
-        className="w-full rounded-xl bg-[#085041] px-4 py-3 text-sm font-bold text-white disabled:opacity-40"
+        className="w-full rounded-xl bg-dm-teal-800 px-4 py-3 text-sm font-bold text-white disabled:opacity-40"
         disabled={picked.length === 0}
         onClick={() => onAnswer({ type: 'seat', seats: picked })}
       >
@@ -170,7 +170,7 @@ function NumberInput({ dp, onAnswer }: { dp: DecisionPoint; onAnswer: (a: Answer
         </label>
       ))}
       <button
-        className="w-full rounded-xl bg-[#085041] px-4 py-3 text-sm font-bold text-white"
+        className="w-full rounded-xl bg-dm-teal-800 px-4 py-3 text-sm font-bold text-white"
         onClick={submit}
       >
         제출
@@ -202,10 +202,10 @@ function Feedback({
   const partial = result !== undefined && !correct && result.score > 0
 
   const tone = correct
-    ? 'bg-[#E1F5EE] text-[#085041]'
+    ? 'bg-dm-teal-50 text-dm-teal-800'
     : partial
-      ? 'bg-[#FAEEDA] text-[#4A2F02]'
-      : 'bg-[#FBEBE8] text-[#B23A2E]'
+      ? 'bg-dm-amber-50 text-dm-amber-800'
+      : 'bg-dm-red-50 text-dm-red'
 
   const verdict = timedOut
     ? '시간 초과'
@@ -223,7 +223,7 @@ function Feedback({
       </div>
 
       <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[#0F6E56]">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-dm-accent">
           {dp.ruleRef}
         </p>
         <p className="text-sm leading-relaxed">{dp.explanation}</p>
