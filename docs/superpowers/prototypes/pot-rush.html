@@ -178,126 +178,214 @@ body {
   word-break: keep-all;   /* 한국어를 어절 중간에서 끊지 않는다 */
 }
 
-/* ── 펠트 ─────────────────────────────────────── */
+/* ── 펠트 · 테이블 ─────────────────────────────── */
 
 .felt {
   position: relative;
-  margin: 0 12px 12px;
-  border-radius: 20px;
-  padding: 16px 12px;
-  background: radial-gradient(ellipse at 50% 0%,
-              color-mix(in srgb, var(--felt) 85%, #fff) 0%, var(--felt) 55%, var(--felt-edge) 100%);
-  box-shadow: inset 0 0 26px rgba(0,0,0,.28), 0 0 0 4px var(--felt-deep);
+  margin: 2px 12px 14px;
+  border-radius: 34px / 28px;
+  padding: 10px 8px 8px;
+  background:
+    radial-gradient(ellipse at 50% 32%,
+      color-mix(in srgb, var(--felt) 88%, #fff) 0%, var(--felt) 50%, var(--felt-edge) 100%);
+  /* 안쪽 그림자 → 펠트, 바깥 두 겹 → 쿠션과 나무 레일 */
+  box-shadow:
+    inset 0 0 30px rgba(0,0,0,.3),
+    0 0 0 4px var(--felt-deep),
+    0 0 0 10px #33241A,
+    0 0 0 11px rgba(0,0,0,.35),
+    0 8px 20px rgba(0,0,0,.3);
 }
 
-.board { display: flex; gap: 5px; justify-content: center; margin-bottom: 12px; }
-.pcard {
-  width: 34px; height: 47px;
-  border-radius: 5px;
-  background: #FBFBF8; color: #14231D;
+/*
+ * 좌석은 절대좌표로 타원에 뿌리지 않는다 — 폭이 좁아지면 서로 겹친다.
+ * 5열 그리드에 앉히면 겹칠 수가 없고, 바깥 두 좌석을 아래 줄에 두면
+ * 테이블을 둘러싼 모양이 나온다. 버튼 왼쪽 시계방향이 눈으로 읽히는 게 목적이다.
+ */
+.tbl {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px 4px;
+  align-items: start;
+}
+
+.seat {
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  font-family: var(--mono); font-weight: 800;
-  line-height: 1;
-  box-shadow: 0 2px 6px rgba(0,0,0,.3);
-}
-.pcard .r { font-size: 15px; }
-.pcard .s { font-size: 13px; }
-.pcard.red { color: #B23A2E; }
-.pcard.sm { width: 26px; height: 36px; }
-.pcard.sm .r { font-size: 12px; }
-.pcard.sm .s { font-size: 10px; }
-
-.rows { display: flex; flex-direction: column; gap: 7px; }
-
-.prow {
-  display: flex; align-items: center; gap: 9px;
-  min-height: 56px;
-  background: rgba(0,0,0,.17);
+  align-items: center; gap: 3px;
+  padding: 5px 4px 6px;
+  border-radius: 12px;
   border: 2px solid transparent;
-  border-radius: 11px;
-  padding: 7px 10px;
+  background: rgba(0,0,0,.19);
   color: var(--felt-ink);
-  width: 100%;
-  text-align: left;
   font-family: inherit;
-  font-size: 13px;
+  width: 100%;
+  min-width: 0;
+  min-height: 54px;
 }
-button.prow { cursor: pointer; }
-button.prow:hover, button.prow:focus-visible {
+button.seat { cursor: pointer; }
+button.seat:hover, button.seat:focus-visible {
   border-color: #FBFBF8;
-  background: rgba(0,0,0,.28);
+  background: rgba(0,0,0,.3);
   outline: none;
 }
-.prow.pick { border-color: var(--amber); background: rgba(239,159,39,.22); }
-.prow.right { border-color: #6FE3B8; background: rgba(29,158,117,.3); }
-.prow.wrong { border-color: var(--red); background: rgba(178,58,46,.28); }
+.seat.pick  { border-color: var(--amber); background: rgba(239,159,39,.25); }
+.seat.right { border-color: #6FE3B8; background: rgba(29,158,117,.32); }
+.seat.wrong { border-color: var(--red); background: rgba(178,58,46,.3); }
+.seat.folded { opacity: .5; }
+.seat.arc { margin-top: 11px; }        /* 가운데가 솟은 아크 착시 */
 
-.pname {
-  font-weight: 700;
-  min-width: 74px;
-  white-space: nowrap;
+.sname {
+  display: flex; align-items: center; justify-content: center;
+  gap: 3px; flex-wrap: wrap;
+  font-size: 11.5px; font-weight: 700;
+  line-height: 1.2;
 }
 .ptag {
-  font-size: 10px; font-weight: 800;
-  padding: 1px 5px; border-radius: 4px;
-  margin-left: 4px;
+  font-size: 9px; font-weight: 800;
+  padding: 1px 4px; border-radius: 4px;
   white-space: nowrap;
 }
 .ptag.allin { background: var(--red); color: #fff; }
 .ptag.tie   { background: #6FE3B8; color: #04342C; }
-.ptag.out   { background: rgba(255,255,255,.15); color: var(--felt-ink); opacity: .75; }
+.ptag.out   { background: rgba(255,255,255,.15); color: var(--felt-ink); }
 
 /* 딜러 버튼 — 홀칩 순서의 기준점이라 화면에 없으면 풀 수 없다 */
 .pbtn {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 19px; height: 19px; border-radius: 50%;
-  background: linear-gradient(#FFFFFF, #DFE5E1);
+  width: 17px; height: 17px; border-radius: 50%;
+  background: linear-gradient(#FFFFFF, #DCE3DF);
   color: #14231D;
-  font-family: var(--mono); font-size: 10px; font-weight: 800;
-  letter-spacing: 0;
-  box-shadow: 0 2px 4px rgba(0,0,0,.45), inset 0 -2px 3px rgba(0,0,0,.16);
-  margin-left: 5px;
+  font-family: var(--mono); font-size: 9px; font-weight: 800;
+  box-shadow: 0 2px 4px rgba(0,0,0,.5), inset 0 -2px 3px rgba(0,0,0,.16);
   flex: none;
 }
 
-/* 팟 더미 — 홀칩 문제에서 "남는 100 칩"이 눈에 보여야 한다 */
-.potpile {
-  display: flex; flex-direction: column; align-items: center; gap: 7px;
-  margin-bottom: 12px; padding: 11px 10px 9px;
-  border-radius: 14px;
-  background: rgba(0,0,0,.2);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
-}
-.potpile .lbl {
-  font-size: 10px; font-weight: 800;
-  letter-spacing: .14em; text-transform: uppercase;
-  color: var(--felt-ink); opacity: .7;
-}
-.potpile .amt {
-  font-family: var(--mono);
-  font-size: 21px; font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: #FFFFFF;
-  line-height: 1;
-}
-.potpile .chips { flex: none; justify-content: center; }
-.phand { display: flex; gap: 3px; }
-.pgrow { flex: 1; }
+.shand { display: flex; gap: 3px; }
 .pamt {
   font-family: var(--mono);
-  font-size: 13px; font-weight: 800;
+  font-size: 12px; font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
-/* 칩 */
-.chips { display: flex; gap: 11px; flex-wrap: wrap; align-items: flex-end; flex: 1; }
-.stack { display: flex; flex-direction: column; align-items: center; min-width: 32px; }
+/* 베팅 존 — 칩은 좌석 앞(테이블 안쪽)에 놓인다 */
+.sbet {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 2px;
+  margin-top: 1px;
+}
+
+/* 테이블 가운데 — 보드와 팟 */
+.tblcenter {
+  grid-column: 2 / 5; grid-row: 2;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 8px;
+  padding: 2px 0;
+  min-height: 44px;
+}
+.board { display: flex; gap: 4px; justify-content: center; }
+
+/* 딜러 자리 — 덱과 컷카드. 이 화면에서 유일한 "딜러 시점" 요소다 */
+.dealerbox {
+  grid-column: 1 / 6; grid-row: 3;
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px;
+  margin-top: 3px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(255,255,255,.13);
+}
+.dlabel {
+  font-size: 10px; font-weight: 800;
+  letter-spacing: .12em;
+  color: var(--felt-ink); opacity: .6;
+}
+.deck { position: relative; display: inline-block; }
+.deck .pcard { animation: none; position: relative; }
+.cutcard {
+  position: absolute; left: 6px; top: 5px;
+  width: clamp(25px, 6.6vw, 33px);
+  height: calc(clamp(25px, 6.6vw, 33px) * 1.42);
+  border-radius: 4px;
+  background: linear-gradient(150deg, #F5C349, #DB9C19);
+  box-shadow: 0 2px 5px rgba(0,0,0,.4), inset 0 0 0 1px rgba(0,0,0,.2);
+}
+
+/* ── 카드 ─────────────────────────────────────── */
+
+.pcard {
+  position: relative;
+  --cw: clamp(25px, 6.6vw, 33px);
+  width: var(--cw);
+  height: calc(var(--cw) * 1.42);
+  display: inline-block;
+  vertical-align: top;
+  border-radius: 4px;
+  background: linear-gradient(#FFFFFF, #F1F2EC);
+  color: #14231D;
+  box-shadow: 0 2px 5px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.14);
+  flex: none;
+  overflow: hidden;
+}
+/* 실물 카드처럼 코너 인덱스(랭크 위, 무늬 아래)와 반대편 미러 인덱스 */
+.pcard .idx {
+  position: absolute; top: 2px; left: 3px;
+  display: flex; flex-direction: column; align-items: center;
+  line-height: .92;
+  font-weight: 900;
+  letter-spacing: -.04em;
+  font-size: calc(var(--cw) * .40);
+}
+.pcard .idx .s { font-size: calc(var(--cw) * .33); }
+.pcard .idx2 {
+  position: absolute; bottom: 2px; right: 3px;
+  transform: rotate(180deg);
+  top: auto; left: auto;
+  opacity: .95;
+}
+.pcard .pip {
+  position: absolute;
+  right: calc(var(--cw) * .08); top: 50%;
+  transform: translateY(-50%);
+  font-size: calc(var(--cw) * .58);
+  opacity: .92;
+}
+.pcard.red { color: #B23A2E; }
+.shand .pcard { --cw: clamp(19px, 5vw, 25px); }
+.shand .pcard .idx2, .deck .pcard .idx2 { display: none; }
+
+/* 카드 뒷면 — 사이드팟 문제에서 살아있는 좌석은 아직 카드를 덮고 있다 */
+.pcard.back {
+  background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,.15) 0 2px, rgba(255,255,255,0) 2px 5px),
+    repeating-linear-gradient(-45deg, rgba(255,255,255,.15) 0 2px, rgba(255,255,255,0) 2px 5px),
+    linear-gradient(150deg, #B23A2E 0%, #78221B 100%);
+  box-shadow:
+    0 2px 5px rgba(0,0,0,.4),
+    inset 0 0 0 2px #FBFBF8,
+    inset 0 0 0 3px rgba(0,0,0,.18);
+}
+.deck .pcard.back {
+  box-shadow:
+    0 2px 5px rgba(0,0,0,.4),
+    inset 0 0 0 2px #FBFBF8,
+    inset 0 0 0 3px rgba(0,0,0,.18),
+    3px 3px 0 -1px #8E2C22,
+    5px 5px 0 -2px #78221B;
+}
+
+/* ── 칩 ───────────────────────────────────────── */
+
+.chips {
+  display: flex; gap: 7px;
+  flex-wrap: wrap; align-items: flex-end; justify-content: center;
+}
+.stack { display: flex; flex-direction: column; align-items: center; }
 .pile { display: flex; flex-direction: column-reverse; align-items: center; }
 .chip {
-  width: 28px; height: 28px;
+  --cs: clamp(15px, 3.9vw, 24px);
+  width: var(--cs); height: var(--cs);
   border-radius: 50%;
-  margin-top: -20px;
+  margin-top: calc(var(--cs) * -.72);
   border: 1px solid rgba(0,0,0,.4);
   background-color: var(--c, #999);
   /*
@@ -315,16 +403,39 @@ button.prow:hover, button.prow:focus-visible {
     inset 0 0 0 1px rgba(0,0,0,.22),
     inset 0 -3px 5px rgba(0,0,0,.3),
     inset 0 2px 3px rgba(255,255,255,.2);
+  flex: none;
 }
 .pile .chip:last-child { margin-top: 0; }
 .stack .cnt {
   font-family: var(--mono);
-  font-size: 10px; font-weight: 800;
+  font-size: 9.5px; font-weight: 800;
   color: var(--felt-ink);
   opacity: .8;
-  margin-top: 5px;
+  margin-top: 4px;
   white-space: nowrap;
 }
+
+/* 팟 더미 — 홀칩·스플릿 문제에서 팟이 눈에 보여야 한다 */
+.potpile {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 6px 14px 7px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.16);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+}
+.potpile .lbl {
+  font-size: 9.5px; font-weight: 800;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--felt-ink); opacity: .7;
+}
+.potpile .amt {
+  font-family: var(--mono);
+  font-size: 19px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #FFFFFF;
+  line-height: 1;
+}
+.potpile .chips { flex: none; }
 
 /* ── 입력 ─────────────────────────────────────── */
 
@@ -461,8 +572,8 @@ button.prow:hover, button.prow:focus-visible {
 }
 .pcard { animation: deal .26s cubic-bezier(.2,.8,.3,1) backwards; }
 .chip  { animation: chipdrop .2s ease-out backwards; }
-.prow.right { animation: rowpop .34s ease-out; }
-.prow.wrong { animation: rowshake .3s ease-out; }
+.seat.right { animation: rowpop .34s ease-out; }
+.seat.wrong { animation: rowshake .3s ease-out; }
 .flash.on   { animation: chipdrop .18s ease-out; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -896,11 +1007,20 @@ button.prow:hover, button.prow:focus-visible {
     }).join('') + '</span>';
   }
 
-  function cardHtml(c, sm, order) {
+  function cardHtml(c, order) {
     var red = c.s === 1 || c.s === 2;
     var delay = order ? ' style="animation-delay:' + (order * 45) + 'ms"' : '';
-    return '<span class="pcard' + (red ? ' red' : '') + (sm ? ' sm' : '') + '"' + delay + '>' +
-      '<span class="r">' + RANKS[c.r] + '</span><span class="s">' + SUITS[c.s] + '</span></span>';
+    var idx = '<span class="r">' + RANKS[c.r] + '</span><span class="s">' + SUITS[c.s] + '</span>';
+    return '<span class="pcard' + (red ? ' red' : '') + '"' + delay + '>' +
+      '<span class="idx">' + idx + '</span>' +
+      '<span class="idx idx2">' + idx + '</span>' +
+      '<span class="pip">' + SUITS[c.s] + '</span>' +
+      '</span>';
+  }
+
+  function backHtml(order) {
+    var delay = order ? ' style="animation-delay:' + (order * 45) + 'ms"' : '';
+    return '<span class="pcard back"' + delay + '></span>';
   }
 
   function render() {
@@ -925,42 +1045,75 @@ button.prow:hover, button.prow:focus-visible {
     var multiMode = !!q.multi;
     var clickable = chooseMode || multiMode;
 
-    var rows = q.seats.map(function (s, i) {
+    /*
+     * 좌석 자리표. 바깥 두 좌석을 아래 줄(1열·5열)에 앉히면 테이블을 둘러싼 모양이 되고,
+     * 가운데 줄이 비어 보드와 팟이 들어간다. 절대좌표로 타원에 뿌리면 좁은 화면에서 겹친다.
+     */
+    var POS = {
+      2: [[1, 2], [5, 2]],
+      3: [[1, 2], [3, 1], [5, 2]],
+      4: [[1, 2], [2, 1], [4, 1], [5, 2]],
+      5: [[1, 2], [2, 1], [3, 1], [4, 1], [5, 2]]
+    };
+    var pos = POS[q.seats.length] || POS[5];
+
+    var seatsHtml = q.seats.map(function (s, i) {
+      var p = pos[i];
       var tags = '';
       if (s.allIn) tags += '<span class="ptag allin">올인</span>';
       if (s.role === 'tie') tags += '<span class="ptag tie">동점</span>';
       if (s.role === 'out') tags += '<span class="ptag out">폴드</span>';
       if (q.button === i) tags += '<span class="pbtn">D</span>';
 
-      var mid;
-      if (q.type === 'side') {
-        mid = chipHtml(s.bet) + '<span class="pamt">' + (S.locked ? fmt(s.bet) : '?') + '</span>';
-      } else if (q.type === 'odd') {
-        mid = '<span class="pgrow"></span><span class="pamt">' +
-          (s.role === 'tie' ? fmt(q.share) : '—') + '</span>';
-      } else {
-        mid = '<span class="phand">' +
-          s.hole.map(function (c, k) { return cardHtml(c, true, 5 + i * 2 + k); }).join('') + '</span>' +
-          '<span class="pgrow"></span>' +
-          (q.type === 'payout' ? '<span class="pamt">' + fmt(s.bet) + '</span>' : '');
+      var hand = '';
+      if (s.hole) {
+        hand = '<span class="shand">' +
+          s.hole.map(function (c, k) { return cardHtml(c, 5 + i * 2 + k); }).join('') + '</span>';
+      } else if (q.type === 'side') {
+        // 아직 베팅 라운드다 — 살아있는 좌석은 카드를 덮고 있다
+        hand = '<span class="shand">' + backHtml(5 + i * 2) + backHtml(6 + i * 2) + '</span>';
       }
 
-      var tagName = clickable ? 'button' : 'div';
-      return '<' + tagName + ' class="prow" data-i="' + i + '"' +
+      var bet = '';
+      if (q.type === 'side') {
+        bet = '<span class="sbet">' + chipHtml(s.bet) +
+          '<span class="pamt">' + (S.locked ? fmt(s.bet) : '?') + '</span></span>';
+      } else if (q.type === 'payout') {
+        bet = '<span class="sbet"><span class="pamt">' + fmt(s.bet) + '</span></span>';
+      } else if (q.type === 'odd') {
+        bet = '<span class="sbet"><span class="pamt">' +
+          (s.role === 'tie' ? fmt(q.share) : '—') + '</span></span>';
+      }
+
+      var tag = clickable ? 'button' : 'div';
+      var cls = 'seat' + (p[1] === 1 && p[0] !== 3 ? ' arc' : '') + (s.role === 'out' ? ' folded' : '');
+      return '<' + tag + ' class="' + cls + '" data-i="' + i + '"' +
+        ' style="grid-column:' + p[0] + ';grid-row:' + p[1] + '"' +
         (clickable ? ' type="button"' : '') + '>' +
-        '<span class="pname">' + s.name + tags + '</span>' + mid +
-        '</' + tagName + '>';
+        '<span class="sname">' + s.name + tags + '</span>' + hand + bet +
+        '</' + tag + '>';
     }).join('');
 
     var boardHtml = q.board.length
-      ? '<div class="board">' + q.board.map(function (c, k) { return cardHtml(c, false, k); }).join('') + '</div>'
+      ? '<div class="board">' + q.board.map(function (c, k) { return cardHtml(c, k); }).join('') + '</div>'
       : '';
 
-    // 홀칩 문제는 보드가 없다 — 대신 팟 더미를 놓아야 "남는 100 칩"이 눈에 보인다
-    var potHtml = q.type === 'odd'
-      ? '<div class="potpile"><span class="lbl">메인팟</span>' +
+    // 팟이 이미 가운데로 수거된 문제(스플릿·홀칩)는 팟 더미를 놓는다.
+    // 사이드팟 문제는 아직 각자 앞에 있어야 맞다 — 여기서 합치면 문제가 사라진다.
+    var potHtml = q.pot
+      ? '<div class="potpile"><span class="lbl">' +
+        (q.type === 'odd' ? '메인팟' : '팟') + '</span>' +
         '<span class="amt">' + fmt(q.pot) + '</span>' + chipHtml(q.pot) + '</div>'
       : '';
+
+    var feltHtml =
+      '<div class="felt"><div class="tbl">' + seatsHtml +
+        '<div class="tblcenter">' + boardHtml + potHtml + '</div>' +
+        '<div class="dealerbox">' +
+          '<span class="deck"><span class="cutcard"></span>' + backHtml() + '</span>' +
+          '<span class="dlabel">딜러</span>' +
+        '</div>' +
+      '</div></div>';
 
     var answerHtml;
     if (multiMode) {
@@ -981,17 +1134,17 @@ button.prow:hover, button.prow:focus-visible {
     $('#panel').innerHTML =
       '<div class="kicker">' + q.kicker + '</div>' +
       '<div class="qtext">' + q.q + '</div>' +
-      '<div class="felt">' + potHtml + boardHtml + '<div class="rows">' + rows + '</div></div>' +
+      feltHtml +
       '<div class="flash" id="flash"></div>' +
       answerHtml;
 
     if (multiMode) {
-      Array.prototype.forEach.call(document.querySelectorAll('button.prow'), function (b) {
+      Array.prototype.forEach.call(document.querySelectorAll('button.seat'), function (b) {
         b.addEventListener('click', function () { toggleMark(+b.dataset.i, b); });
       });
       $('#go').addEventListener('click', answerMulti);
     } else if (chooseMode) {
-      Array.prototype.forEach.call(document.querySelectorAll('button.prow'), function (b) {
+      Array.prototype.forEach.call(document.querySelectorAll('button.seat'), function (b) {
         b.addEventListener('click', function () { answerChoice(+b.dataset.i); });
       });
     } else {
@@ -1064,7 +1217,7 @@ button.prow:hover, button.prow:focus-visible {
     if (q.choose || q.multi) {
       var right = q.multi ? q.multi.answers : [q.choose.answer];
       var mine = q.multi ? S.marks : [S.picked];
-      Array.prototype.forEach.call(document.querySelectorAll('.prow'), function (b) {
+      Array.prototype.forEach.call(document.querySelectorAll('.seat'), function (b) {
         var i = +b.dataset.i;
         b.classList.remove('pick');
         if (right.indexOf(i) >= 0) b.classList.add('right');
@@ -1074,7 +1227,7 @@ button.prow:hover, button.prow:focus-visible {
     } else {
       Array.prototype.forEach.call(document.querySelectorAll('.fin'), function (inp) { inp.disabled = true; });
       // 금액을 공개한다
-      Array.prototype.forEach.call(document.querySelectorAll('.prow .pamt'), function (el, i) {
+      Array.prototype.forEach.call(document.querySelectorAll('.seat .pamt'), function (el, i) {
         el.textContent = fmt(q.seats[i].bet);
       });
     }
