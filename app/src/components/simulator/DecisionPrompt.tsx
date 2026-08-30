@@ -193,16 +193,33 @@ function Feedback({
   // 피드백에는 타이머가 없다 — 설명을 읽는 것이 훈련의 절반이다.
   const timedOut = answer?.type === 'timeout'
   const correct = result?.correct === true
+  /*
+   * 숫자 2칸 문항에서 1칸만 맞히면 scoreDecision 이 50 을 준다(hits/fields×100).
+   * 그걸 빨간 "오답입니다"로 그리면 학습자에게 완전히 틀린 것으로 읽힌다 — 판정은
+   * 맞았는데 액수 하나가 틀린 것과 판정 자체를 틀린 것은 다른 실수다. 세 번째
+   * 상태로 가른다. 점수 값은 엔진 그대로다.
+   */
+  const partial = result !== undefined && !correct && result.score > 0
+
+  const tone = correct
+    ? 'bg-[#E1F5EE] text-[#085041]'
+    : partial
+      ? 'bg-[#FAEEDA] text-[#4A2F02]'
+      : 'bg-[#FBEBE8] text-[#B23A2E]'
+
+  const verdict = timedOut
+    ? '시간 초과'
+    : correct
+      ? '정답입니다'
+      : partial
+        ? '부분 정답'
+        : '오답입니다'
 
   return (
     <div className="mt-4 space-y-3">
-      <div
-        className={`rounded-xl px-4 py-3 text-sm font-bold ${
-          correct ? 'bg-[#E1F5EE] text-[#085041]' : 'bg-[#FBEBE8] text-[#B23A2E]'
-        }`}
-      >
-        {timedOut ? '시간 초과' : correct ? '정답입니다' : '오답입니다'}
-        {result !== undefined && !correct ? ` · ${result.score}점` : ''}
+      <div className={`rounded-xl px-4 py-3 text-sm font-bold ${tone}`}>
+        {verdict}
+        {result !== undefined && !correct ? ` · ${result.score} / 100점` : ''}
       </div>
 
       <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">

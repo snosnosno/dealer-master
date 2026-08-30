@@ -22,16 +22,24 @@ export function ActionLog({
   seats: SeatInit[]
   cursor: number
 }) {
-  const endRef = useRef<HTMLDivElement>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
 
+  /*
+   * 컨테이너를 **직접** 내린다. scrollIntoView 는 명세상 스크롤 가능한 모든 조상을
+   * 움직이므로, 로그가 뷰포트 아래로 걸쳐 있으면 block:'nearest' 도 페이지 전체를
+   * 끌어당긴다 — 420px 높이에서 로그가 102px 걸친 채 재생하면 페이지가 정확히
+   * 102px 튀는 것을 실측했다. scrollTop 은 이 요소 하나만 건드린다.
+   */
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'nearest' })
+    const box = boxRef.current
+    if (box) box.scrollTop = box.scrollHeight
   }, [cursor])
 
   const shown = events.slice(0, cursor)
 
   return (
     <div
+      ref={boxRef}
       className="h-48 overflow-y-auto rounded-xl bg-zinc-900 px-4 py-3 text-zinc-300 motion-reduce:text-base motion-reduce:text-zinc-100"
       role="log"
       aria-live="polite"
@@ -55,7 +63,6 @@ export function ActionLog({
           ))}
         </ol>
       )}
-      <div ref={endRef} />
     </div>
   )
 }
