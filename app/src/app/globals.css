@@ -3,12 +3,22 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /*
+   * 본문 서체. Pretendard 는 CDN 동적 서브셋으로 layout.tsx 가 로드한다.
+   * 폰트가 뜨기 전(font-display:swap)과 CDN 차단 환경에서 한글이 브라우저
+   * 기본값으로 떨어지지 않도록 OS 한글 서체를 폴백에 직접 적는다.
+   */
+  --font-app-sans:
+    'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
+    'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Segoe UI', Roboto,
+    sans-serif;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-app-sans);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -22,7 +32,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-app-sans);
 }
 
 /*
