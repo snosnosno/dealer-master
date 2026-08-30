@@ -125,6 +125,9 @@ body {
   color: var(--ink-2);
 }
 .hud .stat b { color: var(--ink); font-weight: 800; }
+.hud .tsec { font-weight: 800; min-width: 38px; text-align: right; }
+.hud .tsec.warn { color: var(--amber-ink); }
+.hud .tsec.crit { color: var(--red); }
 .streak {
   font-family: var(--mono);
   font-size: 12px; font-weight: 800;
@@ -172,6 +175,7 @@ body {
   letter-spacing: -.01em;
   padding: 3px 16px 12px;
   text-wrap: balance;
+  word-break: keep-all;   /* 한국어를 어절 중간에서 끊지 않는다 */
 }
 
 /* ── 펠트 ─────────────────────────────────────── */
@@ -234,12 +238,50 @@ button.prow:hover, button.prow:focus-visible {
   min-width: 74px;
   white-space: nowrap;
 }
-.pallin {
+.ptag {
   font-size: 10px; font-weight: 800;
-  background: var(--red); color: #fff;
   padding: 1px 5px; border-radius: 4px;
   margin-left: 4px;
+  white-space: nowrap;
 }
+.ptag.allin { background: var(--red); color: #fff; }
+.ptag.tie   { background: #6FE3B8; color: #04342C; }
+.ptag.out   { background: rgba(255,255,255,.15); color: var(--felt-ink); opacity: .75; }
+
+/* 딜러 버튼 — 홀칩 순서의 기준점이라 화면에 없으면 풀 수 없다 */
+.pbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 19px; height: 19px; border-radius: 50%;
+  background: linear-gradient(#FFFFFF, #DFE5E1);
+  color: #14231D;
+  font-family: var(--mono); font-size: 10px; font-weight: 800;
+  letter-spacing: 0;
+  box-shadow: 0 2px 4px rgba(0,0,0,.45), inset 0 -2px 3px rgba(0,0,0,.16);
+  margin-left: 5px;
+  flex: none;
+}
+
+/* 팟 더미 — 홀칩 문제에서 "남는 100 칩"이 눈에 보여야 한다 */
+.potpile {
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  margin-bottom: 12px; padding: 11px 10px 9px;
+  border-radius: 14px;
+  background: rgba(0,0,0,.2);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
+}
+.potpile .lbl {
+  font-size: 10px; font-weight: 800;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--felt-ink); opacity: .7;
+}
+.potpile .amt {
+  font-family: var(--mono);
+  font-size: 21px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #FFFFFF;
+  line-height: 1;
+}
+.potpile .chips { flex: none; justify-content: center; }
 .phand { display: flex; gap: 3px; }
 .pgrow { flex: 1; }
 .pamt {
@@ -253,13 +295,28 @@ button.prow:hover, button.prow:focus-visible {
 .stack { display: flex; flex-direction: column; align-items: center; min-width: 32px; }
 .pile { display: flex; flex-direction: column-reverse; align-items: center; }
 .chip {
-  width: 27px; height: 27px;
+  width: 28px; height: 28px;
   border-radius: 50%;
-  margin-top: -18px;
-  border: 2px solid rgba(255,255,255,.62);
-  box-shadow: 0 2px 3px rgba(0,0,0,.5), inset 0 -2px 4px rgba(0,0,0,.28);
+  margin-top: -20px;
+  border: 1px solid rgba(0,0,0,.4);
+  background-color: var(--c, #999);
+  /*
+   * 실물 칩 = 테두리의 엣지 스팟 8개 + 불투명한 중앙 인레이.
+   * 인레이가 불투명해야 스팟이 테두리에만 남는다 — 반투명으로 깔면 칩이 바람개비가 된다.
+   */
+  background-image:
+    radial-gradient(circle at 50% 50%,
+      color-mix(in srgb, var(--c, #999) 74%, #FFFFFF) 0 55%,
+      rgba(0,0,0,0) 56%),
+    repeating-conic-gradient(from 8deg,
+      rgba(255,255,255,.92) 0 10deg, rgba(255,255,255,0) 10deg 45deg);
+  box-shadow:
+    0 2px 3px rgba(0,0,0,.5),
+    inset 0 0 0 1px rgba(0,0,0,.22),
+    inset 0 -3px 5px rgba(0,0,0,.3),
+    inset 0 2px 3px rgba(255,255,255,.2);
 }
-.pile .chip:first-child { margin-top: 0; }
+.pile .chip:last-child { margin-top: 0; }
 .stack .cnt {
   font-family: var(--mono);
   font-size: 10px; font-weight: 800;
@@ -311,6 +368,7 @@ button.prow:hover, button.prow:focus-visible {
 .hint {
   font-size: 12.5px; color: var(--ink-2);
   padding: 2px 0 0;
+  word-break: keep-all;
 }
 
 /* ── 피드백 ───────────────────────────────────── */
@@ -325,7 +383,7 @@ button.prow:hover, button.prow:focus-visible {
 .flash .hd { font-weight: 800; font-size: 16px; margin-bottom: 2px; }
 .flash.good { background: var(--ok-bg); color: var(--ok); }
 .flash.bad  { background: var(--red-bg); color: var(--red-ink); }
-.flash .why { font-size: 13px; opacity: .9; margin-top: 3px; }
+.flash .why { font-size: 13px; opacity: .9; margin-top: 3px; word-break: keep-all; }
 .flash .pts {
   font-family: var(--mono); font-weight: 800;
   float: right;
@@ -382,6 +440,31 @@ button.prow:hover, button.prow:focus-visible {
   text-align: center;
 }
 
+@keyframes deal {
+  from { opacity: 0; transform: translate(-14px, -20px) rotate(-9deg) scale(.9); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes chipdrop {
+  from { opacity: 0; transform: translateY(-9px) scale(.86); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes rowpop {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.022); }
+  100% { transform: scale(1); }
+}
+@keyframes rowshake {
+  0%, 100% { transform: translateX(0); }
+  22% { transform: translateX(-5px); }
+  55% { transform: translateX(4px); }
+  80% { transform: translateX(-2px); }
+}
+.pcard { animation: deal .26s cubic-bezier(.2,.8,.3,1) backwards; }
+.chip  { animation: chipdrop .2s ease-out backwards; }
+.prow.right { animation: rowpop .34s ease-out; }
+.prow.wrong { animation: rowshake .3s ease-out; }
+.flash.on   { animation: chipdrop .18s ease-out; }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
@@ -393,6 +476,7 @@ button.prow:hover, button.prow:focus-visible {
     <span class="brand">팟 판독 러시</span>
     <span class="streak off" id="streak">연속 0</span>
     <span class="spacer"></span>
+    <span class="stat tsec" id="tsec">—</span>
     <span class="stat" id="qno">1 / 10</span>
     <span class="stat"><b id="score">0</b>점</span>
   </div>
@@ -522,6 +606,17 @@ button.prow:hover, button.prow:focus-visible {
     return pots;
   }
 
+  /**
+   * 홀칩 규칙. 정본은 엔진 `app/src/lib/simulator/pots.ts` 다 — 여기서 지어내지 않는다.
+   * ODD_CHIP_UNIT = 100, 순서는 버튼 왼쪽 첫 좌석부터 시계방향(버튼 자신이 맨 뒤).
+   */
+  var ODD_UNIT = 100;
+
+  function orderFromButton(seats, button, seatCount) {
+    var dist = function (x) { return ((x - button - 1) % seatCount + seatCount) % seatCount; };
+    return seats.slice().sort(function (a, b) { return dist(a) - dist(b); });
+  }
+
   // ── 문제 생성 ───────────────────────────────────
 
   /** 1. 사이드팟 분리 — 올인 금액이 콜 금액보다 뚜렷하게 낮아야 문제가 산다 */
@@ -622,21 +717,158 @@ button.prow:hover, button.prow:focus-visible {
     };
   }
 
-  var MAKERS = [makeSidePots, makeSidePots, makeSidePots, makeSidePots,
-                makeWinner, makeWinner, makeWinner,
-                makePayout, makePayout, makePayout];
+  /** 보드 5장을 스트레이트로 깐다 — 홀카드가 안 걸리면 전원이 보드로 플레이한다. */
+  function straightBoard(deck) {
+    var lo = rnd(9);                       // 하이는 lo+4, 최대 A
+    var out = [];
+    for (var r = lo; r <= lo + 4; r++) {
+      for (var i = 0; i < deck.length; i++) {
+        if (deck[i].r === r) { out.push(deck.splice(i, 1)[0]); break; }
+      }
+    }
+    return out.length === 5 ? out : null;
+  }
 
-  var TYPE_LABEL = { side: '사이드팟 분리', winner: '승자 판정', payout: '메인팟 지급' };
+  /**
+   * 4. 스플릿 팟 판정 — 동점은 자연 발생 확률이 낮아 유도한다.
+   * 유도한 배치가 진짜 동점인지는 **반드시 evaluate7 로 확인**하고, 아니면 다시 만든다.
+   */
+  function makeSplit(depth) {
+    depth = depth || 0;
+    var n = 3 + rnd(2);                    // 3~4명
+    var deck = newDeck();
+    var board, holes = [], byBoard = false;
+
+    if (rnd(4) === 0) {
+      // (가) 보드로 플레이 — 보드 5장이 완성 핸드라 홀카드가 킥커로도 안 걸린다
+      board = straightBoard(deck);
+      if (!board) return makeSplit(depth + 1);
+      byBoard = true;
+      for (var i = 0; i < n; i++) holes.push(deck.splice(0, 2));
+    } else {
+      // (나) 같은 랭크 두 개를 두 좌석에 거울처럼 준다 — 킥커까지 같아진다
+      board = deck.splice(0, 5);
+      var onBoard = board.map(function (c) { return c.r; });
+      var byRank = {};
+      deck.forEach(function (c) {
+        if (onBoard.indexOf(c.r) >= 0) return;
+        (byRank[c.r] = byRank[c.r] || []).push(c);
+      });
+      var pairable = Object.keys(byRank).filter(function (k) { return byRank[k].length >= 2; });
+      if (pairable.length < 2) return makeSplit(depth + 1);
+      var two = shuffle(pairable).slice(0, 2);
+      var A = byRank[two[0]], B = byRank[two[1]];
+      holes.push([A[0], B[0]]);
+      holes.push([A[1], B[1]]);
+      var taken = [A[0], A[1], B[0], B[1]];
+      var rest = deck.filter(function (c) { return taken.indexOf(c) < 0; });
+
+      /*
+       * 거울 두 좌석이 최고여야 스플릿이 된다. 나머지를 그냥 랜덤으로 채우면
+       * 그중 하나가 더 강해서 단독 승자가 되는 판이 절반을 넘고, 그만큼 재생성이
+       * (가) 보드플레이로 흘러 "전원 분할"만 나오게 된다. 그래서 더 약한 패로 채운다.
+       */
+      var mirrorVal = evaluate7(holes[0].concat(board));
+      for (var j = 2; j < n; j++) {
+        var got = null, guard = 0;
+        while (guard++ < 40) {
+          var at = rnd(rest.length - 1);
+          var h = [rest[at], rest[at + 1]];
+          if (cmp(evaluate7(h.concat(board)), mirrorVal) < 0) { got = [at, h]; break; }
+        }
+        if (!got) return makeSplit(depth + 1);
+        rest.splice(got[0], 2);
+        holes.push(got[1]);
+      }
+    }
+
+    // 정답 좌석이 늘 0,1 번이 되지 않도록 자리를 섞는다
+    var names = shuffle(NAMES).slice(0, n);
+    var seats = shuffle(holes).map(function (h, i) {
+      return { name: names[i], hole: h, val: evaluate7(h.concat(board)) };
+    });
+
+    var best = seats.reduce(function (a, s) { return cmp(s.val, a.val) > 0 ? s : a; }, seats[0]);
+    var winners = [];
+    seats.forEach(function (s, i) { if (cmp(s.val, best.val) === 0) winners.push(i); });
+    if (winners.length < 2) {
+      if (depth > 200) return makeWinner();   // 있을 수 없는 경우의 안전판
+      return makeSplit(depth + 1);
+    }
+
+    var share = (4 + rnd(12)) * 1000;         // 나눠떨어지는 팟 — 홀칩은 다음 유형에서 다룬다
+    var pot = share * winners.length;
+    return {
+      type: 'split', kicker: '스플릿 팟 판정', limit: 30,
+      q: '쇼다운이다. 팟 ' + fmt(pot) + ' 은 누가 나눠 갖나?',
+      seats: seats, board: board, pot: pot,
+      multi: { answers: winners },
+      why: winners.map(function (i) { return seats[i].name; }).join(' · ') + ' 동점 — ' +
+        catName(best.val) + (byBoard ? ' (보드로 플레이)' : '') +
+        ' · 각 ' + fmt(share) + ' 씩'
+    };
+  }
+
+  /**
+   * 5. 홀칩 배분 — 규칙 출처는 엔진 pots.ts.
+   * TDA 2024 규정집 "20: Awarding Odd Chips" 는 엔진 주석에 원문 대조 기록이 남아 있다.
+   */
+  function makeOddChip() {
+    var n = 4 + rnd(2);                                  // 좌석 4~5
+    var names = shuffle(NAMES).slice(0, n);
+    var winCount = Math.min(2 + rnd(2), n - 1);          // 최소 한 명은 못 받는다
+    var idx = shuffle(names.map(function (_, i) { return i; }));
+    var winners = idx.slice(0, winCount).sort(function (a, b) { return a - b; });
+    var button = rnd(n);
+
+    // 홀칩이 정확히 하나 남게 만든다 (units % winCount === 1)
+    var units = winCount * (30 + rnd(70)) + 1;
+    var pot = units * ODD_UNIT;
+    var share = Math.floor(units / winCount) * ODD_UNIT;
+
+    var ordered = orderFromButton(winners, button, n);
+    var seats = names.map(function (nm, i) {
+      return { name: nm, role: winners.indexOf(i) >= 0 ? 'tie' : 'out' };
+    });
+
+    return {
+      type: 'odd', kicker: '홀칩 배분', limit: 20,
+      q: '메인팟 ' + fmt(pot) + ' 을 동점자 ' + winCount + '명이 나눈다. ' +
+         fmt(share) + ' 씩 가고 남는 ' + ODD_UNIT + ' 칩은 누구에게?',
+      seats: seats, board: [], button: button, pot: pot, share: share,
+      choose: { answer: ordered[0] },
+      why: '버튼 왼쪽 첫 자격자부터 시계방향 — ' +
+        ordered.map(function (i) { return names[i]; }).join(' → ') +
+        ' · 버튼은 ' + names[button] + ' (자격자면 맨 뒤로 간다)' +
+        ' · 100 칩 아래로는 쪼갤 수 없다 [TDA 20 Awarding Odd Chips]'
+    };
+  }
+
+  // 10문제 · 한 유형이 4개를 넘지 않는다
+  var MAKERS = [makeSidePots, makeSidePots, makeSidePots,
+                makeWinner, makeWinner,
+                makePayout, makePayout,
+                makeSplit, makeSplit,
+                makeOddChip];
+
+  var TYPE_LABEL = {
+    side: '사이드팟 분리', winner: '승자 판정', payout: '메인팟 지급',
+    split: '스플릿 팟 판정', odd: '홀칩 배분'
+  };
 
   // ── 상태 ────────────────────────────────────────
   var S;
   function reset() {
     S = {
-      qs: shuffle(MAKERS).map(function (f) { return f(); }),
+      qs: shuffle(MAKERS).map(function (f) {
+        var q = f();
+        if (q.button === undefined) q.button = rnd(q.seats.length);
+        return q;
+      }),
       i: 0, score: 0, streak: 0, best: 0,
       correct: 0,
       byType: {},
-      picked: null, locked: false,
+      picked: null, marks: [], locked: false,
       t: 0, limit: 0, timer: null
     };
     render();
@@ -656,16 +888,18 @@ button.prow:hover, button.prow:focus-visible {
       var discs = '';
       var show = Math.min(g.n, 6);
       for (var i = 0; i < show; i++)
-        discs += '<span class="chip" style="background:' + DENOM_VAR[g.d] + '"></span>';
+        discs += '<span class="chip" style="--c:' + DENOM_VAR[g.d] +
+          ';animation-delay:' + (140 + i * 40) + 'ms"></span>';
       return '<span class="stack"><span class="pile">' + discs + '</span>' +
         '<span class="cnt">' + (g.d >= 1000 ? (g.d / 1000) + 'K' : g.d) +
         (g.n > 6 ? ' ×' + g.n : '') + '</span></span>';
     }).join('') + '</span>';
   }
 
-  function cardHtml(c, sm) {
+  function cardHtml(c, sm, order) {
     var red = c.s === 1 || c.s === 2;
-    return '<span class="pcard' + (red ? ' red' : '') + (sm ? ' sm' : '') + '">' +
+    var delay = order ? ' style="animation-delay:' + (order * 45) + 'ms"' : '';
+    return '<span class="pcard' + (red ? ' red' : '') + (sm ? ' sm' : '') + '"' + delay + '>' +
       '<span class="r">' + RANKS[c.r] + '</span><span class="s">' + SUITS[c.s] + '</span></span>';
   }
 
@@ -679,6 +913,7 @@ button.prow:hover, button.prow:focus-visible {
      */
     S.locked = false;
     S.picked = null;
+    S.marks = [];
 
     $('#qno').textContent = (S.i + 1) + ' / ' + S.qs.length;
     $('#score').textContent = fmt(S.score);
@@ -687,42 +922,75 @@ button.prow:hover, button.prow:focus-visible {
     st.className = 'streak' + (S.streak >= 2 ? '' : ' off');
 
     var chooseMode = !!q.choose;
+    var multiMode = !!q.multi;
+    var clickable = chooseMode || multiMode;
 
     var rows = q.seats.map(function (s, i) {
-      var tag = s.allIn ? '<span class="pallin">올인</span>' : '';
-      var mid = chooseMode
-        ? '<span class="phand">' + s.hole.map(function (c) { return cardHtml(c, true); }).join('') + '</span>' +
+      var tags = '';
+      if (s.allIn) tags += '<span class="ptag allin">올인</span>';
+      if (s.role === 'tie') tags += '<span class="ptag tie">동점</span>';
+      if (s.role === 'out') tags += '<span class="ptag out">폴드</span>';
+      if (q.button === i) tags += '<span class="pbtn">D</span>';
+
+      var mid;
+      if (q.type === 'side') {
+        mid = chipHtml(s.bet) + '<span class="pamt">' + (S.locked ? fmt(s.bet) : '?') + '</span>';
+      } else if (q.type === 'odd') {
+        mid = '<span class="pgrow"></span><span class="pamt">' +
+          (s.role === 'tie' ? fmt(q.share) : '—') + '</span>';
+      } else {
+        mid = '<span class="phand">' +
+          s.hole.map(function (c, k) { return cardHtml(c, true, 5 + i * 2 + k); }).join('') + '</span>' +
           '<span class="pgrow"></span>' +
-          (q.type === 'payout' ? '<span class="pamt">' + fmt(s.bet) + '</span>' : '')
-        : chipHtml(s.bet) + '<span class="pamt">' + (S.locked ? fmt(s.bet) : '?') + '</span>';
-      var tagName = chooseMode ? 'button' : 'div';
+          (q.type === 'payout' ? '<span class="pamt">' + fmt(s.bet) + '</span>' : '');
+      }
+
+      var tagName = clickable ? 'button' : 'div';
       return '<' + tagName + ' class="prow" data-i="' + i + '"' +
-        (chooseMode ? ' type="button"' : '') + '>' +
-        '<span class="pname">' + s.name + tag + '</span>' + mid +
+        (clickable ? ' type="button"' : '') + '>' +
+        '<span class="pname">' + s.name + tags + '</span>' + mid +
         '</' + tagName + '>';
     }).join('');
 
     var boardHtml = q.board.length
-      ? '<div class="board">' + q.board.map(function (c) { return cardHtml(c); }).join('') + '</div>'
+      ? '<div class="board">' + q.board.map(function (c, k) { return cardHtml(c, false, k); }).join('') + '</div>'
       : '';
 
-    var answerHtml = chooseMode
-      ? '<div class="answer"><div class="hint">위에서 좌석을 누르세요.</div></div>'
-      : '<div class="answer"><div class="fields">' +
+    // 홀칩 문제는 보드가 없다 — 대신 팟 더미를 놓아야 "남는 100 칩"이 눈에 보인다
+    var potHtml = q.type === 'odd'
+      ? '<div class="potpile"><span class="lbl">메인팟</span>' +
+        '<span class="amt">' + fmt(q.pot) + '</span>' + chipHtml(q.pot) + '</div>'
+      : '';
+
+    var answerHtml;
+    if (multiMode) {
+      answerHtml = '<div class="answer">' +
+        '<div class="hint">나눠 갖는 좌석을 <b>모두</b> 고르세요. 한 명이라도 틀리면 오답이다.</div>' +
+        '<button class="go" id="go" type="button">확인</button></div>';
+    } else if (chooseMode) {
+      answerHtml = '<div class="answer"><div class="hint">위에서 좌석을 누르세요.</div></div>';
+    } else {
+      answerHtml = '<div class="answer"><div class="fields">' +
           q.fields.map(function (f, i) {
             return '<div class="field"><label>' + f.label + '</label>' +
               '<input type="text" inputmode="numeric" class="fin" data-i="' + i + '" placeholder="0"></div>';
           }).join('') +
         '</div><button class="go" id="go" type="button">확인</button></div>';
+    }
 
     $('#panel').innerHTML =
       '<div class="kicker">' + q.kicker + '</div>' +
       '<div class="qtext">' + q.q + '</div>' +
-      '<div class="felt">' + boardHtml + '<div class="rows">' + rows + '</div></div>' +
-      answerHtml +
-      '<div class="flash" id="flash"></div>';
+      '<div class="felt">' + potHtml + boardHtml + '<div class="rows">' + rows + '</div></div>' +
+      '<div class="flash" id="flash"></div>' +
+      answerHtml;
 
-    if (chooseMode) {
+    if (multiMode) {
+      Array.prototype.forEach.call(document.querySelectorAll('button.prow'), function (b) {
+        b.addEventListener('click', function () { toggleMark(+b.dataset.i, b); });
+      });
+      $('#go').addEventListener('click', answerMulti);
+    } else if (chooseMode) {
       Array.prototype.forEach.call(document.querySelectorAll('button.prow'), function (b) {
         b.addEventListener('click', function () { answerChoice(+b.dataset.i); });
       });
@@ -743,11 +1011,16 @@ button.prow:hover, button.prow:focus-visible {
     var bar = $('#tbar');
     bar.style.width = '100%';
     bar.className = '';
+    var sec = $('#tsec');
+    sec.textContent = S.t.toFixed(1) + 's';
+    sec.className = 'stat tsec';
     S.timer = setInterval(function () {
       S.t -= 0.1;
       var pct = Math.max(0, S.t / S.limit) * 100;
       bar.style.width = pct + '%';
       bar.className = pct < 20 ? 'crit' : pct < 45 ? 'warn' : '';
+      sec.textContent = Math.max(0, S.t).toFixed(1) + 's';
+      sec.className = 'stat tsec' + (pct < 20 ? ' crit' : pct < 45 ? ' warn' : '');
       if (S.t <= 0) { clearInterval(S.timer); S.timer = null; timeUp(); }
     }, 100);
   }
@@ -786,30 +1059,37 @@ button.prow:hover, button.prow:focus-visible {
 
     $('#score').textContent = fmt(S.score);
 
-    if (q.choose) {
+    var nextLabel = S.i + 1 >= S.qs.length ? '결과 보기' : '다음 문제';
+
+    if (q.choose || q.multi) {
+      var right = q.multi ? q.multi.answers : [q.choose.answer];
+      var mine = q.multi ? S.marks : [S.picked];
       Array.prototype.forEach.call(document.querySelectorAll('.prow'), function (b) {
         var i = +b.dataset.i;
-        if (i === q.choose.answer) b.classList.add('right');
-        else if (i === S.picked) b.classList.add('wrong');
+        b.classList.remove('pick');
+        if (right.indexOf(i) >= 0) b.classList.add('right');
+        else if (mine.indexOf(i) >= 0) b.classList.add('wrong');
         b.disabled = true;
       });
     } else {
       Array.prototype.forEach.call(document.querySelectorAll('.fin'), function (inp) { inp.disabled = true; });
-      var go = $('#go');
-      go.textContent = S.i + 1 >= S.qs.length ? '결과 보기' : '다음 문제';
-      go.onclick = next;
       // 금액을 공개한다
       Array.prototype.forEach.call(document.querySelectorAll('.prow .pamt'), function (el, i) {
         el.textContent = fmt(q.seats[i].bet);
       });
     }
 
-    if (q.choose) {
+    var go = $('#go');
+    if (go) {
+      go.textContent = nextLabel;
+      go.onclick = next;
+      go.disabled = false;
+    } else {
       setTimeout(function () {
         var b = document.createElement('button');
         b.className = 'go'; b.type = 'button';
         b.style.margin = '0 16px 16px'; b.style.width = 'calc(100% - 32px)';
-        b.textContent = S.i + 1 >= S.qs.length ? '결과 보기' : '다음 문제';
+        b.textContent = nextLabel;
         b.addEventListener('click', next);
         $('#panel').appendChild(b);
         b.focus();
@@ -829,6 +1109,24 @@ button.prow:hover, button.prow:focus-visible {
     });
     if (vals.some(isNaN)) return;
     var ok = q.fields.every(function (f, i) { return vals[i] === f.answer; });
+    finish(ok, award(ok));
+  }
+
+  function toggleMark(i, el) {
+    if (S.locked) return;
+    var at = S.marks.indexOf(i);
+    if (at >= 0) S.marks.splice(at, 1);
+    else S.marks.push(i);
+    el.classList.toggle('pick', S.marks.indexOf(i) >= 0);
+  }
+
+  /** 복수 선택 — 정확히 일치해야 정답이다. 하나라도 더/덜 고르면 오답. */
+  function answerMulti() {
+    if (S.locked) return;
+    if (!S.marks.length) return;
+    var want = S.qs[S.i].multi.answers;
+    var ok = want.length === S.marks.length &&
+      want.every(function (i) { return S.marks.indexOf(i) >= 0; });
     finish(ok, award(ok));
   }
 
