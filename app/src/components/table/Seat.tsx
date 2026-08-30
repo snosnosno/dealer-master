@@ -23,7 +23,7 @@ export function Seat({
 }) {
   return (
     <div
-      className={`flex w-24 flex-col items-center gap-0.5 ${seat.folded ? 'opacity-40' : ''}`}
+      className={`flex w-full flex-col items-center gap-0.5 ${seat.folded ? 'opacity-40' : ''}`}
     >
       <div className="flex gap-0.5">
         {seat.hole.map((card, i) => (
