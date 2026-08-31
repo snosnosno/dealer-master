@@ -286,19 +286,17 @@ body {
 }
 @keyframes drop { from { opacity: 0; transform: translateY(-9px); } }
 
-.pushed {
-  margin-top: 10px; padding: 10px 12px;
-  background: rgba(0,0,0,.22); border-radius: 11px;
-  border: 1.5px dashed rgba(225,245,238,.4);
-}
-.pushed .cap {
-  font-size: 10.5px; font-weight: 900; letter-spacing: .03em;
-  opacity: .8; margin-bottom: 8px;
-}
-/* 민 칩은 이 화면의 주인공이다 — 로그의 장식용 칩보다 크게 그린다 */
-.pushed .chip { --cs: 27px; }
-.pushed .chips { gap: 12px; padding-top: 4px; }
-.pushed .stack .cnt { font-size: 11px; opacity: 1; }
+/*
+ * 칩은 좌석 안에 그린다. 실제 테이블에서 플레이어가 민 칩은 그 사람 앞에 놓인다 —
+ * 테이블 밖 별도 상자로 빼면 누가 밀었는지가 그림에서 끊긴다.
+ */
+.schips { display: flex; justify-content: center; min-height: 26px; }
+.schips .chip { --cs: 19px; }
+.schips .chips { gap: 6px; }
+.schips .stack .cnt { font-size: 9px; opacity: .95; }
+/* 민 칩은 문제의 주인공이라 크게 — 개수를 세는 것이 곧 정답이다 */
+.seat.pushing .schips .chip { --cs: 24px; }
+.seat.pushing .schips .stack .cnt { font-size: 10px; opacity: 1; }
 
 /* ── 답변 ─────────────────────────────────────── */
 .answers { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; }
@@ -402,6 +400,14 @@ body {
   function pick(a) { return a[rnd(a.length)]; }
   function fmt(n) { return n.toLocaleString('ko-KR'); }
   function round100(n) { return Math.max(100, Math.round(n / 100) * 100); }
+
+  /*
+   * 그 레벨에서 실제로 테이블에 남아 있는 최소 칩 단위.
+   * 블라인드가 오르면 작은 칩은 레이스로 사라진다 — 1,000/2,000 레벨에서 100 칩을
+   * 그리면 현실과 다르고, 칩 더미가 잔돈으로 뒤덮여 좌석이 읽히지 않는다.
+   */
+  function unitFor(bb) { return bb >= 2000 ? 1000 : (bb >= 1000 ? 500 : 100); }
+  function roundUnit(n, u) { return Math.max(u, Math.round(n / u) * u); }
   function $(s) { return document.querySelector(s); }
 
   /**
@@ -463,6 +469,24 @@ body {
     });
     return out;
   }
+  /**
+   * 좌석 앞 칩 더미. **가장 큰 액면 한 종류만** 그린다.
+   *
+   * 정확히 분해하면 1,400 이 1K + 100×4 가 되어 좌석마다 잔돈 칩이 쌓이고,
+   * 칩 줄이 감기면서 좌석 높이가 제각각이 된다. 칩은 "얼마나 큰 스택인가"를 알리는
+   * 시각 신호이고 정확한 금액은 바로 아래 숫자가 이미 말한다 — 러시 테이블도 같다.
+   *
+   * 액면 구성 자체가 정답인 문제(제31조 다중 칩)는 좌석에 `chips` 를 명시해
+   * 이 함수를 거치지 않는다.
+   */
+  function chipsOf(amount) {
+    var top = breakdown(amount)[0];
+    if (!top) return [];
+    var out = [];
+    for (var i = 0; i < top.n; i++) out.push(top.d);
+    return out;
+  }
+
   /** 칩 목록(액면 배열)을 그대로 그린다 — 다중 칩 문제는 "무엇을 밀었나"가 곧 문제다. */
   function chipListHtml(list) {
     var groups = {};
@@ -488,13 +512,14 @@ body {
   /** 프리플랍 레이즈 연쇄를 만든다. 짧은 올인은 폭을 갱신하지 않는다(제35조 2항). */
   function makeChain(bb, opts) {
     opts = opts || {};
+    var u = unitFor(bb);
     var currentBet = bb, lastRaiseSize = bb;
     var rows = [{ who: 'BB', act: '빅블라인드', amt: bb }];
     var used = 0;
 
     var fullRaises = opts.fullRaises || (2 + rnd(2));   // 2~3회
     for (var i = 0; i < fullRaises; i++) {
-      var inc = round100(lastRaiseSize * (1.05 + Math.random() * 1.6));
+      var inc = roundUnit(lastRaiseSize * (1.05 + Math.random() * 1.6), u);
       var to = currentBet + inc;
       rows.push({ who: SEATS[used++], act: 'RAISE', amt: to });
       lastRaiseSize = to - currentBet;
@@ -508,8 +533,8 @@ body {
     var shorts = opts.shorts === undefined ? rnd(3) : opts.shorts;  // 0~2회
     shorts = Math.max(0, Math.min(shorts, 4 - fullRaises));
     for (var j = 0; j < shorts; j++) {
-      var sinc = round100(lastRaiseSize * (0.05 + Math.random() * 0.35));
-      if (sinc >= lastRaiseSize) sinc = 100;          // 반드시 미달이어야 한다
+      var sinc = roundUnit(lastRaiseSize * (0.05 + Math.random() * 0.35), u);
+      if (sinc >= lastRaiseSize) sinc = u;            // 반드시 미달이어야 한다
       var sto = currentBet + sinc;
       rows.push({ who: SEATS[used++], act: 'ALL IN', amt: sto, allIn: true });
       currentBet = sto;                                // 콜 금액만 오른다
@@ -613,10 +638,9 @@ body {
       rows: [{ who: 'UTG', act: 'BET', amt: call }],
       seats: [
         { name: 'UTG', bet: call, act: 'BET' },
-        { name: 'MP', bet: 0, act: '칩을 밀었다', pushing: true }
+        { name: 'MP', bet: chip, chips: [chip], act: '밀었다 (선언 없음)', pushing: true }
       ],
       button: null, heroName: 'MP',
-      pushed: [chip], pushedCap: '민 칩 (콜 금액 ' + fmt(call) + ')',
       options: [
         { t: '콜', note: '거스름 ' + fmt(chip - call) + ' 을 되돌려준다', ok: !declared },
         { t: '레이즈 ' + fmt(chip), note: '총액 ' + fmt(chip) + ' 으로의 레이즈', ok: declared }
@@ -677,10 +701,10 @@ body {
       rows: [{ who: 'UTG', act: 'BET', amt: call }],
       seats: [
         { name: 'UTG', bet: call, act: 'BET' },
-        { name: 'MP', bet: 0, act: '칩을 밀었다', pushing: true }
+        { name: 'MP', bet: total, chips: chips,
+          act: lastChips ? '밀었다 (남은 칩 전부)' : '밀었다 (칩 더 있음)', pushing: true }
       ],
       button: null, heroName: 'MP',
-      pushed: chips, pushedCap: '민 칩 ' + fmt(total) + ' (콜 금액 ' + fmt(call) + ')',
       options: [
         { t: '콜', note: '가장 작은 칩 하나를 빼면 콜에 미달', ok: verdict === 'call' },
         { t: '레이즈 시도', note: '50% 규칙(제29조 3항)의 적용을 받는다', ok: verdict === 'raise' },
@@ -811,8 +835,13 @@ body {
       if (s.allIn) tags += '<span class="ptag">올인</span>';
       if (q.button === i) tags += '<span class="pbtn">D</span>';
 
+      if (s.pushing) cls += ' pushing';
+      // 명시된 칩 목록이 있으면 그대로(액면이 곧 정답), 없으면 금액을 액면으로 편다
+      var chipList = s.chips || (s.bet ? chipsOf(s.bet) : null);
+
       return '<div class="' + cls + '" style="grid-column:' + p[0] + ';grid-row:' + p[1] + '">' +
         '<span class="sname">' + s.name + tags + '</span>' +
+        '<span class="schips">' + (chipList ? chipListHtml(chipList) : '') + '</span>' +
         '<span class="sbet' + (s.bet ? '' : ' zero') + '">' + (s.bet ? fmt(s.bet) : '—') + '</span>' +
         '<span class="sact">' + (s.act || '') + '</span>' +
       '</div>';
@@ -831,7 +860,8 @@ body {
   }
 
   function seqHtml(q) {
-    if (!q.rows || !q.rows.length) return '';
+    // 액션이 하나뿐이면 테이블이 이미 다 보여준다 — 한 줄짜리 연쇄는 중복일 뿐이다
+    if (!q.rows || q.rows.length < 2) return '';
     var parts = q.rows.map(function (r) {
       var mark = r.oot ? ' class="oot"' : (q.heroWho && r.who === q.heroWho ? ' class="hi"' : '');
       return '<span' + mark + '>' + r.who + ' ' + r.act +
@@ -853,8 +883,6 @@ body {
           (q.street ? ' · ' + q.street : ' · 프리플랍') + '</div>' +
         tableHtml(q) +
         seqHtml(q) +
-        (q.pushed ? '<div class="pushed"><div class="cap">' + q.pushedCap + '</div>' +
-          chipListHtml(q.pushed) + '</div>' : '') +
       '</div>';
 
     if (q.input === 'number') {
