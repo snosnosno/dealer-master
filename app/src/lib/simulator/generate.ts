@@ -8,7 +8,7 @@
 import { makeDeck, shuffle, type Card } from './cards'
 import { createRng, type Rng } from './rng'
 import { decideAction, pickStacks, type StackPlan } from './bots'
-import { initialState, applyEvent } from './reduce'
+import { initialState, applyEvent, isFullRaise } from './reduce'
 import { awardPots, buildPots } from './pots'
 import type { RulesetId } from './rulesets/types'
 import type { HandEvent, HandState, SeatInit, Street } from './types'
@@ -107,8 +107,14 @@ export function runBettingRound(
   let lastAggressor: number | null = null
 
   let currentBet = Math.max(...s.seats.map((x) => x.bet))
-  // 프리플랍은 빅블라인드가 오픈 벳 역할을 하므로 레이즈 폭의 출발점이 bb 다.
-  let lastRaiseSize = street === 'preflop' ? bb : 0
+  /*
+   * 레이즈 폭은 상태가 들고 간다 (`HandState.lastRaiseSize`).
+   * 여기서 따로 세면 정본이 둘로 갈라져, 화면이 묻는 "최소 레이즈"와
+   * 생성기가 만든 핸드가 어긋난다.
+   *
+   * 상태가 주는 출발점이 옛 지역 변수와 같은지 확인해 둔다 — 프리플랍은
+   * 빅블라인드 포스트가 bb 로 세워두고, 그 이후 스트릿은 deal_board 가 0 으로 지운다.
+   */
   /*
    * "지금 마주한 벳이 이 라운드의 첫 벳인가" (Rule 51-B, rulesets/types.ts).
    * 마주한 쪽의 성질이지 "아직 벳이 없다"가 아니다 — 프리플랍은 빅블라인드가
@@ -141,17 +147,18 @@ export function runBettingRound(
 
     openBetTrajectory.push(isOpenBet)
     const e = decideAction(s, seat, {
-      rng, bb, currentBet, lastRaiseSize, isOpenBet, street, plan,
+      rng, bb, currentBet, lastRaiseSize: s.lastRaiseSize, isOpenBet, street, plan,
       canRaise: !actedSinceFullRaise.has(seat),
     })
     events.push(e)
+    // 풀 레이즈 판정은 액션을 적용하기 **전** 상태를 기준으로 한다.
+    const beforeAction = s
     s = applyEvent(s, e)
     acted.add(seat)
     actedSinceFullRaise.add(seat)
 
     const newBet = s.seats[seat].bet
     if (newBet > currentBet) {
-      const raiseSize = newBet - currentBet
       /*
        * 오픈 벳 자격을 없애는 것은 "벳이 있었다" 위에 얹힌 레이즈뿐이다.
        * 벳이 없던 자리에 깔린 첫 벳은 그 자신이 오픈 벳이므로 참을 유지한다.
@@ -165,12 +172,10 @@ export function runBettingRound(
       // 풀 레이즈에 못 미치는 올인도 공격이다 — 리오픈 권리와 공개 순서는 다른 규칙이다.
       lastAggressor = seat
       /*
-       * 풀 레이즈만 베팅을 다시 연다.
-       * 풀 레이즈에 못 미치는 올인은 lastRaiseSize 를 갱신하지도 않는다 —
-       * 갱신해버리면 그 뒤 사람의 최소 레이즈가 규정보다 작아진다.
+       * 풀 레이즈만 베팅을 다시 연다. 폭 갱신은 리듀서가 이미 했으므로
+       * 여기서는 같은 판정을 빌려 레이즈 권리만 초기화한다.
        */
-      if (raiseSize >= Math.max(lastRaiseSize, bb)) {
-        lastRaiseSize = raiseSize
+      if (isFullRaise(beforeAction, newBet)) {
         actedSinceFullRaise = new Set([seat])
       }
     }

@@ -23,7 +23,29 @@ export function initialState(seats: SeatInit[], buttonSeat: number): HandState {
     pot: 0,
     street: 'preflop',
     contributed: seats.map(() => 0),
+    lastRaiseSize: 0,
+    bigBlind: 0,
   }
+}
+
+/** 이번 라운드의 현재 최고 벳. */
+function currentBet(state: HandState): number {
+  return state.seats.reduce((max, s) => (s.bet > max ? s.bet : max), 0)
+}
+
+/**
+ * 이 벳이 베팅을 다시 여는 **풀 레이즈**인가.
+ *
+ * 리듀서는 이 판단으로 `lastRaiseSize` 를 갱신하고, 생성기는 같은 판단으로
+ * 레이즈 권리(`actedSinceFullRaise`)를 초기화한다. 판단이 둘로 갈라지면
+ * "폭은 안 늘었는데 베팅은 다시 열렸다" 같은 불가능한 상태가 만들어진다.
+ *
+ * @param state  액션을 적용하기 **전**의 상태
+ * @param newBet 액션 후 그 좌석의 실제 벳 (스택에 잘린 뒤의 값)
+ */
+export function isFullRaise(state: HandState, newBet: number): boolean {
+  const before = currentBet(state)
+  return newBet > before && newBet - before >= Math.max(state.lastRaiseSize, state.bigBlind)
 }
 
 /** 좌석 하나만 바꾼 새 seats 배열을 만든다. */
@@ -73,6 +95,14 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
       // 내므로 sb/bb 는 동작이 같고, 앤티는 블라인드와 어느 순서로 와도 합계가 옳아진다.
       // 목표치로 다루면 앤티가 블라인드에 흡수되거나(과소 징수) 음수 delta 가 된다.
       const { seats, contributed } = raiseBetTo(state, e.seat, state.seats[e.seat].bet + e.amount)
+      /*
+       * 프리플랍의 오픈 벳은 빅블라인드이고 그 폭도 빅블라인드다.
+       * 앤티와 스몰블라인드는 벳을 여는 것이 아니므로 폭을 건드리지 않는다.
+       */
+      if (e.kind === 'bb') {
+        const posted = seats[e.seat].bet
+        return { ...state, seats, contributed, bigBlind: posted, lastRaiseSize: posted }
+      }
       return { ...state, seats, contributed }
     }
 
@@ -86,7 +116,8 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
       return state
 
     case 'deal_board':
-      return { ...state, board: [...state.board, ...e.cards], street: e.street }
+      // 새 베팅 라운드에는 직전 폭이 없다. 하한은 룰셋이 빅블라인드로 잡아준다.
+      return { ...state, board: [...state.board, ...e.cards], street: e.street, lastRaiseSize: 0 }
 
     case 'player_action': {
       const a = e.action
@@ -94,8 +125,19 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
         return { ...state, seats: withSeat(state, e.seat, { folded: true }) }
       }
       if (a.kind === 'check') return state
+      const before = currentBet(state)
       const { seats, contributed } = raiseBetTo(state, e.seat, a.to)
-      return { ...state, seats, contributed }
+      /*
+       * 폭은 **요청한 to 가 아니라 실제로 오른 벳**에서 잰다. 스택에 잘린 올인은
+       * 요청보다 적게 오르는데, 요청값으로 재면 다음 사람의 최소 레이즈가 부풀려진다.
+       *
+       * 그리고 풀 레이즈만 폭을 갱신한다. 못 미치는 올인이 폭을 덮어쓰면 그 뒤 사람의
+       * 최소 레이즈가 규정보다 작아진다 — TD 시험 문제 6 이 노리는 함정이 정확히 이것이다
+       * (`rulesets/nlh.exam.test.ts`).
+       */
+      const after = seats[e.seat].bet
+      const lastRaiseSize = isFullRaise(state, after) ? after - before : state.lastRaiseSize
+      return { ...state, seats, contributed, lastRaiseSize }
     }
 
     case 'return_uncalled': {

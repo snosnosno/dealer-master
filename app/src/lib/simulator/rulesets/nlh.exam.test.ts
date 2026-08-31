@@ -8,34 +8,46 @@
  * 풀 레이즈에 못 미치는 올인이 `lastRaiseSize` 를 갱신해버리면 그 뒤 사람의 최소
  * 레이즈가 규정보다 작아지고, 훈련생이 틀린 금액을 정답으로 배운다.
  *
- * 아래 replay 는 `generate.ts` 의 갱신 규칙(:154, :172)을 그대로 옮긴 것이다 —
- * `raiseSize = newBet - currentBet`, 그리고 `raiseSize >= max(lastRaiseSize, bb)` 일 때만 갱신.
+ * 액션을 **상태 기계에 실제로 통과시킨다.** 갱신 규칙을 테스트에 옮겨 적으면
+ * 테스트가 검증하는 것은 엔진이 아니라 그 사본이 된다.
  */
 import { describe, it, expect } from 'vitest'
 import { nlh } from './nlh'
+import { initialState, applyEvent } from '../reduce'
+import type { HandState, SeatInit } from '../types'
 
 type Wager = { to: number; allIn?: boolean }
 
-/** 프리플랍 레이즈 연쇄를 재생해 (현재 최고 벳, 마지막 풀레이즈 폭) 을 낸다. */
-function replay(bb: number, wagers: Wager[]): { currentBet: number; lastRaiseSize: number } {
-  // 프리플랍의 시작 상태: 빅블라인드가 곧 오픈 벳이고 그 폭도 bb 다 (generate.ts:111)
-  let currentBet = bb
-  let lastRaiseSize = bb
+const DEEP = 1_000_000_000
 
-  for (const w of wagers) {
-    const raiseSize = w.to - currentBet
-    currentBet = w.to
-    if (raiseSize >= Math.max(lastRaiseSize, bb)) lastRaiseSize = raiseSize
-  }
-  return { currentBet, lastRaiseSize }
-}
-
+/**
+ * 프리플랍 레이즈 연쇄를 실제 리듀서로 재생하고, 그 상태로 최소 레이즈 총액을 묻는다.
+ * 좌석 0·1 은 블라인드, 그 뒤로 wagers 가 순서대로 앉는다.
+ * 올인 표시된 벳은 좌석 스택을 그 금액에 맞춰 **진짜 올인**으로 만든다.
+ */
 function minRaiseTo(bb: number, wagers: Wager[]): number {
-  const { currentBet, lastRaiseSize } = replay(bb, wagers)
+  const seats: SeatInit[] = [
+    { name: 'SB', stack: DEEP },
+    { name: 'BB', stack: DEEP },
+    ...wagers.map((w, i) => ({ name: `P${i}`, stack: w.allIn ? w.to : DEEP })),
+  ]
+
+  let s: HandState = initialState(seats, 0)
+  s = applyEvent(s, { type: 'post_blind', seat: 0, amount: Math.floor(bb / 2), kind: 'sb' })
+  s = applyEvent(s, { type: 'post_blind', seat: 1, amount: bb, kind: 'bb' })
+
+  wagers.forEach((w, i) => {
+    s = applyEvent(s, {
+      type: 'player_action',
+      seat: i + 2,
+      action: w.allIn ? { kind: 'allin', to: w.to } : { kind: 'raise', to: w.to },
+    })
+  })
+
   return nlh.minRaiseTo({
-    currentBet,
-    lastRaiseSize,
-    bigBlind: bb,
+    currentBet: Math.max(...s.seats.map((x) => x.bet)),
+    lastRaiseSize: s.lastRaiseSize,
+    bigBlind: s.bigBlind,
     // 규정이 정하는 최소 총액을 묻는 것이라 좌석 스택을 보지 않는다 (decisions.ts 와 같은 중립값)
     seatBet: 0,
     seatStack: Number.MAX_SAFE_INTEGER,
@@ -83,7 +95,7 @@ describe('TD 시험 문제 — MP+2 의 최소 레이즈 금액', () => {
   })
 
   it('짧은 올인이 최소 레이즈를 깎지 않는다', () => {
-    // 같은 자리에서 짧은 올인이 없었다면 답은 13,500 + 8,800 = 22,300 이다.
+    // 짧은 올인이 없었다면 답은 13,500 + 8,800 = 22,300 이다.
     // 짧은 올인 둘은 콜 금액만 16,000 으로 올리고 폭은 8,800 그대로 둔다.
     const withShortAllIns = minRaiseTo(2000, [
       { to: 4700 },
