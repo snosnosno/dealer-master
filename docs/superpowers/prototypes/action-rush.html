@@ -117,25 +117,85 @@ body {
   background: linear-gradient(170deg, var(--felt) 0%, var(--felt-edge) 100%);
   padding: 13px 14px 14px; color: var(--felt-ink);
 }
+
+/* ── 펠트 · 테이블 ─────────────────────────────── */
+.felt {
+  position: relative;
+  margin: 0 0 11px;
+  border-radius: 30px / 24px;
+  padding: 11px 8px 9px;
+  background:
+    radial-gradient(ellipse at 50% 32%,
+      color-mix(in srgb, var(--felt) 88%, #fff) 0%, var(--felt) 50%, var(--felt-edge) 100%);
+  box-shadow:
+    inset 0 0 30px rgba(0,0,0,.3),
+    0 0 0 3px var(--felt-deep),
+    0 0 0 8px #33241A,
+    0 0 0 9px rgba(0,0,0,.35),
+    0 6px 16px rgba(0,0,0,.3);
+}
+
+/*
+ * 좌석을 절대좌표로 타원에 뿌리지 않는다 — 폭이 좁아지면 서로 겹친다.
+ * 5열 그리드에 앉히면 겹칠 수가 없고, 바깥 좌석을 아래 줄에 두면 테이블을
+ * 둘러싼 모양이 나온다. 액션이 시계방향으로 도는 게 눈으로 읽히는 것이 목적이다.
+ * (러시 프로토타입에서 확립한 방식 — 같은 이유로 같은 구조를 쓴다)
+ */
+.tbl {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px 4px;
+  align-items: start;
+}
+.seat {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 5px 3px 6px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: rgba(0,0,0,.19);
+  color: var(--felt-ink);
+  min-width: 0; min-height: 50px;
+}
+.seat.hero { border-color: var(--amber); background: rgba(239,159,39,.24); }
+.seat.oot  { border-color: var(--red); background: rgba(178,58,46,.28); }
+.seat.acted { opacity: .96; }
+.seat.waiting { opacity: .55; }
+.sname {
+  display: flex; align-items: center; justify-content: center; gap: 3px; flex-wrap: wrap;
+  font-size: 11.5px; font-weight: 800; line-height: 1.1;
+}
+.sbet { font-family: var(--mono); font-size: 12px; font-weight: 800; }
+.sbet.zero { opacity: .38; }
+.sact { font-size: 9.5px; font-weight: 700; opacity: .78; letter-spacing: .01em; }
+.ptag {
+  font-size: 8.5px; font-weight: 900; padding: 1px 4px; border-radius: 99px;
+  background: var(--red); color: #fff; letter-spacing: .02em;
+}
+.pbtn {
+  font-size: 8.5px; font-weight: 900; width: 14px; height: 14px; border-radius: 50%;
+  background: #FBFBF8; color: #33241A;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.center {
+  text-align: center; margin-top: 9px;
+  font-family: var(--mono); font-size: 11.5px; font-weight: 800;
+  color: var(--felt-ink); opacity: .82; letter-spacing: .02em;
+}
 .blindline {
   font-family: var(--mono); font-size: 11px; font-weight: 800;
   opacity: .82; letter-spacing: .02em; margin-bottom: 9px;
 }
-.log { display: flex; flex-direction: column; gap: 5px; }
-.row {
-  display: flex; align-items: center; gap: 9px;
-  background: rgba(0,0,0,.17); border-radius: 9px;
-  padding: 7px 10px;
+.seq {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 5px;
+  font-size: 11.5px; font-weight: 700; line-height: 1.5;
+  background: rgba(0,0,0,.2); border-radius: 10px; padding: 8px 11px;
   animation: slide .22s ease-out backwards;
 }
-.row.hero { background: rgba(239,159,39,.22); box-shadow: inset 0 0 0 1.5px var(--amber); }
-.row .who { font-weight: 800; font-size: 12.5px; width: 60px; flex: none; }
-.row .act { font-size: 12.5px; font-weight: 600; opacity: .92; flex: 1; }
-.row .amt { font-family: var(--mono); font-weight: 800; font-size: 13.5px; }
-.row .tag {
-  font-size: 9.5px; font-weight: 900; padding: 2px 6px; border-radius: 99px;
-  background: var(--red); color: #fff; letter-spacing: .03em;
-}
+.seq span { opacity: .9; }
+.seq span b { font-family: var(--mono); font-weight: 800; font-size: 12.5px; }
+.seq span.hi { color: var(--amber); opacity: 1; }
+.seq span.oot { color: #FFB4A8; opacity: 1; }
+.seq i { opacity: .45; font-style: normal; font-size: 10.5px; }
 @keyframes slide { from { opacity: 0; transform: translateX(-6px); } }
 
 /* ── 칩 ───────────────────────────────────────── */
@@ -389,9 +449,29 @@ body {
       currentBet = sto;                                // 콜 금액만 오른다
     }
 
+    /*
+     * 테이블 좌석을 만든다. 프리플랍이므로 순서는 BB 다음이 UTG 다.
+     * 아직 액션하지 않은 좌석도 자리를 차지해야 "누구 차례인가"가 보인다 —
+     * 액션한 사람만 그리면 순서 문제가 로그와 다를 게 없어진다.
+     */
+    var seats = [
+      { name: 'SB', bet: bb / 2, act: '스몰블라인드', blind: true },
+      { name: 'BB', bet: bb, act: '빅블라인드', blind: true }
+    ];
+    rows.slice(1).forEach(function (r) {
+      seats.push({ name: r.who, bet: r.amt, act: r.act, allIn: r.allIn });
+    });
+    if (SEATS[used]) seats.push({ name: SEATS[used], bet: 0, act: '차례', waiting: true });
+
     return {
       bb: bb, rows: rows, currentBet: currentBet, lastRaiseSize: lastRaiseSize,
-      nextSeat: SEATS[used], shorts: shorts
+      nextSeat: SEATS[used], shorts: shorts,
+      /*
+       * 버튼은 표시하지 않는다. 좌석 배열이 SB 부터 시작하므로 버튼은 배열 밖(SB 직전)에 있고,
+       * 이 유형들의 정답은 버튼 위치와 무관하다. 자리를 지어내 표시하면 틀린 것을 가르치게 된다.
+       * 버튼이 정답에 관여하는 유형(데드 버튼)을 만들 때 좌석 모델을 확장한다.
+       */
+      seats: seats, button: null
     };
   }
 
@@ -405,6 +485,7 @@ body {
       kind: '최소 레이즈', limit: 28, cite: ART.minraise,
       q: '<em>' + c.nextSeat + '</em> 이(가) 할 수 있는 <em>최소 레이즈 총액</em>은?',
       bb: bb, rows: c.rows, input: 'number', answer: answer,
+      seats: c.seats, button: c.button, heroName: c.nextSeat,
       why: '직전 <b>풀 레이즈 폭이 ' + fmt(c.lastRaiseSize) + '</b> 이다. ' +
         (c.shorts > 0
           ? '뒤따른 올인 ' + c.shorts + '건은 폭에 미치지 못해 <b>폭을 갱신하지 않는다</b> — 콜 금액만 ' +
@@ -429,6 +510,7 @@ body {
       kind: '베팅 기회 재개', limit: 20, cite: ART.reopen,
       q: '<em>' + hero + '</em> 에게 액션이 돌아왔다. <em>레이즈할 수 있나?</em>',
       bb: bb, rows: c.rows, heroWho: hero,
+      seats: c.seats, button: c.button, heroName: hero,
       options: [
         { t: '레이즈할 수 있다', note: '폴드 · 콜 · 레이즈 모두 가능', ok: canRaise },
         { t: '레이즈할 수 없다', note: '폴드 · 콜만 가능', ok: !canRaise }
@@ -463,6 +545,11 @@ body {
          '이 액션은?',
       bb: bb,
       rows: [{ who: 'UTG', act: 'BET', amt: call }],
+      seats: [
+        { name: 'UTG', bet: call, act: 'BET' },
+        { name: 'MP', bet: 0, act: '칩을 밀었다', pushing: true }
+      ],
+      button: null, heroName: 'MP',
       pushed: [chip], pushedCap: '민 칩 (콜 금액 ' + fmt(call) + ')',
       options: [
         { t: '콜', note: '거스름 ' + fmt(chip - call) + ' 을 되돌려준다', ok: !declared },
@@ -522,6 +609,11 @@ body {
          '이 액션은?',
       bb: bb,
       rows: [{ who: 'UTG', act: 'BET', amt: call }],
+      seats: [
+        { name: 'UTG', bet: call, act: 'BET' },
+        { name: 'MP', bet: 0, act: '칩을 밀었다', pushing: true }
+      ],
+      button: null, heroName: 'MP',
       pushed: chips, pushedCap: '민 칩 ' + fmt(total) + ' (콜 금액 ' + fmt(call) + ')',
       options: [
         { t: '콜', note: '가장 작은 칩 하나를 빼면 콜에 미달', ok: verdict === 'call' },
@@ -570,6 +662,15 @@ body {
       q: 'C가 순서를 어기고 <em>' + ootLabel + '</em>했다. B는 <em>' + properLabel +
          '</em>. C의 액션은?',
       bb: bb, rows: rows, heroWho: 'C',
+      /* 시계방향 순서가 A → B → C 다. C 가 B 를 건너뛰고 먼저 행동한 것이 문제의 핵심이라
+         좌석 순서로 보여야 한다 — 목록으로는 '건너뛰었다'가 드러나지 않는다. */
+      seats: [
+        { name: 'A', bet: oot === 'check' ? 0 : bet, act: oot === 'check' ? 'CHECK' : 'BET' },
+        { name: 'B', bet: proper === 'raise' ? raiseTo : (proper === 'bet' || proper === 'call' ? bet : 0),
+          act: properLabel.toUpperCase() + ' (본래 순서)' },
+        { name: 'C', bet: oot === 'call' ? bet : 0, act: ootLabel + ' · 순서 위반', ootSeat: true }
+      ],
+      button: null, heroName: 'C',
       options: [
         { t: '구속력을 가진다', note: 'C의 ' + josa(ootLabel, '은', '는') + ' 그대로 유효하다', ok: binding },
         { t: '무효 — 벳을 회수하고 새 옵션', note: 'C는 모든 옵션을 새로 가진다', ok: !binding }
@@ -605,14 +706,64 @@ body {
   function saveBest(v) { try { localStorage.setItem('actionrush.best', String(v)); } catch (e) {} }
 
   // ── 렌더 ───────────────────────────────────────
-  function rowHtml(r, hero, idx) {
-    var cls = 'row' + (r.oot || (hero && r.who === hero) ? ' hero' : '');
-    return '<div class="' + cls + '" style="animation-delay:' + (idx * 40) + 'ms">' +
-      '<span class="who">' + r.who + '</span>' +
-      '<span class="act">' + r.act + '</span>' +
-      (r.allIn ? '<span class="tag">올인</span>' : '') +
-      (r.amt != null ? '<span class="amt">' + fmt(r.amt) + '</span>' : '') +
+  /*
+   * 좌석 배치. 5열 그리드의 [열, 행] 좌표를 좌석 수마다 미리 정해둔다.
+   * 위 줄 가운데 3칸 → 양옆 → 아래 두 칸 순서로 시계방향을 만든다.
+   */
+  var POS = {
+    1: [[3, 1]],
+    2: [[2, 1], [4, 1]],
+    3: [[1, 2], [3, 1], [5, 2]],
+    4: [[1, 2], [2, 1], [4, 1], [5, 2]],
+    5: [[1, 2], [2, 1], [3, 1], [4, 1], [5, 2]],
+    6: [[1, 2], [2, 1], [3, 1], [4, 1], [5, 2], [4, 3]],
+    7: [[1, 2], [2, 1], [3, 1], [4, 1], [5, 2], [4, 3], [2, 3]],
+    8: [[1, 2], [2, 1], [3, 1], [4, 1], [5, 2], [4, 3], [3, 3], [2, 3]]
+  };
+
+  function tableHtml(q) {
+    if (!q.seats || !q.seats.length) return '';
+    var pos = POS[q.seats.length] || POS[8];
+    var total = q.seats.reduce(function (a, s) { return a + (s.bet || 0); }, 0);
+
+    var seatsHtml = q.seats.map(function (s, i) {
+      var p = pos[i] || [3, 1];
+      var cls = 'seat';
+      if (s.ootSeat) cls += ' oot';
+      else if (s.name === q.heroName) cls += ' hero';
+      if (s.waiting) cls += ' waiting';
+
+      var tags = '';
+      if (s.allIn) tags += '<span class="ptag">올인</span>';
+      if (q.button === i) tags += '<span class="pbtn">D</span>';
+
+      return '<div class="' + cls + '" style="grid-column:' + p[0] + ';grid-row:' + p[1] + '">' +
+        '<span class="sname">' + s.name + tags + '</span>' +
+        '<span class="sbet' + (s.bet ? '' : ' zero') + '">' + (s.bet ? fmt(s.bet) : '—') + '</span>' +
+        '<span class="sact">' + (s.act || '') + '</span>' +
       '</div>';
+    }).join('');
+
+    return '<div class="felt"><div class="tbl">' + seatsHtml + '</div>' +
+      '<div class="center">테이블 위 ' + fmt(total) + '</div></div>';
+  }
+
+  /*
+   * 액션을 한 줄로 압축한다.
+   *
+   * 테이블은 **위치**를, 이 줄은 **시간 순서**를 보여준다. 둘 다 필요하다 —
+   * 테이블만 보면 순서를 어긴 사람이 언제 행동했는지 알 수 없고, 목록만 보면
+   * 누가 누구를 건너뛰었는지 알 수 없다. 다만 목록 형태로 두면 테이블과 금액이
+   * 그대로 중복돼 화면이 두 배로 길어지므로, 연쇄만 남긴다.
+   */
+  function seqHtml(q) {
+    if (!q.rows || !q.rows.length) return '';
+    var parts = q.rows.map(function (r) {
+      var mark = r.oot ? ' class="oot"' : (q.heroWho && r.who === q.heroWho ? ' class="hi"' : '');
+      return '<span' + mark + '>' + r.who + ' ' + r.act +
+        (r.amt != null ? ' <b>' + fmt(r.amt) + '</b>' : '') + '</span>';
+    });
+    return '<div class="seq">' + parts.join('<i>→</i>') + '</div>';
   }
 
   function render() {
@@ -626,7 +777,8 @@ body {
       '<div class="board">' +
         '<div class="blindline">BLIND ' + fmt(q.bb / 2) + '/' + fmt(q.bb) +
           (q.street ? ' · ' + q.street : ' · 프리플랍') + '</div>' +
-        '<div class="log">' + q.rows.map(function (r, i) { return rowHtml(r, q.heroWho, i); }).join('') + '</div>' +
+        tableHtml(q) +
+        seqHtml(q) +
         (q.pushed ? '<div class="pushed"><div class="cap">' + q.pushedCap + '</div>' +
           chipListHtml(q.pushed) + '</div>' : '') +
       '</div>';
