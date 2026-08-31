@@ -37,3 +37,7 @@ next-env.d.ts
 
 # TDA 규정집 원문 PDF (저작권물 — 로컬 대조용)
 *.pdf
+.gstack/
+
+# Claude Code 에이전트 로컬 학습 메모리 (머신 종속, 공유 대상 아님)
+.claude/agent-memory/
