@@ -9,8 +9,32 @@
  * 모든 접근을 try/catch 로 감싼다. 사파리 프라이빗 모드나 스토리지 차단 설정에서는
  * `localStorage` 를 읽는 것만으로 던진다 — 기록 하나 때문에 게임이 멈추면 안 된다.
  */
+import { useSyncExternalStore } from 'react'
+
 const BEST_KEY = 'potrush.best'
 const MUTED_KEY = 'potrush.muted'
+
+/*
+ * 저장값을 **외부 스토어**로 다룬다.
+ *
+ * 마운트 이펙트에서 읽어 setState 하면 렌더가 한 번 더 돌고(React 가 경고한다),
+ * 서버가 그린 값과 클라이언트 첫 렌더가 어긋난다. useSyncExternalStore 는 그 둘을
+ * 갈라 놓는다 — 서버는 기본값, 클라이언트는 저장값, 다른 탭의 변경까지 따라온다.
+ */
+const listeners = new Set<() => void>()
+
+function subscribe(onChange: () => void): () => void {
+  listeners.add(onChange)
+  window.addEventListener('storage', onChange)
+  return () => {
+    listeners.delete(onChange)
+    window.removeEventListener('storage', onChange)
+  }
+}
+
+function emit(): void {
+  for (const listener of listeners) listener()
+}
 
 export function readBest(): number {
   try {
@@ -30,7 +54,13 @@ export function saveBest(score: number): boolean {
   } catch {
     // 저장이 안 되는 환경이어도 이번 판의 점수는 화면에 그대로 남는다
   }
+  emit()
   return true
+}
+
+/** 최고 기록. 서버 렌더에서는 0 이다 (localStorage 가 없다). */
+export function useBest(): number {
+  return useSyncExternalStore(subscribe, readBest, () => 0)
 }
 
 /**
@@ -51,4 +81,10 @@ export function saveMuted(muted: boolean): void {
   } catch {
     // 무시. 이번 세션 동안은 메모리 상태로 동작한다
   }
+  emit()
+}
+
+/** 음소거 상태. 서버 렌더에서는 소리 켜짐이다. */
+export function useMuted(): boolean {
+  return useSyncExternalStore(subscribe, readMuted, () => false)
 }

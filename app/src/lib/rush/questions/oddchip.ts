@@ -65,6 +65,7 @@ export function makeOddChip(rng: Rng): RushQuestion | null {
     board: [],
     buttonSeat,
     pot,
+    share,
     answerSeat: odd[0].seat,
     why:
       `버튼 왼쪽 첫 자격자부터 시계방향 — ${order}` +

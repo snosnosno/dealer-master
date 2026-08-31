@@ -7,6 +7,7 @@
 import Link from 'next/link'
 
 const AXES = [
+  { icon: '⏱️', title: '팟 판독 러시', desc: '10문제 · 3분 · 개인 기록', href: '/rush' },
   { icon: '⚖️', title: 'TDA 룰', desc: '이번 주 케이스', href: null },
   { icon: '🎓', title: '딜러 교육', desc: '노리밋 홀덤 시뮬레이터', href: '/simulator' },
   { icon: '🃏', title: '믹스게임 운영', desc: '스터드 · 드로우 트레이너', href: null },

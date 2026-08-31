@@ -1,0 +1,395 @@
+/*
+ * 펠트 안쪽 스타일. **테마와 무관하게 항상 진한 초록 위**라서 라이트/다크로 갈리지 않는다 —
+ * 페이지 쪽 크롬(패널·입력·결과)은 Tailwind 유틸리티와 기존 토큰이 담당한다.
+ *
+ * 값의 출처는 프로토타입 `docs/superpowers/prototypes/pot-rush.html` 이고,
+ * 색은 `globals.css` 의 디자인 토큰을 var() 로 부른다 — 여기서 hex 를 짓지 않는다.
+ * (칩 6색은 `:root` 에 있고, 펠트는 dm-teal 스케일이다)
+ */
+
+.root {
+  --felt: var(--color-dm-teal-600);
+  --felt-edge: var(--color-dm-teal-800);
+  --felt-deep: var(--color-dm-teal-900);
+  --felt-ink: var(--color-dm-teal-50);
+  --amber: var(--color-dm-amber-400);
+  /* 테이블 레일(나무). 펠트 바깥 테두리에만 쓰는 마감재라 팔레트에 없다 */
+  --rail: #33241a;
+}
+
+/* ── 펠트 ─────────────────────────────────────── */
+
+.felt {
+  position: relative;
+  border-radius: 34px / 28px;
+  padding: 10px 8px 8px;
+  background: radial-gradient(
+    ellipse at 50% 32%,
+    color-mix(in srgb, var(--felt) 88%, #fff) 0%,
+    var(--felt) 50%,
+    var(--felt-edge) 100%
+  );
+  /* 안쪽 그림자 → 펠트, 바깥 두 겹 → 쿠션과 나무 레일 */
+  box-shadow:
+    inset 0 0 30px rgba(0, 0, 0, 0.3),
+    0 0 0 4px var(--felt-deep),
+    0 0 0 10px var(--rail),
+    0 0 0 11px rgba(0, 0, 0, 0.35),
+    0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+/*
+ * 좌석은 절대좌표로 타원에 뿌리지 않는다 — 폭이 좁아지면 서로 겹친다.
+ * 5열 그리드에 앉히면 겹칠 수가 없고, 바깥 두 좌석을 아래 줄에 두면
+ * 테이블을 둘러싼 모양이 나온다. **좌석 인덱스 순서가 곧 시계방향**이어야 하고,
+ * 홀칩 문제는 그 배치 위에서만 성립한다.
+ */
+.table {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px 4px;
+  align-items: start;
+}
+
+/* ── 좌석 ─────────────────────────────────────── */
+
+.seat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 2px 6px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: rgba(0, 0, 0, 0.19);
+  color: var(--felt-ink);
+  font-family: inherit;
+  width: 100%;
+  min-width: 0;
+  min-height: 54px;
+}
+
+button.seat {
+  cursor: pointer;
+}
+
+button.seat:hover:not(:disabled),
+button.seat:focus-visible {
+  border-color: #fbfbf8;
+  background: rgba(0, 0, 0, 0.3);
+  outline: none;
+}
+
+.picked {
+  border-color: var(--amber);
+  background: rgba(239, 159, 39, 0.25);
+}
+
+.right {
+  border-color: var(--color-dm-teal-100);
+  background: rgba(29, 158, 117, 0.32);
+}
+
+.wrong {
+  border-color: var(--dm-danger);
+  background: rgba(178, 58, 46, 0.3);
+}
+
+.out {
+  opacity: 0.5;
+}
+
+/* 가운데가 솟은 아크 착시 — 위 줄의 바깥 좌석만 살짝 내린다 */
+.arc {
+  margin-top: 11px;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tag {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.tagAllIn {
+  background: var(--dm-danger);
+  color: #fff;
+}
+
+.tagTie {
+  background: var(--color-dm-teal-100);
+  color: var(--color-dm-teal-900);
+}
+
+.tagOut {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--felt-ink);
+}
+
+/* 딜러 버튼 — 홀칩 순서의 기준점이라 화면에 없으면 풀 수 없다 */
+.dealerButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: linear-gradient(#ffffff, #dce3df);
+  color: #14231d;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 800;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.5),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.16);
+  flex: none;
+}
+
+.hand {
+  display: flex;
+  gap: 2px;
+}
+
+.amount {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 베팅 존 — 칩은 좌석 앞(테이블 안쪽)에 놓인다 */
+.bet {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: 1px;
+}
+
+/* ── 가운데 · 딜러 자리 ────────────────────────── */
+
+.center {
+  grid-column: 2 / 5;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 2px 0;
+  min-height: 44px;
+}
+
+.board {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+
+.dealerBox {
+  grid-column: 1 / 6;
+  grid-row: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 3px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.13);
+}
+
+.dealerLabel {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--felt-ink);
+  opacity: 0.6;
+}
+
+/* 덱은 span 이 아니라 블록이어야 보인다 — 프로토타입에서 덱이 통째로 안 보였던 원인이다 */
+.deck {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+
+.cutCard {
+  position: absolute;
+  left: 6px;
+  top: 5px;
+  width: clamp(27px, 7vw, 34px);
+  height: calc(clamp(27px, 7vw, 34px) * 1.5);
+  border-radius: 4px;
+  background: linear-gradient(150deg, #f5c349, #db9c19);
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+/* ── 카드 ─────────────────────────────────────── */
+
+/*
+ * 원본 캔버스가 360×540 이라 **세로비가 1.5** — 1.42 로 잡으면 그림이 눌린다.
+ * 표준 인덱스라 작게 그리면 랭크가 안 읽힌다: 실측으로 19px 는 판독 불가, 24px 부터 읽힌다.
+ * 그래서 홀카드 최소가 24px 이고, 그만큼 좌석 여백을 줄여 360px 화면에 맞춘다.
+ */
+.card {
+  --cw: clamp(27px, 7vw, 34px);
+  display: inline-block;
+  vertical-align: top;
+  width: var(--cw);
+  height: calc(var(--cw) * 1.5);
+  border-radius: calc(var(--cw) * 0.083);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.38);
+  background: #fff;
+  flex: none;
+  overflow: hidden;
+}
+
+.hole {
+  --cw: clamp(24px, 6.2vw, 28px);
+}
+
+/* 뒷면은 CSS 로 그린다 — CC0 덱에 뒷면이 없다 (Commons 뒷면은 LGPL) */
+.back {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.15) 0 2px,
+      rgba(255, 255, 255, 0) 2px 5px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.15) 0 2px,
+      rgba(255, 255, 255, 0) 2px 5px
+    ),
+    linear-gradient(150deg, #b23a2e 0%, #78221b 100%);
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 2px #fbfbf8,
+    inset 0 0 0 3px rgba(0, 0, 0, 0.18);
+}
+
+.deck .back {
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 2px #fbfbf8,
+    inset 0 0 0 3px rgba(0, 0, 0, 0.18),
+    3px 3px 0 -1px #8e2c22,
+    5px 5px 0 -2px #78221b;
+}
+
+/* ── 칩 ───────────────────────────────────────── */
+
+.chips {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: center;
+  /* 좌석 폭을 넘어가면 행 밖으로 삐져나온다 — 프로토타입에서 렌더로만 잡힌 결함이다 */
+  max-width: 100%;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pile {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+}
+
+/*
+ * 실물 칩 = 테두리의 엣지 스팟 8개 + 불투명한 중앙 인레이.
+ * 인레이가 불투명해야 스팟이 테두리에만 남는다 — 반투명으로 깔면 칩이 바람개비가 된다.
+ *
+ * 색은 인라인 스타일이 `--c` **커스텀 프로퍼티만** 넘긴다.
+ * `background` 단축 속성을 인라인으로 얹으면 이 텍스처가 통째로 지워진다.
+ */
+.chip {
+  --cs: clamp(15px, 3.9vw, 24px);
+  width: var(--cs);
+  height: var(--cs);
+  border-radius: 50%;
+  margin-top: calc(var(--cs) * -0.72);
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  background-color: var(--c, #999);
+  background-image:
+    radial-gradient(
+      circle at 50% 50%,
+      color-mix(in srgb, var(--c, #999) 74%, #ffffff) 0 55%,
+      rgba(0, 0, 0, 0) 56%
+    ),
+    repeating-conic-gradient(
+      from 8deg,
+      rgba(255, 255, 255, 0.92) 0 10deg,
+      rgba(255, 255, 255, 0) 10deg 45deg
+    );
+  box-shadow:
+    0 2px 3px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.22),
+    inset 0 -3px 5px rgba(0, 0, 0, 0.3),
+    inset 0 2px 3px rgba(255, 255, 255, 0.2);
+  flex: none;
+}
+
+.pile .chip:last-child {
+  margin-top: 0;
+}
+
+.count {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--felt-ink);
+  opacity: 0.8;
+  margin-top: 4px;
+  white-space: nowrap;
+}
+
+/* 팟 더미 — 홀칩·스플릿 문제에서 팟이 눈에 보여야 한다 */
+.pot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  max-width: 100%;
+}
+
+.potLabel {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--felt-ink);
+  opacity: 0.7;
+}
+
+.potAmount {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 19px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+  line-height: 1;
+}

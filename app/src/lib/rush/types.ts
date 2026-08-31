@@ -56,6 +56,8 @@ type RushBase = {
   buttonSeat: number
   /** 이미 가운데로 수거된 팟. 사이드팟 문제에는 없다(아직 각자 앞에 있다) */
   pot?: number
+  /** 동점자 한 명 몫. 홀칩 문제만 쓴다 — 화면에서 계산하면 홀칩 규칙이 두 곳에 생긴다 */
+  share?: number
   /** 채점 후 보여주는 근거 한 줄 */
   why: string
 }
