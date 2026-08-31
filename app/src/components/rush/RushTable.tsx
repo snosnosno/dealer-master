@@ -43,6 +43,7 @@ const fmt = (n: number) => n.toLocaleString('ko-KR')
 export function RushTable({
   question,
   selectable,
+  multiSelect,
   marks,
   answered,
   correctSeats,
@@ -51,6 +52,8 @@ export function RushTable({
   question: RushQuestion
   /** 좌석을 누를 수 있나 (좌석으로 답하는 유형이고 아직 채점 전) */
   selectable: boolean
+  /** 여러 좌석을 골랐다 뺐다 하는 유형인가 (스플릿) */
+  multiSelect: boolean
   /** 사용자가 고른 좌석 */
   marks: readonly number[]
   /** 채점이 끝났나 — 금액 공개와 정답 표시가 여기 달렸다 */
@@ -128,6 +131,11 @@ export function RushTable({
             <button
               key={i}
               type="button"
+              /*
+               * 복수 선택일 때만 토글이다. 단일 선택은 누르는 즉시 채점되는 "행동"이라
+               * aria-pressed 를 붙이면 눌린 채로 남아 있는 것처럼 읽힌다.
+               */
+              aria-pressed={multiSelect ? picked : undefined}
               className={className}
               style={style}
               onClick={() => onPick(i)}

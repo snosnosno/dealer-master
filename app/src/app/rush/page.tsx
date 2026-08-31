@@ -18,11 +18,13 @@ import { ResultPanel } from '@/components/rush/ResultPanel'
 import { generateRun, randomSeed } from '@/lib/rush/generate'
 import { readBest, saveBest, saveMuted, useBest, useMuted } from '@/lib/rush/record'
 import { applyAnswer, initialRun, type RunState } from '@/lib/rush/score'
-import { playBad, playDeal, playGood, playTick, unlockSound } from '@/lib/rush/sound'
+import { playBad, playChips, playDeal, playGood, playTick, unlockSound } from '@/lib/rush/sound'
 import { QUESTION_COUNT } from '@/lib/rush/types'
 
 /** 마지막 몇 초부터 틱 소리를 내나 */
 const TICK_FROM_SEC = 5
+/** 딜링 소리와 칩 소리 사이 간격 */
+const CHIP_SOUND_DELAY_MS = 180
 
 const fmt = (n: number) => n.toLocaleString('ko-KR')
 
@@ -92,10 +94,18 @@ function RushRun({ seed, onRetry }: { seed: string; onRetry: () => void }) {
     [verdict, deadline, run, question.kind],
   )
 
-  // 문제가 열릴 때 딜링 소리
+  /*
+   * 문제가 열릴 때 딜링 소리, 칩이 있는 유형이면 조금 뒤에 칩 소리.
+   * 두 소리를 같은 순간에 겹치면 노이즈 버스트끼리 뭉쳐 한 덩어리로 들린다.
+   */
   useEffect(() => {
-    if (solving) playDeal()
-  }, [solving, index])
+    if (!solving) return
+    playDeal()
+    const hasChips = question.kind === 'sidepots' || question.pot !== undefined
+    if (!hasChips) return
+    const id = window.setTimeout(playChips, CHIP_SOUND_DELAY_MS)
+    return () => window.clearTimeout(id)
+  }, [solving, question])
 
   /*
    * 남은 시간 갱신. setState 는 프레임 콜백 안에서만 일어난다 —

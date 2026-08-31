@@ -82,6 +82,7 @@ export function QuestionPanel({
         <RushTable
           question={question}
           selectable={isSeatKind && !answered}
+          multiSelect={isMulti}
           marks={marks}
           answered={answered}
           correctSeats={correctSeats}
