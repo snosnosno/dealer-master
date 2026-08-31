@@ -411,13 +411,24 @@ body {
    * 단위가 액면이 아니면 금액이 잔돈으로 쪼개져 좌석마다 칩 더미가 뒤덮인다.
    * 블라인드도 그래서 이 셋으로 제한한다(500/1,000 · 1,000/2,000 · 5,000/10,000).
    */
-  function unitFor(bb) { return bb >= 10000 ? 5000 : (bb >= 2000 ? 1000 : 500); }
+  function unitFor(bb) {
+    if (bb >= 10000) return 5000;
+    if (bb >= 2000) return 1000;
+    if (bb >= 1000) return 500;
+    return 100;
+  }
   /** d 바로 아래 액면. 이 단위로 반올림하면 분해가 두세 칩으로 끝난다. */
   function belowDenom(d) {
     for (var i = 0; i < DENOMS.length; i++) if (DENOMS[i] < d) return DENOMS[i];
     return 100;
   }
-  var BLINDS = [1000, 2000, 10000];
+  /*
+   * 레벨마다 테이블에 남아 있는 칩이 다르다. 낮은 레벨에는 100·500 칩이 실제로 있고
+   * 높은 레벨에서는 레이스로 사라진다 — 1,000/2,000 에서 100 칩을 그리면 현실과 다르고
+   * 칩 더미가 잔돈으로 뒤덮인다. 어수선함의 원인은 작은 액면 자체가 아니라
+   * **레벨에 맞지 않는 단위**였다.
+   */
+  var BLINDS = [200, 400, 1000, 2000, 10000];
   function roundUnit(n, u) { return Math.max(u, Math.round(n / u) * u); }
   function $(s) { return document.querySelector(s); }
 
@@ -714,13 +725,13 @@ body {
       lastChips = Math.random() < 0.5;
     } else if (branch === 'allin') {
       // 하나 빼도 콜 이상 + 마지막 칩 → 50% 규칙과 무관하게 올인
-      var e = pick([5000, 25000]);
+      var e = pick([1000, 5000, 25000]);
       chips = [e, e, e];
       call = roundUnit(e * (0.6 + Math.random() * 0.35), belowDenom(e));   // 2e >= call
       lastChips = true;
     } else {
       // 하나 빼도 콜 이상 + 칩이 더 남음 → 레이즈 시도
-      var f = pick([5000, 25000]);
+      var f = pick([1000, 5000, 25000]);
       chips = [f, f, f];
       call = roundUnit(f * (0.6 + Math.random() * 0.35), belowDenom(f));
       lastChips = false;
