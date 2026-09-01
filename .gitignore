@@ -41,3 +41,6 @@ next-env.d.ts
 
 # Claude Code 에이전트 로컬 학습 메모리 (머신 종속, 공유 대상 아님)
 .claude/agent-memory/
+
+# 3자 규정 자료 원본 (저작권물 — 로컬 대조용). 규칙 사실은 docs/references/ 에 정리해 둔다
+참고문서/
