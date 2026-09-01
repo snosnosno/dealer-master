@@ -1,25 +1,31 @@
 /**
- * 팟 판독 러시 — 10문제 한 판.
+ * 액션 판정 러시 — 10문제 한 판.
  *
- * 시드가 URL 에 있다. 어떤 판이든 링크로 다시 열 수 있고(버그 재현·복기), 나중에
- * 일일 챌린지가 붙을 자리도 여기다. **다만 일일 챌린지 자체는 4단계다.**
+ * 상태 기계는 축 1(`app/rush/page.tsx`)과 같다. 시드가 URL 에 있고, 타이머는
+ * **문제가 열린 시각**에서 매번 역산한다 — 점수가 남은 시간에 비례하므로 인터벌
+ * 누적 오차가 곧 점수 오차다.
  *
- * 타이머는 인터벌마다 남은 시간을 빼지 않는다. **문제가 열린 시각**을 기억해 두고
- * 매번 거기서 역산한다 — 점수가 남은 시간에 비례하므로 누적 오차가 곧 점수 오차다.
- * 채점할 때도 화면에 그려진 숫자가 아니라 이 시각에서 다시 계산한다.
+ * 점수·음향·기록은 축 1 의 모듈을 그대로 부른다. 최고 기록만 키가 다르다
+ * (`actionrush.best` — 프로토타입이 쓰던 키라 거기서 세운 기록이 이어진다).
  */
 'use client'
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { QuestionPanel, type Verdict } from '@/components/rush/QuestionPanel'
+import { ActionQuestionPanel, type Verdict } from '@/components/action-rush/ActionQuestionPanel'
 import { ResultPanel } from '@/components/rush/ResultPanel'
-import { generateRun, randomSeed } from '@/lib/rush/generate'
-import { readBest, saveBest, saveMuted, useBest, useMuted } from '@/lib/rush/record'
+import { generateRun, randomSeed } from '@/lib/action-rush/generate'
+import { KIND_LABEL, QUESTION_COUNT, type ActionKind } from '@/lib/action-rush/types'
+import { createBestRecord, saveMuted, useMuted } from '@/lib/rush/record'
 import { applyAnswer, emptyRun, type RunState } from '@/lib/rush/score'
 import { playBad, playChips, playDeal, playGood, playTick, unlockSound } from '@/lib/rush/sound'
-import { KIND_LABEL, QUESTION_COUNT, type RushKind } from '@/lib/rush/types'
+
+/**
+ * 축 2 의 기록. **축 1 과 키가 달라야 한다** — 두 축은 문제 성격이 달라 점수대가 다르고,
+ * 키를 공유하면 한쪽 최고점이 다른 쪽을 영원히 덮는다 (계획서 §4).
+ */
+const record = createBestRecord('actionrush.best')
 
 /** 마지막 몇 초부터 틱 소리를 내나 */
 const TICK_FROM_SEC = 5
@@ -28,36 +34,36 @@ const CHIP_SOUND_DELAY_MS = 180
 
 const fmt = (n: number) => n.toLocaleString('ko-KR')
 
-function RushInner() {
+function ActionRushInner() {
   const router = useRouter()
   const params = useSearchParams()
   const seed = params.get('seed')
 
   useEffect(() => {
-    if (seed === null) router.replace(`/rush?seed=${randomSeed()}`)
+    if (seed === null) router.replace(`/action-rush?seed=${randomSeed()}`)
   }, [seed, router])
 
-  const retry = useCallback(() => router.replace(`/rush?seed=${randomSeed()}`), [router])
+  const retry = useCallback(() => router.replace(`/action-rush?seed=${randomSeed()}`), [router])
 
   if (seed === null) {
     return <p className="py-20 text-center text-sm text-zinc-500">문제를 준비하는 중…</p>
   }
   // key 로 판을 통째로 갈아 끼운다 — 점수·연속·타이머가 남아 있으면 다음 판이 오염된다
-  return <RushRun key={seed} seed={seed} onRetry={retry} />
+  return <ActionRushRun key={seed} seed={seed} onRetry={retry} />
 }
 
-function RushRun({ seed, onRetry }: { seed: string; onRetry: () => void }) {
+function ActionRushRun({ seed, onRetry }: { seed: string; onRetry: () => void }) {
   const questions = useMemo(() => generateRun(seed), [seed])
 
   const [index, setIndex] = useState(0)
-  const [run, setRun] = useState<RunState<RushKind>>(emptyRun)
+  const [run, setRun] = useState<RunState<ActionKind>>(emptyRun)
   const [verdict, setVerdict] = useState<Verdict>(null)
   /** 지금 문제가 열린 시각. 첫 문제는 마운트, 그 뒤는 "다음 문제"를 누른 순간이다 */
   const [openedAt, setOpenedAt] = useState(() => now())
   const [remaining, setRemaining] = useState(questions[0].limitSec)
   const [isNewBest, setIsNewBest] = useState(false)
 
-  const best = useBest()
+  const best = record.useBest()
   const muted = useMuted()
 
   const done = index >= questions.length
@@ -95,13 +101,13 @@ function RushRun({ seed, onRetry }: { seed: string; onRetry: () => void }) {
   )
 
   /*
-   * 문제가 열릴 때 딜링 소리, 칩이 있는 유형이면 조금 뒤에 칩 소리.
+   * 문제가 열릴 때 딜링 소리, 칩이 앞에 나가는 유형이면 조금 뒤에 칩 소리.
    * 두 소리를 같은 순간에 겹치면 노이즈 버스트끼리 뭉쳐 한 덩어리로 들린다.
    */
   useEffect(() => {
     if (!solving) return
     playDeal()
-    const hasChips = question.kind === 'sidepots' || question.pot !== undefined
+    const hasChips = question.seats.some((s) => (s.bet ?? 0) > 0)
     if (!hasChips) return
     const id = window.setTimeout(playChips, CHIP_SOUND_DELAY_MS)
     return () => window.clearTimeout(id)
@@ -144,23 +150,19 @@ function RushRun({ seed, onRetry }: { seed: string; onRetry: () => void }) {
     return () => window.cancelAnimationFrame(frame)
   }, [solving, deadline, finish])
 
-  const answerSeats = useCallback(
-    (seats: number[]) => {
-      if (question.kind === 'sidepots') return
-      const ok =
-        question.kind === 'split'
-          ? question.answerSeats.length === seats.length &&
-            question.answerSeats.every((s) => seats.includes(s))
-          : seats[0] === question.answerSeat
+  const answerChoice = useCallback(
+    (choiceIndex: number) => {
+      if (question.input !== 'choice') return
+      const ok = question.choices[choiceIndex]?.correct === true
       finish(ok, ok ? '정확하다' : '틀렸다')
     },
     [question, finish],
   )
 
-  const answerFields = useCallback(
-    (values: number[]) => {
-      if (question.kind !== 'sidepots') return
-      const ok = question.fields.every((field, i) => values[i] === field.answer)
+  const answerNumber = useCallback(
+    (value: number) => {
+      if (question.input !== 'number') return
+      const ok = value === question.answer
       finish(ok, ok ? '정확하다' : '틀렸다')
     },
     [question, finish],
@@ -170,8 +172,8 @@ function RushRun({ seed, onRetry }: { seed: string; onRetry: () => void }) {
     const at = index + 1
     if (at >= questions.length) {
       // 판이 끝났다. 기록은 여기서 한 번만 쓴다 — 경신 여부는 쓰기 전 값과 비교한다
-      const previous = readBest()
-      saveBest(run.score)
+      const previous = record.readBest()
+      record.saveBest(run.score)
       setIsNewBest(run.score > previous)
     }
     setVerdict(null)
@@ -187,7 +189,7 @@ function RushRun({ seed, onRetry }: { seed: string; onRetry: () => void }) {
   return (
     <>
       <div className="mb-2.5 flex items-center gap-3">
-        <span className="whitespace-nowrap text-[15px] font-black tracking-tight">팟 판독 러시</span>
+        <span className="whitespace-nowrap text-[15px] font-black tracking-tight">액션 판정 러시</span>
         {run.streak >= 2 ? (
           <span className="whitespace-nowrap rounded-full bg-dm-amber-50 px-2 py-0.5 font-mono text-xs font-extrabold text-dm-amber-600">
             연속 {run.streak}
@@ -247,21 +249,21 @@ function RushRun({ seed, onRetry }: { seed: string; onRetry: () => void }) {
           onRetry={onRetry}
         />
       ) : (
-        <QuestionPanel
+        <ActionQuestionPanel
           // 문제마다 새로 그린다 — 이전 문제의 입력이 남으면 정답이 미리 찍힌 채로 열린다
           key={index}
           question={question}
           index={index}
           total={questions.length}
           verdict={verdict}
-          onAnswerSeats={answerSeats}
-          onAnswerFields={answerFields}
+          onAnswerChoice={answerChoice}
+          onAnswerNumber={answerNumber}
           onNext={next}
         />
       )}
 
       <p className="mt-3 break-keep text-center text-[11px] text-zinc-400">
-        {QUESTION_COUNT}문제 · 카드와 팟은 매번 새로 만들어진다
+        {QUESTION_COUNT}문제 · 정답 근거는 WINNABLE 공식 대회 규정이다
       </p>
     </>
   )
@@ -272,7 +274,7 @@ function now(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now()
 }
 
-export default function RushPage() {
+export default function ActionRushPage() {
   return (
     <main className="mx-auto w-full max-w-[560px] px-4 py-5 font-sans">
       <div className="mb-3 flex items-center justify-between">
@@ -280,11 +282,11 @@ export default function RushPage() {
           ← 돌아가기
         </Link>
         <span className="text-[11px] font-bold uppercase tracking-wide text-dm-accent">
-          판정 훈련 · 노리밋 홀덤
+          판정 훈련 · 액션 규정
         </span>
       </div>
       <Suspense fallback={<p className="py-20 text-center text-sm text-zinc-500">불러오는 중…</p>}>
-        <RushInner />
+        <ActionRushInner />
       </Suspense>
     </main>
   )

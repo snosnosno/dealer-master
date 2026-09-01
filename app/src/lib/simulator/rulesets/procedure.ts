@@ -33,6 +33,21 @@ const LABEL: Record<ProperAction | OutOfTurnAction, string> = {
 }
 
 /**
+ * 주격 조사를 붙인 형태. **"은(는)" 으로 얼버무리지 않는다** — 규칙을 가르치는 화면에서
+ * 조사가 어긋나면 문장이 어색해지고, 그 어색함이 곧 신뢰를 깎는다.
+ *
+ * 어휘가 다섯 개로 고정이라 일반 조사 규칙을 구현할 이유가 없다. 받침 판정기를 짜면
+ * 영어 좌석 이름(MP·BTN·UTG+1)에서 다시 틀린다 — 그쪽은 문장을 바꿔서 피한다.
+ */
+const TOPIC: Record<ProperAction | OutOfTurnAction, string> = {
+  fold: '폴드는',
+  check: '체크는',
+  call: '콜은',
+  bet: '벳은',
+  raise: '레이즈는',
+}
+
+/**
  * 제27조 2·3항 (액션의 순서).
  *
  * > 순서를 어긴 액션은, 본래 순서 플레이어의 행동으로 베팅 상황이 변하지 않았다면
@@ -66,14 +81,14 @@ export function resolveOutOfTurn(
       binding: false,
       reason:
         `본래 순서 플레이어가 ${LABEL[proper]}하여 마주한 베팅 상황이 변경되었습니다 — ` +
-        `순서를 어긴 ${LABEL[outOfTurn]}은(는) 무효이고, 벳을 회수한 뒤 모든 옵션을 새로 가집니다`,
+        `순서를 어긴 ${TOPIC[outOfTurn]} 무효이고, 벳을 회수한 뒤 모든 옵션을 새로 가집니다`,
     }
   }
 
   return {
     binding: true,
     reason:
-      `본래 순서 플레이어의 ${LABEL[proper]}은(는) 마주한 베팅 상황을 변경하지 않습니다 — ` +
-      `순서를 어긴 ${LABEL[outOfTurn]}은(는) 그대로 유효합니다`,
+      `본래 순서 플레이어의 ${TOPIC[proper]} 마주한 베팅 상황을 변경하지 않습니다 — ` +
+      `순서를 어긴 ${TOPIC[outOfTurn]} 그대로 유효합니다`,
   }
 }

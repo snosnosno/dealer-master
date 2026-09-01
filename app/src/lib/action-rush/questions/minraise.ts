@@ -40,7 +40,11 @@ export function makeMinRaise(rng: Rng): ActionQuestion | null {
     kind: 'minraise',
     input: 'number',
     label: KIND_LABEL.minraise,
-    prompt: `${nextName} 이(가) 할 수 있는 최소 레이즈 총액은?`,
+    /*
+     * 좌석 이름에 조사를 붙이지 않는다. MP·BTN·UTG+1 은 읽는 소리로 받침이 갈려서
+     * ("엠피가" · "비티엔이") 규칙으로 맞히려면 발음 사전이 필요하다. 문장을 바꿔서 피한다.
+     */
+    prompt: `${nextName} 차례다. 할 수 있는 최소 레이즈 총액은?`,
     limitSec: LIMIT_SEC.minraise,
     street: '프리플랍',
     bb,

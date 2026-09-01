@@ -29,6 +29,13 @@ const LOG_ACT: Record<OutOfTurnAction | ProperAction, string> = {
   raise: 'RAISE',
 }
 
+/** 보기 설명에 쓰는, 주격 조사가 붙은 형태. 엔진 `procedure.ts` 의 TOPIC 과 같은 이유다. */
+const TOPIC: Record<OutOfTurnAction, string> = {
+  fold: '폴드는',
+  check: '체크는',
+  call: '콜은',
+}
+
 /** 지문과 보기에 쓰는 표기. 이쪽은 문장에 들어가므로 한글이다. */
 const LABEL: Record<OutOfTurnAction | ProperAction, string> = {
   fold: '폴드',
@@ -107,7 +114,7 @@ export function makeOutOfTurn(rng: Rng): ActionQuestion | null {
     choices: [
       {
         label: '구속력을 가진다',
-        note: `C의 ${LABEL[oot]}은(는) 그대로 유효하다`,
+        note: `C의 ${TOPIC[oot]} 그대로 유효하다`,
         correct: ruling.binding,
       },
       {

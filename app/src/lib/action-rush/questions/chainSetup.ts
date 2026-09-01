@@ -87,8 +87,9 @@ export function chainSeats(
   const bets = chain.state.seats.map((s) => s.bet)
 
   const seats: ActionSeat[] = [
-    { name: 'SB', bet: bets[0], act: '스몰블라인드', blind: true },
-    { name: 'BB', bet: bets[1], act: '빅블라인드', blind: true },
+    // 좌석 이름이 이미 SB·BB 다. "스몰블라인드"를 덧붙이면 좌석 폭에서 두 줄로 깨진다
+    { name: 'SB', bet: bets[0], act: '블라인드', blind: true },
+    { name: 'BB', bet: bets[1], act: '블라인드', blind: true },
   ]
 
   chain.rows.forEach((row, i) => {
