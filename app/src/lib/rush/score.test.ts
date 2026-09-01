@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { applyAnswer, initialRun, questionScore, streakMultiplier, type RunState } from './score'
+import { applyAnswer, emptyRun, questionScore, streakMultiplier, type RunState } from './score'
+import type { RushKind } from './types'
 
 describe('streakMultiplier — 경계', () => {
   it('2연속까지는 배수가 없다', () => {
@@ -34,14 +35,14 @@ describe('questionScore', () => {
 })
 
 describe('applyAnswer', () => {
-  const run = (results: { ok: boolean; sec: number }[]): RunState =>
+  const run = (results: { ok: boolean; sec: number }[]): RunState<RushKind> =>
     results.reduce(
       (s, r) => applyAnswer(s, 'winner', r.ok, r.sec).state,
-      initialRun,
+      emptyRun<RushKind>(),
     )
 
   it('원본 상태를 바꾸지 않는다', () => {
-    const before = initialRun
+    const before = emptyRun<RushKind>()
     applyAnswer(before, 'winner', true, 10)
     expect(before).toEqual({ answered: 0, score: 0, streak: 0, correct: 0, byKind: {} })
   })
@@ -59,7 +60,7 @@ describe('applyAnswer', () => {
   })
 
   it('5번째 정답부터 2배가 붙는다', () => {
-    let s = initialRun
+    let s = emptyRun<RushKind>()
     const points: number[] = []
     for (let i = 0; i < 6; i++) {
       const next = applyAnswer(s, 'winner', true, 0)
@@ -88,7 +89,7 @@ describe('applyAnswer', () => {
   })
 
   it('유형별 집계가 정답/전체로 쌓인다', () => {
-    let s = initialRun
+    let s = emptyRun<RushKind>()
     s = applyAnswer(s, 'sidepots', true, 0).state
     s = applyAnswer(s, 'sidepots', false, 0).state
     s = applyAnswer(s, 'oddchip', true, 0).state

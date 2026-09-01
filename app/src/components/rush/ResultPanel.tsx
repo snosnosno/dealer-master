@@ -3,25 +3,31 @@
  *
  * 유형별 집계는 **약점 분석이 아니라 이번 판의 집계**다. 유형별 누적 기록은 4단계다.
  */
-import { KIND_LABEL, type RushKind } from '@/lib/rush/types'
-import type { RunState } from '@/lib/rush/score'
+import type { KindTally, RunState } from '@/lib/rush/score'
 
 const fmt = (n: number) => n.toLocaleString('ko-KR')
 
-export function ResultPanel({
+export function ResultPanel<K extends string>({
   run,
   total,
   best,
+  labels,
   isNewBest,
   onRetry,
 }: {
-  run: RunState
+  run: RunState<K>
   total: number
   best: number
+  /**
+   * 유형 키 → 사람이 읽는 이름. **prop 으로 받는다.**
+   * 여기서 축 1 의 `KIND_LABEL` 을 직접 import 하면 이 컴포넌트가 축 1 전용이 되고,
+   * 축 2 는 점수 공식이 같은데도 결과 화면을 통째로 복사해야 한다.
+   */
+  labels: Record<K, string>
   isNewBest: boolean
   onRetry: () => void
 }) {
-  const rows = Object.entries(run.byKind) as [RushKind, { correct: number; total: number }][]
+  const rows = Object.entries(run.byKind) as [K, KindTally][]
 
   return (
     <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -46,7 +52,7 @@ export function ResultPanel({
         <div className="mt-5 divide-y divide-zinc-100 text-left dark:divide-zinc-800">
           {rows.map(([kind, tally]) => (
             <div key={kind} className="flex items-center justify-between py-2 text-[13px]">
-              <span className="text-zinc-500">{KIND_LABEL[kind]}</span>
+              <span className="text-zinc-500">{labels[kind]}</span>
               <span className="font-mono font-bold tabular-nums">
                 {tally.correct} / {tally.total}
               </span>

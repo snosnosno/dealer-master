@@ -17,9 +17,9 @@ import { QuestionPanel, type Verdict } from '@/components/rush/QuestionPanel'
 import { ResultPanel } from '@/components/rush/ResultPanel'
 import { generateRun, randomSeed } from '@/lib/rush/generate'
 import { readBest, saveBest, saveMuted, useBest, useMuted } from '@/lib/rush/record'
-import { applyAnswer, initialRun, type RunState } from '@/lib/rush/score'
+import { applyAnswer, emptyRun, type RunState } from '@/lib/rush/score'
 import { playBad, playChips, playDeal, playGood, playTick, unlockSound } from '@/lib/rush/sound'
-import { QUESTION_COUNT } from '@/lib/rush/types'
+import { KIND_LABEL, QUESTION_COUNT, type RushKind } from '@/lib/rush/types'
 
 /** 마지막 몇 초부터 틱 소리를 내나 */
 const TICK_FROM_SEC = 5
@@ -50,7 +50,7 @@ function RushRun({ seed, onRetry }: { seed: string; onRetry: () => void }) {
   const questions = useMemo(() => generateRun(seed), [seed])
 
   const [index, setIndex] = useState(0)
-  const [run, setRun] = useState<RunState>(initialRun)
+  const [run, setRun] = useState<RunState<RushKind>>(emptyRun)
   const [verdict, setVerdict] = useState<Verdict>(null)
   /** 지금 문제가 열린 시각. 첫 문제는 마운트, 그 뒤는 "다음 문제"를 누른 순간이다 */
   const [openedAt, setOpenedAt] = useState(() => now())
@@ -236,6 +236,7 @@ function RushRun({ seed, onRetry }: { seed: string; onRetry: () => void }) {
           run={run}
           total={questions.length}
           best={best}
+          labels={KIND_LABEL}
           isNewBest={isNewBest}
           onRetry={onRetry}
         />
