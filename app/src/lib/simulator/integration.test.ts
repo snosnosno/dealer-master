@@ -173,8 +173,11 @@ function verifyActionsLegal(hand: Hand): number {
   let lastRaiseSize = 0
   /** 이번 라운드에 오픈 벳 위로 레이즈가 얹혔는가. 얹히는 순간 오픈 벳이 아니게 된다. */
   let raiseSeen = false
-  /** 마지막 풀 레이즈 이후 이미 액션한 좌석 — 이들에게는 레이즈 권리가 없다. */
-  let actedSinceFullRaise = new Set<number>()
+  /**
+   * 이번 라운드에 이미 액션한 좌석. **레이즈 권리가 아니라 사실이다** —
+   * 권리 판정은 룰셋의 canReopen 이 한다 (제35조 4항).
+   */
+  const acted = new Set<number>()
 
   hand.events.forEach((e, i) => {
     // 라운드 경계. 벳이 팟으로 들어가고 레이즈 폭은 다시 빅블라인드 하한만 남는다
@@ -183,7 +186,7 @@ function verifyActionsLegal(hand: Hand): number {
       currentBet = 0
       lastRaiseSize = 0
       raiseSeen = false
-      actedSinceFullRaise = new Set()
+      acted.clear()
       return
     }
 
@@ -215,7 +218,7 @@ function verifyActionsLegal(hand: Hand): number {
        * (nlh.test.ts:134 의 픽스처도 currentBet 8,000 을 마주한 채 isOpenBet: true 다.)
        */
       isOpenBet: !raiseSeen,
-      canRaise: !actedSinceFullRaise.has(e.seat),
+      hasActedThisRound: acted.has(e.seat),
     }
 
     const r = nlh.validateAction(ctx, e.action)
@@ -229,7 +232,7 @@ function verifyActionsLegal(hand: Hand): number {
     // action.to 를 그대로 믿으면 현재 벳이 실제보다 부풀려진다.
     const after = stateAt(init, hand.events, i + 1)
     const newBet = after.seats[e.seat].bet
-    actedSinceFullRaise.add(e.seat)
+    acted.add(e.seat)
 
     if (newBet > currentBet) {
       const size = newBet - currentBet
@@ -240,7 +243,6 @@ function verifyActionsLegal(hand: Hand): number {
       // 갱신하면 뒷사람의 최소 레이즈가 규정보다 작아진다.
       if (size >= Math.max(lastRaiseSize, hand.blinds.bb)) {
         lastRaiseSize = size
-        actedSinceFullRaise = new Set([e.seat])
       }
     }
   })

@@ -52,7 +52,7 @@ function minRaiseTo(bb: number, wagers: Wager[]): number {
     seatBet: 0,
     seatStack: Number.MAX_SAFE_INTEGER,
     isOpenBet: false,
-    canRaise: true,
+    hasActedThisRound: false,
   })
 }
 

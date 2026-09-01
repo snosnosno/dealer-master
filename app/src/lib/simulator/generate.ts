@@ -8,7 +8,7 @@
 import { makeDeck, shuffle, type Card } from './cards'
 import { createRng, type Rng } from './rng'
 import { decideAction, pickStacks, type StackPlan } from './bots'
-import { initialState, applyEvent, isFullRaise } from './reduce'
+import { initialState, applyEvent } from './reduce'
 import { awardPots, buildPots } from './pots'
 import type { RulesetId } from './rulesets/types'
 import type { HandEvent, HandState, SeatInit, Street } from './types'
@@ -125,8 +125,6 @@ export function runBettingRound(
   const openBetTrajectory: boolean[] = []
 
   const acted = new Set<number>()
-  /** 마지막 "풀 레이즈" 이후 이미 액션한 좌석. 이들에게는 레이즈 권리가 없다. */
-  let actedSinceFullRaise = new Set<number>()
 
   let seat = street === 'preflop' ? (s.buttonSeat + 3) % n : (s.buttonSeat + 1) % n
 
@@ -148,14 +146,16 @@ export function runBettingRound(
     openBetTrajectory.push(isOpenBet)
     const e = decideAction(s, seat, {
       rng, bb, currentBet, lastRaiseSize: s.lastRaiseSize, isOpenBet, street, plan,
-      canRaise: !actedSinceFullRaise.has(seat),
+      /*
+       * 결론이 아니라 사실만 넘긴다. "레이즈할 수 있는가"는 룰셋의 canReopen 이
+       * 제35조 4항으로 판정한다 — 예전에는 여기서 "마지막 풀 레이즈 이후 액션했나"로
+       * 계산해 넘겼고, 그 단발 판정이 규정(누적)과 어긋나 있었다.
+       */
+      hasActedThisRound: acted.has(seat),
     })
     events.push(e)
-    // 풀 레이즈 판정은 액션을 적용하기 **전** 상태를 기준으로 한다.
-    const beforeAction = s
     s = applyEvent(s, e)
     acted.add(seat)
-    actedSinceFullRaise.add(seat)
 
     const newBet = s.seats[seat].bet
     if (newBet > currentBet) {
@@ -171,13 +171,6 @@ export function runBettingRound(
       currentBet = newBet
       // 풀 레이즈에 못 미치는 올인도 공격이다 — 리오픈 권리와 공개 순서는 다른 규칙이다.
       lastAggressor = seat
-      /*
-       * 풀 레이즈만 베팅을 다시 연다. 폭 갱신은 리듀서가 이미 했으므로
-       * 여기서는 같은 판정을 빌려 레이즈 권리만 초기화한다.
-       */
-      if (isFullRaise(beforeAction, newBet)) {
-        actedSinceFullRaise = new Set([seat])
-      }
     }
 
     seat = (seat + 1) % n

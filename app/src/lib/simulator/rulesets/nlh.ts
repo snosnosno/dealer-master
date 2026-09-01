@@ -24,9 +24,13 @@ function bad(
  * 리오픈이 닫혔을 때의 거절 사유.
  * bet·raise 경로와 allin 경로가 같은 규칙을 집행하므로 문구를 공유한다 —
  * 따로 두면 한쪽만 고쳐져 "레이즈로는 거절, 올인으로는 통과"가 되돌아온다.
+ *
+ * 문구가 규정을 그대로 말해야 한다. 예전 문구("풀 레이즈에 못 미치는 올인은 베팅을
+ * 다시 열지 않습니다")는 **단발 해석을 문장으로 굳혀 놓은 것**이라, 짧은 올인이
+ * 합쳐서 최소 레이즈를 넘긴 경우에도 같은 이유를 대며 훈련생에게 틀린 규칙을 가르쳤다.
  */
 const REOPEN_CLOSED =
-  '풀 레이즈에 못 미치는 올인은 베팅을 다시 열지 않습니다 — 콜 또는 폴드만 가능합니다'
+  '직면한 총 베팅 증가액이 최소 레이즈 금액에 못 미칩니다 — 콜 또는 폴드만 가능합니다'
 
 export const nlh: Ruleset = {
   id: 'nlh',
@@ -46,6 +50,32 @@ export const nlh: Ruleset = {
 
   maxRaiseTo(ctx) {
     return ctx.seatBet + ctx.seatStack
+  },
+
+  /**
+   * 제35조 4항 (베팅 기회 재개).
+   *
+   * > 한 명 이상의 플레이어가 최소 레이즈 금액에 미치지 못하는 올인을 한 경우, 이미
+   * > 액션을 취했던 플레이어에게 베팅 기회가 다시 돌아왔을 때, 해당 플레이어가 직면한
+   * > **총** 베팅 증가액이 유효한 최소 레이즈 금액 이상이 아니라면 레이즈를 할 수 없다.
+   *
+   * 비유: 문이 닫혔는지는 "마지막에 누가 세게 밀었나"가 아니라 **내가 마지막으로 본
+   * 이후 문이 얼마나 움직였나**로 정한다. 약한 손길이 여러 번이어도 합쳐서 충분히
+   * 밀렸으면 문은 열린 것이다.
+   *
+   * **누적이라는 점이 핵심이다.** 짧은 올인 각각이 최소 레이즈에 못 미쳐도 합이 넘으면
+   * 레이즈할 수 있다. 예전 구현은 "마지막 풀 레이즈 이후 액션했나"라는 단발 판정이라
+   * 이 경우를 막았다(실측: 4,700 → 13,500 → 18,000 올인 → 23,000 올인 에서 13,500 을
+   * 레이즈했던 좌석의 직면 증가액은 9,500 ≥ 8,800 이므로 규정상 레이즈 가능하다).
+   *
+   * "직면한 총 베팅 증가액"에 새 상태는 필요 없다. 그 좌석이 마지막 액션에서 남긴 벳이
+   * 곧 `seatBet` 이므로 `currentBet - seatBet` 이 그 값이다 — 콜로 남겼든 레이즈로
+   * 세웠든 마찬가지다.
+   */
+  canReopen(ctx) {
+    // 이번 라운드에 아직 액션하지 않았다면 리오픈을 따질 일이 없다. 온전한 권리가 있다.
+    if (!ctx.hasActedThisRound) return true
+    return ctx.currentBet - ctx.seatBet >= Math.max(ctx.lastRaiseSize, ctx.bigBlind)
   },
 
   validateAction(ctx, action) {
@@ -98,8 +128,8 @@ export const nlh: Ruleset = {
 
       case 'bet':
       case 'raise': {
-        // ⚠️ 리오픈 규칙의 조항 번호는 미검증이다 — types.ts 의 canRaise 주석 참조.
-        if (!ctx.canRaise) {
+        // 리오픈 판정은 canReopen 하나가 정본이다 (제35조 4항).
+        if (!this.canReopen(ctx)) {
           return bad(REOPEN_CLOSED, { kind: 'call', to: Math.min(ctx.currentBet, maxTo) })
         }
         if (action.to > maxTo) return bad('스택을 초과합니다', { kind: 'allin', to: maxTo })
@@ -116,7 +146,7 @@ export const nlh: Ruleset = {
         /*
          * 올인은 리오픈 제약의 예외가 아니다. 마주한 벳보다 많이 내는 올인은
          * 이름만 다른 레이즈이므로, 리오픈이 닫혀 있으면 "레이즈"와 똑같이 거절된다 —
-         * 아니면 한 단어로 canRaise 를 우회할 수 있고 엔진이
+         * 아니면 한 단어로 리오픈 제약을 우회할 수 있고 엔진이
          * "리오픈 안 돼도 올인은 된다"를 정답으로 가르친다.
          *
          * 반대로 maxTo <= currentBet 인 올인은 레이즈가 아니라 그냥 콜이다(스택이
@@ -126,7 +156,7 @@ export const nlh: Ruleset = {
          * 금액 검사가 먼저면 corrected 로 { allin, to: maxTo } 를 내놓는데
          * 그 교정값 자체가 다시 무효다. 리오픈을 먼저 보면 항상 합법인 콜로 교정된다.
          */
-        if (!ctx.canRaise && maxTo > ctx.currentBet) {
+        if (!this.canReopen(ctx) && maxTo > ctx.currentBet) {
           return bad(REOPEN_CLOSED, { kind: 'call', to: ctx.currentBet })
         }
         if (action.to !== maxTo) return bad('올인 금액이 스택과 다릅니다', { kind: 'allin', to: maxTo })

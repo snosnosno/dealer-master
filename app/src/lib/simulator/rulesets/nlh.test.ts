@@ -4,7 +4,7 @@ import type { BettingContext } from './types'
 
 const ctx = (over: Partial<BettingContext> = {}): BettingContext => ({
   currentBet: 0, lastRaiseSize: 0, bigBlind: 200, seatBet: 0, seatStack: 100000,
-  isOpenBet: false, canRaise: true, ...over,
+  isOpenBet: false, hasActedThisRound: false, ...over,
 })
 
 describe('minRaiseTo — 파일럿 케이스 4', () => {
@@ -204,8 +204,8 @@ describe('validateAction — 파일럿 케이스 3 (Rule 51-B 언더콜)', () =>
 
   it('리오픈되지 않았으면 올인이라고 말해도 다시 올릴 수 없다', () => {
     // "레이즈"로 거절당하는 액션이 "올인"이라는 단어 하나로 통과하면
-    // canRaise 를 둔 이유가 사라진다. 올인은 리오픈 제약의 예외가 아니다.
-    const c = ctx({ currentBet: 1100, lastRaiseSize: 1000, seatBet: 1000, seatStack: 50000, canRaise: false })
+    // 리오픈 제약을 둔 이유가 사라진다. 올인은 그 예외가 아니다.
+    const c = ctx({ currentBet: 1100, lastRaiseSize: 1000, seatBet: 1000, seatStack: 50000, hasActedThisRound: true })
     const r = nlh.validateAction(c, { kind: 'allin', to: 51000 })
     expect(r.valid).toBe(false)
     if (!r.valid) expect(r.corrected).toEqual({ kind: 'call', to: 1100 })
@@ -214,15 +214,23 @@ describe('validateAction — 파일럿 케이스 3 (Rule 51-B 언더콜)', () =>
   it('리오픈되지 않았어도 콜 금액 이하의 올인은 허용된다', () => {
     // 스택이 콜 금액에 못 미치는 올인은 레이즈가 아니라 콜이다.
     // 리오픈 검사가 이것까지 막으면 짧은 스택이 콜조차 못 하게 된다.
-    const c = ctx({ currentBet: 8000, seatBet: 0, seatStack: 3000, canRaise: false })
-    const r = nlh.validateAction(c, { kind: 'allin', to: 3000 })
+    /*
+     * 리오픈이 **실제로 닫힌** 숫자여야 한다. 직면한 증가액 8,000 − 4,000 = 4,000 이
+     * 유효 최소 폭 5,000 에 못 미치므로 닫혀 있고, 스택 3,000 은 그 차액에도 못 미친다.
+     * (예전 픽스처는 seatBet 0 · currentBet 8,000 이라 직면 증가액이 8,000 이었다 —
+     *  제35조 4항으로 계산하면 리오픈이 열려 있어, 어서션은 통과해도 테스트 이름이
+     *  말하는 상황이 아니게 된다.)
+     */
+    const c = ctx({ currentBet: 8000, lastRaiseSize: 5000, seatBet: 4000, seatStack: 3000, hasActedThisRound: true })
+    expect(nlh.canReopen(c)).toBe(false)
+    const r = nlh.validateAction(c, { kind: 'allin', to: 7000 })
     expect(r.valid).toBe(true)
   })
 
   it('베팅이 리오픈되지 않았으면 레이즈할 수 없다', () => {
     // 앞에서 풀 레이즈에 못 미치는 올인만 있었던 경우.
     // 이미 액션한 좌석은 차액을 콜하거나 폴드할 수 있을 뿐 다시 올릴 수 없다.
-    const c = ctx({ currentBet: 1100, lastRaiseSize: 1000, seatBet: 1000, seatStack: 50000, canRaise: false })
+    const c = ctx({ currentBet: 1100, lastRaiseSize: 1000, seatBet: 1000, seatStack: 50000, hasActedThisRound: true })
     const r = nlh.validateAction(c, { kind: 'raise', to: 3000 })
     expect(r.valid).toBe(false)
     if (!r.valid) expect(r.corrected).toEqual({ kind: 'call', to: 1100 })

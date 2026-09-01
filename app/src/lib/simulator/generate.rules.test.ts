@@ -22,8 +22,12 @@ import type { DecisionKind, Hand } from './generate'
 
 /**
  * 생성기가 봇 액션을 만들 때 쓴 것과 같은 규칙으로 베팅 컨텍스트를 다시 세운다.
- * lastRaiseSize·canRaise 는 상태에 남지 않고 라운드 진행에서만 나오는 값이라
- * 이벤트 열을 걸으며 재구성하는 것 말고는 밖에서 알 방법이 없다.
+ * lastRaiseSize 와 "이번 라운드에 액션했는지"는 상태에 남지 않고 라운드 진행에서만
+ * 나오는 값이라, 이벤트 열을 걸으며 재구성하는 것 말고는 밖에서 알 방법이 없다.
+ *
+ * **레이즈 권리는 여기서 계산하지 않는다.** 그건 룰셋의 canReopen 이 제35조 4항으로
+ * 판정하고, 이 테스트는 사실(액션했는가)만 넘긴다 — 사본을 두면 테스트가 검증하는
+ * 것이 엔진이 아니라 그 사본이 된다.
  */
 function assertEveryActionLegal(seed: string, opts: { require?: DecisionKind[] } = {}) {
   const hand = generateHand({ seed, ...opts })
@@ -33,7 +37,7 @@ function assertEveryActionLegal(seed: string, opts: { require?: DecisionKind[] }
   let lastRaiseSize = bb // 프리플랍은 빅블라인드가 오픈 벳 역할을 한다
   // 프리플랍이 마주하는 벳은 빅블라인드이고 그게 곧 이 라운드의 첫 벳이다 (Rule 51-B).
   let isOpenBet = true
-  let actedSinceFullRaise = new Set<number>()
+  const acted = new Set<number>()
   let checked = 0
 
   for (const e of hand.events) {
@@ -41,7 +45,7 @@ function assertEveryActionLegal(seed: string, opts: { require?: DecisionKind[] }
       lastRaiseSize = 0
       // 새 스트리트는 마주한 벳 없이 시작한다 — 다음에 깔릴 벳이 그 라운드의 첫 벳이다.
       isOpenBet = true
-      actedSinceFullRaise = new Set<number>()
+      acted.clear()
       state = applyEvent(state, e)
       continue
     }
@@ -60,7 +64,7 @@ function assertEveryActionLegal(seed: string, opts: { require?: DecisionKind[] }
         seatBet: seat.bet,
         seatStack: seat.stack,
         isOpenBet,
-        canRaise: !actedSinceFullRaise.has(e.seat),
+        hasActedThisRound: acted.has(e.seat),
       },
       e.action,
     )
@@ -68,7 +72,7 @@ function assertEveryActionLegal(seed: string, opts: { require?: DecisionKind[] }
     checked++
 
     state = applyEvent(state, e)
-    actedSinceFullRaise.add(e.seat)
+    acted.add(e.seat)
 
     const newBet = state.seats[e.seat].bet
     if (newBet > currentBet) {
@@ -78,7 +82,6 @@ function assertEveryActionLegal(seed: string, opts: { require?: DecisionKind[] }
       const raiseSize = newBet - currentBet
       if (raiseSize >= Math.max(lastRaiseSize, bb)) {
         lastRaiseSize = raiseSize
-        actedSinceFullRaise = new Set([e.seat])
       }
     }
   }

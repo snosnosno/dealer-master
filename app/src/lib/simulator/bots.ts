@@ -13,6 +13,7 @@
  */
 import type { Rng } from './rng'
 import { nlh } from './rulesets/nlh'
+import type { BettingContext } from './rulesets/types'
 import type { HandEvent, HandState, PlayerAction, Street } from './types'
 
 /** 배역이 성립하는 스택 금액들. 전부 100 단위라 팟이 칩 단위 아래로 쪼개지지 않는다. */
@@ -71,7 +72,12 @@ export type BotContext = {
   currentBet: number
   lastRaiseSize: number
   isOpenBet: boolean
-  canRaise: boolean
+  /**
+   * 이 좌석이 이번 라운드에 이미 액션했는지. **"레이즈할 수 있는가"가 아니다** —
+   * 그 결론은 룰셋의 `canReopen` 이 낸다 (제35조 4항). 봇이 결론을 받아 쓰면
+   * 리오픈 규칙의 사본이 여기 하나 더 생긴다.
+   */
+  hasActedThisRound: boolean
   plan: StackPlan
   street: Street
 }
@@ -103,26 +109,29 @@ export function decideAction(s: HandState, seat: number, d: BotContext): HandEve
   // 콜조차 스택을 넘으면 선택지는 올인 콜 아니면 폴드다
   if (toCall >= st.stack) return roll < 0.5 ? act({ kind: 'allin', to: allinTo }) : act({ kind: 'fold' })
 
-  const minTo = nlh.minRaiseTo({
+  const ctx: BettingContext = {
     currentBet: d.currentBet,
     lastRaiseSize: d.lastRaiseSize,
     bigBlind: d.bb,
     seatBet: st.bet,
     seatStack: st.stack,
     isOpenBet: d.isOpenBet,
-    canRaise: d.canRaise,
-  })
+    hasActedThisRound: d.hasActedThisRound,
+  }
+  // 레이즈 권리는 규칙책에 묻는다. 여기서 판정하면 사본이 갈라진다.
+  const canReopen = nlh.canReopen(ctx)
+  const minTo = nlh.minRaiseTo(ctx)
   const aggress = (): HandEvent =>
     minTo >= allinTo
       ? act({ kind: 'allin', to: allinTo })
       : act({ kind: d.currentBet === 0 ? 'bet' : 'raise', to: minTo })
 
   if (toCall === 0) {
-    if (!d.canRaise || roll < 0.6) return act({ kind: 'check' })
+    if (!canReopen || roll < 0.6) return act({ kind: 'check' })
     return aggress()
   }
 
   if (roll < 0.42) return act({ kind: 'fold' })
-  if (!d.canRaise || roll < 0.86) return act({ kind: 'call', to: d.currentBet })
+  if (!canReopen || roll < 0.86) return act({ kind: 'call', to: d.currentBet })
   return aggress()
 }

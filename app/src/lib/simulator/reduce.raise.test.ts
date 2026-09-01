@@ -90,7 +90,7 @@ describe('HandState.lastRaiseSize', () => {
       seatBet: 0,
       seatStack: Number.MAX_SAFE_INTEGER,
       isOpenBet: false,
-      canRaise: true,
+      hasActedThisRound: false,
     })
     expect(answer).toBe(24800)
   })
@@ -126,7 +126,7 @@ describe('HandState.lastRaiseSize', () => {
       seatBet: 0,
       seatStack: Number.MAX_SAFE_INTEGER,
       isOpenBet: true,
-      canRaise: true,
+      hasActedThisRound: false,
     })
     expect(minBet).toBe(BB)
   })
