@@ -10,7 +10,7 @@ import { useState } from 'react'
 import { RushTable } from './RushTable'
 import type { RushQuestion } from '@/lib/rush/types'
 
-export type Verdict = { correct: boolean; points: number; headline: string } | null
+import type { Verdict } from '@/lib/rush/session'
 
 export function QuestionPanel({
   question,

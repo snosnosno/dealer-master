@@ -16,7 +16,7 @@ import { ActionTable } from './ActionTable'
 import { ArticlePanel } from './ArticlePanel'
 import type { ActionQuestion } from '@/lib/action-rush/types'
 
-export type Verdict = { correct: boolean; points: number; headline: string } | null
+import type { Verdict } from '@/lib/rush/session'
 
 export function ActionQuestionPanel({
   question,

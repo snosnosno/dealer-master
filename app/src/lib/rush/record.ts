@@ -83,8 +83,12 @@ export function createBestRecord(key: string): BestRecord {
   return { readBest, saveBest, useBest }
 }
 
-/** 축 1 — 팟 판독 러시. 호출부는 예전 그대로 `readBest` 등을 쓴다. */
-export const { readBest, saveBest, useBest } = createBestRecord('potrush.best')
+/**
+ * 축별 최고 기록. **키는 여기서만 정한다** — 페이지가 각자 `createBestRecord` 를 부르면
+ * 키가 흩어지고, 흩어진 키는 오타 하나로 기록을 통째로 잃는다.
+ */
+export const potRushRecord = createBestRecord('potrush.best')
+export const actionRushRecord = createBestRecord('actionrush.best')
 
 /**
  * 음소거. `prefers-reduced-motion` 과 **별개**다 —

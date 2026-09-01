@@ -72,10 +72,3 @@ export function generateRun(seed: string): RushQuestion[] {
   return questions
 }
 
-/**
- * 시드가 없을 때 새로 만든다. `components/simulator/hand.ts` 의 것과 같은 형식이다.
- * **문제 생성에는 이 값이 시드로만 들어간다** — 생성기 안에서는 `Math.random()` 을 쓰지 않는다.
- */
-export function randomSeed(): string {
-  return Math.floor(Math.random() * 0xffffffff).toString(36)
-}

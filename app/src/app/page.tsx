@@ -1,21 +1,40 @@
 /**
  * 축 선택 화면.
  *
- * 대시보드가 아니다. 등급 카드·스트릭 배지는 hand_sessions 를 읽어야 하는데
- * 그 테이블이 3단계 범위라, 지금 만들면 더미 데이터 화면이 된다.
+ * 대시보드가 아니다. 등급 카드·스트릭 배지는 기록 층을 읽어야 하는데 그건 로그인과
+ * 함께 오는 단계라(PRD §4), 지금 만들면 더미 데이터 화면이 된다.
+ *
+ * **목록은 PRD §6 의 축 4개와 같은 순서·같은 이름이어야 한다.** 예전에는 "딜러 교육"이
+ * 옛 시뮬레이터를 가리키고 축 4(TDA 룰)는 아예 없었다 — 화면과 정본이 어긋나면
+ * 어느 쪽이 계획인지 아무도 모른다. 시뮬레이터는 축이 아니라 도구라서 아래로 내렸다.
  */
 import Link from 'next/link'
 
 const AXES = [
-  { icon: '⏱️', title: '팟 판독 러시', desc: '10문제 · 3분 · 개인 기록', href: '/rush' },
+  {
+    icon: '⏱️',
+    title: '팟 판독 러시',
+    desc: '팟·사이드팟·홀칩 — 10문제 · 3분',
+    href: '/rush',
+  },
   {
     icon: '⚖️',
-    title: '액션 판정 러시',
-    desc: '10문제 · 규정 조항이 근거다',
+    title: '딜러 교육 — 액션 판정 러시',
+    desc: '액션 합법성·최소 레이즈·칩 해석 — 근거는 규정 조항이다',
     href: '/action-rush',
   },
-  { icon: '🎓', title: '딜러 교육', desc: '노리밋 홀덤 시뮬레이터', href: '/simulator' },
-  { icon: '🃏', title: '믹스게임 운영', desc: '스터드 · 드로우 트레이너', href: null },
+  {
+    icon: '🃏',
+    title: '믹스게임 운영',
+    desc: '스터드 · 드로우 · 베팅 구조 3종',
+    href: null,
+  },
+  {
+    icon: '📖',
+    title: 'TDA 룰 판정',
+    desc: '조항 적용과 재량 판단 — 주 1회 케이스',
+    href: null,
+  },
 ] as const
 
 export default function Home() {
@@ -51,6 +70,14 @@ export default function Home() {
           ),
         )}
       </div>
+
+      {/* 축이 아니라 도구다. 엔진이 무엇을 내는지 눈으로 보는 화면이라 목록과 섞지 않는다 */}
+      <p className="mt-8 text-[11px] text-zinc-400">
+        <Link href="/simulator" className="underline underline-offset-2 hover:text-zinc-600">
+          핸드 시뮬레이터
+        </Link>
+        {' · 노리밋 홀덤 한 판을 처음부터 끝까지 돌려보는 도구'}
+      </p>
     </main>
   )
 }

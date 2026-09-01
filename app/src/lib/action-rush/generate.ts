@@ -85,7 +85,3 @@ export function generateRun(seed: string): ActionQuestion[] {
   return questions
 }
 
-/** 시드가 없을 때 새로 만든다. **문제 생성에는 이 값이 시드로만 들어간다.** */
-export function randomSeed(): string {
-  return Math.floor(Math.random() * 0xffffffff).toString(36)
-}
