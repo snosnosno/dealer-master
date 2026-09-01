@@ -18,7 +18,9 @@ export {
   evaluateHand, compareHands, CATEGORY_LABEL,
   type HandRank, type HandCategory,
 } from './evaluate'
-export { initialState, applyEvent, stateAt } from './reduce'
+// isFullRaise 는 "이 레이즈가 베팅을 다시 여는 풀 레이즈인가"의 정본이다.
+// 러시 생성기가 "짧은 올인을 만들었는지"를 스스로 판단하지 않고 여기 묻는다.
+export { initialState, applyEvent, stateAt, isFullRaise } from './reduce'
 export type {
   HandEvent, HandState, SeatState, SeatInit, PlayerAction, Street,
 } from './types'
