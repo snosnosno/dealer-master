@@ -494,7 +494,7 @@ body {
    * PRD 6-3 의 GameSpec 초안을 두 게임에 실제로 적어 본 것이다.
    *
    * 초안과 달라진 곳 하나 — `deal: number` + `faceUp: boolean` 으로는
-   * **스터드 3번째 카드(다운 2장 + 오픈 1장)를 표현할 수 없다.** 한 스트릿이 다운과 업을
+   * **스터드 3번째 카드(다운 2장 + 업 1장)를 표현할 수 없다.** 한 스트릿이 다운과 업을
    * 동시에 내리므로 `deal: {down, up}` 이어야 한다. 두 게임에 적어 보지 않았다면
    * 평가기를 다 만든 뒤에 알았을 것이다.
    */
@@ -523,7 +523,7 @@ body {
       raiseCap: 5,
       draw: { rounds: 3, maxDiscard: 5 },
       streets: [
-        { id: 'predraw', ko: '카드 배분 직후', short: '배분', deal: { down: 5, up: 0 }, burn: false, betting: true, firstToAct: 'left-of-bb', size: 1 },
+        { id: 'predraw', ko: '베팅 라운드', short: '첫 베팅', deal: { down: 5, up: 0 }, burn: false, betting: true, firstToAct: 'left-of-bb', size: 1 },
         { id: 'draw1', ko: '첫 번째 드로우', short: '드로우 1', draw: true, burn: true, betting: true, firstToAct: 'left-of-button', size: 1 },
         { id: 'draw2', ko: '두 번째 드로우', short: '드로우 2', draw: true, burn: true, betting: true, firstToAct: 'left-of-button', size: 2 },
         { id: 'draw3', ko: '세 번째 드로우', short: '드로우 3', draw: true, burn: true, betting: true, firstToAct: 'left-of-button', size: 2 }
@@ -612,7 +612,7 @@ body {
       board: felt(seatsHtml([seat], false)),
       input: choices(spec.holeCardCount + '장', wrongs.slice(0, 3)),
       why: spec.family === 'stud'
-        ? '스터드는 <b>다운 3장(1·2번째와 7번째) + 오픈 4장(3~6번째)</b> 으로 7장을 받고, 그중 최고 5장을 쓴다.'
+        ? '스터드는 <b>다운 3장(1·2번째와 7번째) + 업 4장(3~6번째)</b> 으로 7장을 받고, 그중 최고 5장을 쓴다.'
         : '드로우는 처음 받은 <b>5장</b>이 전부다. 교체를 해도 손에 있는 장수는 변하지 않는다.',
       cite: { src: GUIDE, txt: spec.family === 'stud'
         ? 'Stud에서 플레이어는 핸드 동안 7장의 카드를 받습니다. 이 7장의 카드에서 플레이어는 최고의 5장 조합을 만들어야 합니다.'
@@ -631,7 +631,7 @@ body {
         ? ['앤티 + 브링인', '앤티만', '브링인만']
         : ['스몰블라인드 + 빅블라인드', '블라인드 + 앤티', '앤티만']),
       why: spec.forced === 'ante+bringin'
-        ? '스터드에는 <b>SB·BB 가 없다.</b> 전원이 앤티를 내고, 3번째 카드에서 가장 낮은 오픈카드가 브링인으로 액션을 연다.'
+        ? '스터드에는 <b>SB·BB 가 없다.</b> 전원이 앤티를 내고, 3번째 카드에서 가장 낮은 업카드가 브링인으로 액션을 연다.'
         : '버튼 바로 왼쪽이 스몰블라인드, 그 왼쪽이 빅블라인드다 — 홀덤과 같다.',
       cite: { src: GUIDE, txt: spec.forced === 'ante+bringin'
         ? '스터드에는 SB와 BB가 없습니다. 대신 각 플레이어는 카드가 나눠지기 전에 Ante를 지불합니다.'
@@ -660,23 +660,23 @@ body {
     }
 
     var d = st.deal;
-    var label = d.down > 0 && d.up > 0 ? '다운 ' + d.down + '장 + 오픈 ' + d.up + '장'
-      : d.up > 0 ? '오픈 ' + d.up + '장' : '다운 ' + d.down + '장';
-    var wrong = ['다운 2장 + 오픈 1장', '오픈 1장', '다운 1장', '다운 5장', '오픈 2장'].filter(function (x) {
+    var label = d.down > 0 && d.up > 0 ? '다운 ' + d.down + '장 + 업 ' + d.up + '장'
+      : d.up > 0 ? '업 ' + d.up + '장' : '다운 ' + d.down + '장';
+    var wrong = ['다운 2장 + 업 1장', '업 1장', '다운 1장', '다운 5장', '업 2장'].filter(function (x) {
       return x !== label;
     }).slice(0, 3);
     return {
       kind: '딜링', limit: 15,
       prompt: at === 0
-        ? '핸드를 시작한다. 첫 카드를 <em>어떻게</em> 돌리나?'
-        : '<em>' + st.ko + '</em> 차례다. <em>어떻게</em> 돌리나?',
-      board: felt(streetStrip(spec, at) + '<div class="note2">다음 카드를 돌릴 차례다.</div>'),
+        ? '핸드를 시작한다. 첫 카드를 <em>어떻게</em> 딜하나?'
+        : '<em>' + st.ko + '</em> 차례다. <em>어떻게</em> 딜하나?',
+      board: felt(streetStrip(spec, at) + '<div class="note2">다음 카드를 딜할 차례다.</div>'),
       input: choices(label, wrong),
       why: st.id === '3rd'
-        ? '첫 카드는 <b>다운 2장과 오픈 1장</b>을 함께 돌린다. 오픈으로 나간 것이 도어카드이고, 브링인을 정하는 것도 이 카드다.'
+        ? '첫 카드는 <b>다운 2장과 업 1장</b>을 함께 딜한다. 업으로 나간 것이 도어카드이고, 브링인을 정하는 것도 이 카드다.'
         : st.id === '7th'
-          ? '7번째 카드는 <b>다운</b>으로 돌린다. 오픈으로 나가면 안 된다.'
-          : '이 카드는 <b>' + label + '</b>으로 돌린다.',
+          ? '7번째 카드는 <b>다운</b>으로 딜한다. 업으로 나가면 안 된다.'
+          : (at === 0 ? '처음에는 <b>' + label + '</b>을 딜한다.' : '이 카드는 <b>' + label + '</b>으로 딜한다.'),
       cite: { src: GUIDE, txt: st.id === '3rd'
         ? '처음 두 장은 페이스다운으로, 마지막 한 장은 페이스업으로 나눠줍니다. 이때 페이스업된 카드를 도어카드라고 부릅니다.'
         : '7번째 카드는 페이스 다운으로 나눠줍니다.' }
@@ -689,19 +689,19 @@ body {
     var st = spec.streets[at];
     var yes = st.burn === true;
     return {
-      kind: '버닝카드', limit: 12,
+      kind: '번카드', limit: 12,
       prompt: at === 0
-        ? '핸드를 시작한다. 첫 카드를 돌리기 직전이다. <em>버닝카드를 내리는가?</em>'
-        : '<em>' + st.ko + '</em>' + part(st.ko, '을', '를') + ' 돌리기 직전이다. <em>버닝카드를 내리는가?</em>',
+        ? '핸드를 시작한다. 첫 카드를 딜하기 직전이다. <em>번카드를 내리는가?</em>'
+        : '<em>' + st.ko + '</em>' + (st.draw ? ' 카드' : '') + '를 딜하기 직전이다. <em>번카드를 내리는가?</em>',
       board: felt(streetStrip(spec, at) +
         '<div class="deck"><span class="cutcard"></span>' + backs(1) + '</div>' +
         '<div class="note2">스텁이 딜러 앞에 있다.</div>'),
       input: shuffle([{ label: '내린다', correct: yes }, { label: '내리지 않는다', correct: !yes }]),
       why: yes
-        ? '베팅 라운드가 끝나고 카드를 돌리기 전에는 <b>항상</b> 버닝카드를 내린다.'
+        ? '베팅 라운드가 끝나고 카드를 딜하기 전에는 <b>항상</b> 번카드를 내린다.'
         : (spec.family === 'stud'
-          ? '첫 카드에는 버닝이 없다. 버닝카드는 <b>베팅 라운드가 끝난 뒤</b> 돌리는 카드 앞에 붙는다.'
-          : '첫 카드를 돌릴 때는 버닝이 없다. 버닝카드는 <b>드로우 직전</b>에 한 장 내린다.'),
+          ? '첫 카드에는 번이 없다. 번카드는 <b>베팅 라운드가 끝난 뒤</b> 딜하는 카드 앞에 붙는다.'
+          : '첫 카드를 딜할 때는 번이 없다. 번카드는 <b>드로우 직전</b>에 한 장 내린다.'),
       cite: { src: GUIDE, txt: spec.family === 'stud'
         ? '배팅라운드가 끝나고 카드를 나눠주기 전에 항상 버닝카드를 내립니다.'
         : '마지막 버튼 플레이어까지 확인이 끝나면 버닝카드를 한 장 내린 후, SB플레이어부터 바꾸는 카드를 회수한 후, 회수한 만큼의 카드 수를 스텁에서 나눠줍니다.' }
@@ -713,7 +713,7 @@ body {
     var small = pick([2000, 4000, 10000, 20000]);
     var big = small * 2;
     /*
-     * 4번째 카드는 뽑지 않는다. 오픈카드에 페어가 뜨면 빅 베팅을 **선택**할 수 있어서
+     * 4번째 카드는 뽑지 않는다. 업카드에 페어가 뜨면 빅벳을 **선택**할 수 있어서
      * (Mix Game Guide) 정답이 하나가 아닌데, 스펙의 size 는 그 조건을 담지 않는다.
      * ADR-003 에서 필드를 늘리지 않기로 했으므로 출제에서 뺀다 — 스펙과 정답이
      * 어긋나는 문제를 내는 것보다 안 내는 것이 낫다.
@@ -736,7 +736,7 @@ body {
         ? (spec.family === 'stud'
           ? '스터드는 <b>5번째 카드부터</b> 베팅이 두 배가 된다.'
           : '드로우는 두 번의 드로우가 끝난 <b>세 번째 베팅 라운드부터</b> 두 배가 된다.')
-        : '아직 <b>스몰 베팅</b> 구간이다.',
+        : '아직 <b>스몰벳</b> 구간이다.',
       cite: { src: GUIDE, txt: spec.family === 'stud'
         ? '(5번째 카드 이후) 모든 베팅은 빅 배팅(Big Bet) 크기로 진행됩니다.'
         : '2번의 드로우가 끝나고 세번째 배팅라운드부터 배팅금액은 두배가 됩니다.' }
@@ -782,7 +782,7 @@ body {
         var main = ranks[i];
         var hand = backs(2) + cardFace(main, pick(SUITS));
         for (k = 1; k < upCount; k++) hand += cardFace(pick(RANKS.slice(0, 8)), pick(SUITS));
-        seats.push({ name: NAMES[i], hand: hand, note: '오픈 ' + main, rank: RANKS.indexOf(main) });
+        seats.push({ name: NAMES[i], hand: hand, note: '업 ' + main, rank: RANKS.indexOf(main) });
       }
       var lowest = st.firstToAct === 'lowest-upcard';
       var best = seats[0].rank;
@@ -793,13 +793,13 @@ body {
       return {
         kind: '액션 순서', limit: 20,
         prompt: lowest
-          ? '<em>3번째 카드</em>까지 돌았다. <em>브링인</em>은 누구인가?'
-          : '<em>' + st.ko + '</em>까지 돌았다. 이 라운드 <em>첫 액션</em>은 누구인가?',
+          ? '<em>3번째 카드</em>까지 딜했다. <em>브링인</em>은 누구인가?'
+          : '<em>' + st.ko + '</em>까지 딜했다. 이 라운드 <em>첫 액션</em>은 누구인가?',
         board: felt(streetStrip(spec, at) + seatsHtml(seats, true)),
         input: { seat: ansIdx },
         why: lowest
-          ? '<b>가장 낮은 오픈카드</b>가 브링인을 낸다. 브링인은 금액을 내거나 컴플리트로 올릴 수 있다.'
-          : '4번째 카드부터는 <b>가장 높은 오픈카드</b>가 액션을 시작한다 — 3번째 카드와 반대다.',
+          ? '<b>가장 낮은 업카드</b>가 브링인을 낸다. 브링인은 금액을 내거나 컴플리트로 올릴 수 있다.'
+          : '4번째 카드부터는 <b>가장 높은 업카드</b>가 액션을 시작한다 — 3번째 카드와 반대다.',
         cite: { src: GUIDE, txt: lowest
           ? '공개된 카드 중 가장 낮은 랭크를 가진 플레이어가 브링인(Bring-In) 배팅을 시작합니다.'
           : '4번째 카드를 받은 후 가장 높은 랭크의 공개 카드를 가진 플레이어가 액션을 시작합니다.' }
@@ -819,7 +819,7 @@ body {
     return {
       kind: '액션 순서', limit: 20,
       prompt: st.firstToAct === 'left-of-bb'
-        ? '카드가 다 돌았다. <em>첫 액션</em>은 누구인가?'
+        ? '카드를 다 딜했다. <em>첫 액션</em>은 누구인가?'
         : '<em>' + st.ko + '</em>' + part(st.ko, '이', '가') + ' 끝났다. 이 라운드 <em>첫 액션</em>은 누구인가?',
       board: felt(streetStrip(spec, at) + seatsHtml(seats, true)),
       input: { seat: ans },
