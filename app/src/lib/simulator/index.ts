@@ -28,6 +28,10 @@ export type {
   Ruleset, RulesetId, BettingContext, ValidationResult, DeclaredIntent,
 } from './rulesets/types'
 export {
+  resolveOutOfTurn,
+  type OutOfTurnAction, type ProperAction, type OutOfTurnRuling,
+} from './rulesets/procedure'
+export {
   generateHand, PLAYER_NAMES, MIN_SEATS, MAX_SEATS,
   type Hand, type GenerateOptions, type Difficulty, type DecisionKind,
 } from './generate'
