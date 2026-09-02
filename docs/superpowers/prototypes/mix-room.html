@@ -203,6 +203,7 @@ body {
   box-shadow: 0 3px 10px rgba(4,52,44,.28), inset 0 0 0 3px rgba(255,255,255,.28);
 }
 .chip small { font-size: 9px; font-weight: 800; opacity: .9; letter-spacing: .04em; }
+.chip.bringin { background: #C07A26; }
 .chip.small { background: #378ADD; }
 .chip.big { background: #7F77DD; }
 .chip.ghost { position: fixed; z-index: 60; pointer-events: none; cursor: grabbing; margin: 0; }
@@ -463,7 +464,7 @@ function advance() {
   if (s.t === 'endhand') return doEndHand();
 
   if (s.t === 'askseat') { var a = mkAskSeat(s.ix); return a ? stop(a) : advance(); }
-  if (s.t === 'askbet') { return stop(mkAskBet(s.ix)); }
+  if (s.t === 'askbet') { var bq = mkAskBet(s.ix); return bq ? stop(bq) : advance(); }
   if (s.t === 'incident') { var inc = mkIncident(s.ix); return inc ? stop(inc) : advance(); }
   if (s.t === 'objection') { var ob = mkObjection(s.ix); return ob ? stop(ob) : advance(); }
   return advance();
@@ -496,16 +497,75 @@ function doDeal(ix, next) {
 function fixTies(ix) {
   var st = H.spec.streets[ix];
   var wantMax = st.firstToAct === 'highest-upcard';
-  for (var guard = 0; guard < 30; guard++) {
+  for (var guard = 0; guard < 40; guard++) {
     var list = actives();
-    var keys = list.map(function (s) { return upKey(s, wantMax); });
-    var ext = wantMax ? Math.max.apply(null, keys) : Math.min.apply(null, keys);
-    var tied = [];
-    for (var i = 0; i < list.length; i++) if (keys[i] === ext) tied.push(list[i]);
-    if (tied.length <= 1) return true;
-    var victim = tied[rnd(tied.length)];
+    if ((wantMax ? bestUpSeat(list) : lowUpSeat(list)) !== null) return true;
+    /* 동률인 좌석 하나의 방금 나간 업카드만 바꾼다. 아직 아무도 보지 않은 시점이다. */
+    var victim = list[rnd(list.length)];
+    if (!victim.up.length) return false;
     victim.up[victim.up.length - 1] = draw1();
   }
+  return false;
+}
+/* 업카드로 만든 최고 핸드. 4장 이하라 스트레이트·플러시는 성립하지 않는다.
+   그래서 포카드 > 트리플 > 투페어 > 원페어 > 하이카드 다섯 단계뿐이다. */
+function upRank(s) {
+  var counts = {}, i, v, k;
+  for (i = 0; i < s.up.length; i++) { v = rv(s.up[i]); counts[v] = (counts[v] || 0) + 1; }
+  var groups = [];
+  for (k in counts) if (counts.hasOwnProperty(k)) groups.push({ v: parseInt(k, 10), n: counts[k] });
+  groups.sort(function (a, b) { return b.n - a.n || b.v - a.v; });
+  if (!groups.length) return { key: [-1], cat: -1, top: -1 };
+  var cat;
+  if (groups[0].n >= 4) cat = 7;
+  else if (groups[0].n === 3) cat = 6;
+  else if (groups[0].n === 2 && groups[1] && groups[1].n === 2) cat = 5;
+  else if (groups[0].n === 2) cat = 4;
+  else cat = 0;
+  var key = [cat];
+  for (i = 0; i < groups.length; i++) key.push(groups[i].v);
+  return { key: key, cat: cat, top: groups[0].v };
+}
+function cmpKey(a, b) {
+  var n = Math.max(a.length, b.length);
+  for (var i = 0; i < n; i++) {
+    var x = i < a.length ? a[i] : -1, y = i < b.length ? b[i] : -1;
+    if (x !== y) return x - y;
+  }
+  return 0;
+}
+function handName(s) {
+  var r = upRank(s), t = RANKS[r.top];
+  if (r.cat === 7) return t + ' 포카드';
+  if (r.cat === 6) return t + ' 트리플';
+  if (r.cat === 5) return t + ' 투페어';
+  if (r.cat === 4) return t + ' 페어';
+  return t + ' 하이';
+}
+/* 최고 업카드 핸드가 하나뿐일 때만 그 좌석을 돌려준다. 동률이면 묻지 않는다 —
+   무늬 우열은 7카드 스터드 기준으로 자료에 없다. */
+function bestUpSeat(list) {
+  var top = null, tied = false;
+  for (var i = 0; i < list.length; i++) {
+    if (top === null) { top = list[i]; continue; }
+    var c = cmpKey(upRank(list[i]).key, upRank(top).key);
+    if (c > 0) { top = list[i]; tied = false; }
+    else if (c === 0) tied = true;
+  }
+  return tied ? null : top;
+}
+function lowUpSeat(list) {
+  var lo = null, tied = false;
+  for (var i = 0; i < list.length; i++) {
+    if (lo === null) { lo = list[i]; continue; }
+    var a = upKey(list[i], false), b = upKey(lo, false);
+    if (a < b) { lo = list[i]; tied = false; }
+    else if (a === b) tied = true;
+  }
+  return tied ? null : lo;
+}
+function openPair(list) {
+  for (var i = 0; i < list.length; i++) if (upRank(list[i]).cat >= 4) return true;
   return false;
 }
 function upKey(s, wantMax) {
@@ -566,20 +626,23 @@ function mkAskSeat(ix) {
   var st = H.spec.streets[ix], list = actives(), ans = null, why = '', cite = null;
 
   if (st.firstToAct === 'lowest-upcard') {
-    if (!fixTies(ix)) return null;
-    var lo = null;
-    list.forEach(function (s) { if (lo === null || upKey(s, false) < upKey(lo, false)) lo = s; });
+    var lo = lowUpSeat(list);
+    if (!lo) return null;
     ans = lo.i;
     why = '가장 낮은 업카드가 브링인이다. 지금은 ' + lo.name + '의 ' +
       lo.up[0].r + lo.up[0].su.s + ' 가 가장 낮다.';
     cite = { src: GUIDE, txt: '3번째 카드의 첫 액션은 가장 낮은 업카드. 브링인 금액을 내거나 컴플리트한다.' };
   } else if (st.firstToAct === 'highest-upcard') {
-    if (!fixTies(ix)) return null;
-    var hi = null;
-    list.forEach(function (s) { if (hi === null || upKey(s, true) > upKey(hi, true)) hi = s; });
+    var hi = bestUpSeat(list);
+    if (!hi) return null;
     ans = hi.i;
-    why = '4번째 카드부터는 가장 높은 업카드가 먼저 액션한다. 지금은 ' + hi.name + '이 가장 높다.';
-    cite = { src: GUIDE, txt: '4번째 카드 이후 첫 액션은 가장 높은 업카드.' };
+    var second = list.filter(function (x) { return x.i !== hi.i; });
+    var runner = bestUpSeat(second) || second[0];
+    why = '4번째 카드부터는 <b>업카드로 만든 핸드가 가장 높은</b> 좌석이 먼저 액션한다. ' +
+      '카드 한 장을 비교하는 것이 아니라 족보로 본다 — 페어가 에이스 하이보다 높다. ' +
+      '지금은 ' + hi.name + '의 <b>' + handName(hi) + '</b>' +
+      (runner ? ' 이 ' + runner.name + '의 ' + handName(runner) + ' 보다 높다.' : ' 이 가장 높다.');
+    cite = { src: GUIDE, txt: '4번째 카드 이후 첫 액션은 가장 높은 업카드 — 보드에 뜬 족보 순서로 정한다.' };
   } else if (st.firstToAct === 'left-of-bb') {
     ans = H.seats.filter(function (s) { return s.pos === 3; })[0].i;
     why = 'BB 왼쪽이 첫 액션이다. 버튼이 ' + seatByPos(0).name + ', BB 가 ' + seatByPos(2).name + ' 이므로 ' + seatByPos(3).name + '.';
@@ -610,9 +673,24 @@ function mkAskBet(ix) {
   var isBig = st.size === 2;
   var why, cite;
   if (H.spec.family === 'stud') {
+    /* 3번째 카드의 첫 벳은 스몰벳이 아니라 브링인 금액이다. */
+    if (ix === 0) {
+      return {
+        kind: 'bet', tone: '', kicker: '판단 · 벳 크기',
+        q: '브링인은 얼마를 냅니까?',
+        sub: H.stage + ' · 맞는 칩을 팟으로 미세요.',
+        chipSet: ['bringin', 'small'],
+        answer: 'bringin',
+        why: '3번째 카드의 첫 벳은 <b>브링인 금액</b>이다. 브링인을 낸 사람이 원하면 스몰벳까지 ' +
+             '컴플리트할 수 있고, 컴플리트는 첫 벳으로 친다.',
+        cite: { src: GUIDE, txt: '3번째 카드 첫 액션은 가장 낮은 업카드 — 브링인 금액을 내거나 컴플리트한다.' }
+      };
+    }
+    /* 4번째 카드에 오픈페어가 있으면 빅벳을 고를 수 있다 — 정답이 하나가 아니므로 묻지 않는다 (ADR-003). */
+    if (ix === 1 && openPair(actives())) return null;
     why = isBig
       ? '스터드는 5번째 카드부터 빅벳이다.'
-      : '3번째·4번째 카드는 스몰벳이다.';
+      : '4번째 카드는 스몰벳이다. 단 업카드에 페어가 뜨면 빅벳을 고를 수 있다.';
     cite = { src: GUIDE, txt: '픽스리밋 2배 지점 — 스터드는 5번째 카드부터.' };
   } else {
     var roundNo = ix + 1;
@@ -625,8 +703,26 @@ function mkAskBet(ix) {
     kind: 'bet', tone: '', kicker: '판단 · 벳 크기',
     q: '지금 벳은 스몰벳입니까, 빅벳입니까?',
     sub: H.stage + ' · 칩을 끌어 팟으로 미세요.',
+    chipSet: ['small', 'big'],
     answer: isBig ? 'big' : 'small', why: why, cite: cite
   };
+}
+
+/* 칩 한 벌을 한 곳에서 그린다 — 딜링 룸과 연습 모드가 같은 손을 쓴다. */
+var CHIPS = {
+  bringin: { ko: '브링인', amt: BRINGIN },
+  small:   { ko: '스몰벳', amt: SMALL },
+  big:     { ko: '빅벳',   amt: BIG }
+};
+function chipsHTML(ask, hint) {
+  var set = (ask && ask.chipSet) || ['small', 'big'];
+  var h = '<div class="chips">';
+  for (var i = 0; i < set.length; i++) {
+    var c = CHIPS[set[i]];
+    h += '<div class="chip ' + set[i] + '" data-chip="' + set[i] + '">' +
+      '<small>' + c.ko + '</small>' + won(c.amt) + '</div>';
+  }
+  return h + '<div class="chiphint">' + hint + '</div></div>';
 }
 
 // ═══════════════════════════════════════════════════
@@ -785,9 +881,8 @@ var INC = {
   },
   // 잘못된 브링인 — 다음 사람이 아직 액션하지 않았다
   bringin_clean: function (list, st, ix) {
-    if (!fixTies(ix)) return null;
-    var lo = null, wrong = null;
-    list.forEach(function (s) { if (lo === null || upKey(s, false) < upKey(lo, false)) lo = s; });
+    var lo = lowUpSeat(list), wrong = null;
+    if (!lo) return null;
     var others = list.filter(function (s) { return s.i !== lo.i; });
     if (!others.length) return null;
     wrong = pick(others);
@@ -810,9 +905,8 @@ var INC = {
   },
   // 같은 사고인데 다음 사람이 이미 액션했다 → 답이 뒤집힌다
   bringin_acted: function (list, st, ix) {
-    if (!fixTies(ix)) return null;
-    var lo = null;
-    list.forEach(function (s) { if (lo === null || upKey(s, false) < upKey(lo, false)) lo = s; });
+    var lo = lowUpSeat(list);
+    if (!lo) return null;
     var others = list.filter(function (s) { return s.i !== lo.i; });
     if (!others.length) return null;
     var wrong = pick(others);
@@ -960,9 +1054,8 @@ var OBJ = {
   },
   // 브링인 지목에 대한 항의 — 업카드를 실제로 비교해야 한다
   ob_bringin: function (list, ix) {
-    if (!fixTies(ix)) return null;
-    var lo = null;
-    list.forEach(function (s) { if (lo === null || upKey(s, false) < upKey(lo, false)) lo = s; });
+    var lo = lowUpSeat(list);
+    if (!lo) return null;
     var others = list.filter(function (s) { return s.i !== lo.i; });
     if (!others.length) return null;
     /* 항의가 사실이면 브링인으로 지목된 사람이 최저가 아니고, 거짓이면 최저가 맞다. */
@@ -1170,7 +1263,7 @@ function chipDown(ev, size) {
   ev.preventDefault();
   var g = document.createElement('div');
   g.className = 'chip ghost ' + size;
-  g.innerHTML = '<small>' + (size === 'big' ? '빅벳' : '스몰벳') + '</small>' + won(size === 'big' ? BIG : SMALL);
+  g.innerHTML = '<small>' + CHIPS[size].ko + '</small>' + won(CHIPS[size].amt);
   document.body.appendChild(g);
   DRAG = { el: g, size: size };
   moveGhost(ev);
@@ -1310,7 +1403,11 @@ function pRun(step) {
     if (!a) { log('첫 액션 자동 처리'); return pDone(); }
     P.ask = a; PHASE = 'pfirst'; render(); return;
   }
-  if (step.act === 'bet') { P.ask = mkAskBet(ix); PHASE = 'pbet'; render(); return; }
+  if (step.act === 'bet') {
+    var bq = mkAskBet(ix);
+    if (!bq) { log('업카드에 페어가 떠 빅벳도 고를 수 있다 — 이 상황은 출제하지 않는다'); return pDone(); }
+    P.ask = bq; PHASE = 'pbet'; render(); return;
+  }
 }
 
 function pDone() {
@@ -1335,7 +1432,7 @@ function onPSeat(i) {
 
 function onPChip(size) {
   if (size === P.ask.answer) {
-    log((size === 'big' ? '빅벳' : '스몰벳') + ' <b>' + won(size === 'big' ? BIG : SMALL) + '</b> 선언');
+    log(CHIPS[size].ko + ' <b>' + won(CHIPS[size].amt) + '</b> 선언');
     P.msg = '';
     pDone();
   } else {
@@ -1387,10 +1484,7 @@ function practicePanelHTML() {
   if (PHASE === 'pbet') {
     h = '<div class="panel"><div class="kicker">직접 밀기</div>' +
       '<div class="q">' + P.ask.q + '</div>' +
-      '<div class="chips">' +
-      '<div class="chip small" data-chip="small"><small>스몰벳</small>' + won(SMALL) + '</div>' +
-      '<div class="chip big" data-chip="big"><small>빅벳</small>' + won(BIG) + '</div>' +
-      '<div class="chiphint">맞는 칩을 팟으로 끌어다 놓으세요.</div></div>';
+      chipsHTML(P.ask, '맞는 칩을 팟으로 끌어다 놓으세요.');
     if (P.msg) h += '<div class="verdict no"><div class="hd">아직 아니다</div>' + P.msg + '</div>';
     return h + '</div>';
   }
@@ -1543,10 +1637,7 @@ function panelHTML() {
   if (s.kind === 'seat') {
     h += '<div class="hint">테이블에서 좌석을 클릭하세요.</div>';
   } else if (s.kind === 'bet') {
-    h += '<div class="chips">' +
-      '<div class="chip small" data-chip="small"><small>스몰벳</small>' + won(SMALL) + '</div>' +
-      '<div class="chip big" data-chip="big"><small>빅벳</small>' + won(BIG) + '</div>' +
-      '<div class="chiphint">맞는 칩을 팟으로 끌어다 놓으세요.</div></div>';
+    h += chipsHTML(s, '맞는 칩을 팟으로 끌어다 놓으세요.');
   } else if (s.kind === 'incident') {
     if (PHASE === 'ask') {
       h += '<div class="choices">';
