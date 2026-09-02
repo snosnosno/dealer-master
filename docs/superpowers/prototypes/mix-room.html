@@ -194,21 +194,6 @@ body {
 .ch.right { border-color: var(--ok); background: var(--ok-bg); opacity: 1; }
 .ch.wrong { border-color: var(--red); background: var(--red-bg); opacity: 1; }
 
-.chips { display: flex; gap: 12px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
-.chip {
-  width: 62px; height: 62px; border-radius: 50%; flex: none;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  color: #fff; font-family: var(--mono); font-weight: 800; font-size: 13px;
-  cursor: grab; user-select: none; touch-action: none;
-  box-shadow: 0 3px 10px rgba(4,52,44,.28), inset 0 0 0 3px rgba(255,255,255,.28);
-}
-.chip small { font-size: 9px; font-weight: 800; opacity: .9; letter-spacing: .04em; }
-.chip.bringin { background: #C07A26; }
-.chip.small { background: #378ADD; }
-.chip.big { background: #7F77DD; }
-.chip.ghost { position: fixed; z-index: 60; pointer-events: none; cursor: grabbing; margin: 0; }
-.chiphint { font-size: 12.5px; color: var(--ink-2); font-weight: 700; }
-
 .verdict { margin-top: 11px; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.55; }
 .verdict.ok { background: var(--ok-bg); border: 1px solid var(--ok); }
 .verdict.no { background: var(--red-bg); border: 1px solid var(--red); }
@@ -433,6 +418,8 @@ function buildQueue() {
     if (k === obAt) q.push({ t: 'objection', ix: k });
     q.push({ t: 'bets', ix: k });
   }
+  q.push({ t: 'showdown' });
+  q.push({ t: 'askwinner' });
   q.push({ t: 'endhand' });
   H.q = q;
   H.qi = 0;
@@ -462,6 +449,12 @@ function advance() {
   if (s.t === 'drawround') return doDrawRound(s.ix);
   if (s.t === 'bets') return doBets(s.ix);
   if (s.t === 'endhand') return doEndHand();
+  if (s.t === 'showdown') {
+    H.showdown = true;
+    log('쇼다운 — 카드를 공개한다', 'hi');
+    render(); return advance();
+  }
+  if (s.t === 'askwinner') { var w = mkAskWinner(); return w ? stop(w) : advance(); }
 
   if (s.t === 'askseat') { var a = mkAskSeat(s.ix); return a ? stop(a) : advance(); }
   if (s.t === 'askbet') { var bq = mkAskBet(s.ix); return bq ? stop(bq) : advance(); }
@@ -676,11 +669,12 @@ function mkAskBet(ix) {
     /* 3번째 카드의 첫 벳은 스몰벳이 아니라 브링인 금액이다. */
     if (ix === 0) {
       return {
-        kind: 'bet', tone: '', kicker: '판단 · 벳 크기',
+        kind: 'incident', tone: '', kicker: '판단 · 벳 크기',
         q: '브링인은 얼마를 냅니까?',
-        sub: H.stage + ' · 맞는 칩을 팟으로 미세요.',
-        chipSet: ['bringin', 'small'],
-        answer: 'bringin',
+        sub: H.stage,
+        choices: ['브링인 ' + won(BRINGIN), '스몰벳 ' + won(SMALL) + ' — 컴플리트', '빅벳 ' + won(BIG)],
+        correct: 0,
+        target: null,
         why: '3번째 카드의 첫 벳은 <b>브링인 금액</b>이다. 브링인을 낸 사람이 원하면 스몰벳까지 ' +
              '컴플리트할 수 있고, 컴플리트는 첫 벳으로 친다.',
         cite: { src: GUIDE, txt: '3번째 카드 첫 액션은 가장 낮은 업카드 — 브링인 금액을 내거나 컴플리트한다.' }
@@ -700,29 +694,125 @@ function mkAskBet(ix) {
     cite = { src: GUIDE, txt: '픽스리밋 2배 지점 — 드로우게임은 3번째 베팅 라운드부터.' };
   }
   return {
-    kind: 'bet', tone: '', kicker: '판단 · 벳 크기',
+    kind: 'incident', tone: '', kicker: '판단 · 벳 크기',
     q: '지금 벳은 스몰벳입니까, 빅벳입니까?',
-    sub: H.stage + ' · 칩을 끌어 팟으로 미세요.',
-    chipSet: ['small', 'big'],
-    answer: isBig ? 'big' : 'small', why: why, cite: cite
+    sub: H.stage,
+    choices: ['스몰벳 ' + won(SMALL), '빅벳 ' + won(BIG)],
+    correct: isBig ? 1 : 0,
+    target: null,
+    why: why, cite: cite
   };
 }
 
-/* 칩 한 벌을 한 곳에서 그린다 — 딜링 룸과 연습 모드가 같은 손을 쓴다. */
-var CHIPS = {
-  bringin: { ko: '브링인', amt: BRINGIN },
-  small:   { ko: '스몰벳', amt: SMALL },
-  big:     { ko: '빅벳',   amt: BIG }
-};
-function chipsHTML(ask, hint) {
-  var set = (ask && ask.chipSet) || ['small', 'big'];
-  var h = '<div class="chips">';
-  for (var i = 0; i < set.length; i++) {
-    var c = CHIPS[set[i]];
-    h += '<div class="chip ' + set[i] + '" data-chip="' + set[i] + '">' +
-      '<small>' + c.ko + '</small>' + won(c.amt) + '</div>';
+// ═══════════════════════════════════════════════════
+// 승자 판정 — 평가기 하나로 하이와 2-7 로우볼을 둘 다 낸다
+//
+// 2-7 로우볼은 별개 알고리즘이 아니다. 표준 하이 평가기를 그대로 쓰되
+//   · A 를 낮게 쓰지 않고 (휠이 스트레이트가 아니다)
+//   · 비교를 뒤집는다 (가장 나쁜 하이 핸드가 이긴다)
+// 그래서 최고 로우가 7-5-4-3-2 무플러시가 된다.
+// ═══════════════════════════════════════════════════
+var CATKO = ['하이카드', '원페어', '투페어', '트리플', '스트레이트',
+             '플러시', '풀하우스', '포카드', '스트레이트 플러시'];
+
+function evalFive(cards, aceLow) {
+  var i, k;
+  var suit = {}, counts = {};
+  for (i = 0; i < cards.length; i++) {
+    suit[cards[i].su.s] = (suit[cards[i].su.s] || 0) + 1;
+    var v = rv(cards[i]);
+    counts[v] = (counts[v] || 0) + 1;
   }
-  return h + '<div class="chiphint">' + hint + '</div></div>';
+  var flush = false;
+  for (k in suit) if (suit.hasOwnProperty(k) && suit[k] === 5) flush = true;
+
+  var groups = [];
+  for (k in counts) if (counts.hasOwnProperty(k)) groups.push({ v: parseInt(k, 10), n: counts[k] });
+  groups.sort(function (a, b) { return b.n - a.n || b.v - a.v; });
+  var uniq = groups.map(function (x) { return x.v; }).slice().sort(function (a, b) { return b - a; });
+
+  var straight = false, top = -1;
+  if (groups.length === 5) {
+    if (uniq[0] - uniq[4] === 4) { straight = true; top = uniq[0]; }
+    else if (aceLow && uniq[0] === 12 && uniq[1] === 3 && uniq[4] === 0) { straight = true; top = 3; }
+  }
+
+  var cat, key, plain = groups.map(function (x) { return x.v; });
+  if (straight && flush) { cat = 8; key = [cat, top]; }
+  else if (groups[0].n === 4) { cat = 7; key = [cat].concat(plain); }
+  else if (groups[0].n === 3 && groups[1] && groups[1].n === 2) { cat = 6; key = [cat].concat(plain); }
+  else if (flush) { cat = 5; key = [cat].concat(uniq); }
+  else if (straight) { cat = 4; key = [cat, top]; }
+  else if (groups[0].n === 3) { cat = 3; key = [cat].concat(plain); }
+  else if (groups[0].n === 2 && groups[1] && groups[1].n === 2) { cat = 2; key = [cat].concat(plain); }
+  else if (groups[0].n === 2) { cat = 1; key = [cat].concat(plain); }
+  else { cat = 0; key = [cat].concat(uniq); }
+
+  return { cat: cat, key: key, cards: cards.slice(), top: plain[0] };
+}
+
+/* 7장이면 21가지 조합에서 최고 5장을 고른다. */
+function bestFive(cards, aceLow) {
+  if (cards.length <= 5) return evalFive(cards, aceLow);
+  var n = cards.length, best = null, a, b, c, d, e;
+  for (a = 0; a < n; a++) for (b = a + 1; b < n; b++) for (c = b + 1; c < n; c++)
+    for (d = c + 1; d < n; d++) for (e = d + 1; e < n; e++) {
+      var h = evalFive([cards[a], cards[b], cards[c], cards[d], cards[e]], aceLow);
+      if (!best || cmpKey(h.key, best.key) > 0) best = h;
+    }
+  return best;
+}
+
+function handKo(h, lowball) {
+  var r = RANKS;
+  if (lowball) {
+    var line = h.cards.map(rv).sort(function (x, y) { return y - x; })
+      .map(function (v) { return r[v]; }).join('-');
+    return h.cat === 0 ? line : line + ' (' + CATKO[h.cat] + ')';
+  }
+  if (h.cat === 8) return r[h.key[1]] + ' 하이 스트레이트 플러시';
+  if (h.cat === 7) return r[h.key[1]] + ' 포카드';
+  if (h.cat === 6) return r[h.key[1]] + ' 풀하우스';
+  if (h.cat === 5) return r[h.key[1]] + ' 하이 플러시';
+  if (h.cat === 4) return r[h.key[1]] + ' 하이 스트레이트';
+  if (h.cat === 3) return r[h.key[1]] + ' 트리플';
+  if (h.cat === 2) return r[h.key[1]] + '·' + r[h.key[2]] + ' 투페어';
+  if (h.cat === 1) return r[h.key[1]] + ' 페어';
+  return r[h.key[1]] + ' 하이';
+}
+
+function showdown() {
+  var lowball = H.spec.id === 'td27';
+  var evals = actives().map(function (s) {
+    return { seat: s, h: bestFive(s.down.concat(s.up), !lowball) };
+  });
+  evals.sort(function (x, y) {
+    var c = cmpKey(x.h.key, y.h.key);
+    return lowball ? c : -c;
+  });
+  var tied = evals.length > 1 && cmpKey(evals[0].h.key, evals[1].h.key) === 0;
+  return { evals: evals, tied: tied, lowball: lowball };
+}
+
+function mkAskWinner() {
+  var r = showdown();
+  if (r.evals.length < 2) { log('한 명만 남아 팟을 그대로 지급한다'); return null; }
+  if (r.tied) { log('동점 — 팟을 나눈다', 'hi'); return null; }
+  var win = r.evals[0], run = r.evals[1];
+  return {
+    kind: 'seat', tone: '', kicker: '판단 · 팟 지급',
+    q: '이 팟은 누구에게 갑니까?',
+    sub: '쇼다운 · 좌석을 클릭하세요.',
+    answer: win.seat.i,
+    why: (r.lowball
+      ? '2-7 로우볼은 <b>가장 낮은 핸드</b>가 이긴다. A 는 항상 높고 스트레이트·플러시는 인정되므로 손해다. '
+      : '7장 중 최고 5장으로 겨룬다. ') +
+      win.seat.name + '의 <b>' + handKo(win.h, r.lowball) + '</b> 이 ' +
+      run.seat.name + '의 ' + handKo(run.h, r.lowball) + ' 을 이긴다.',
+    cite: r.lowball
+      ? { src: GUIDE, txt: '2-7 — A 는 최고, 스트레이트·플러시 인정. 최고 핸드는 7-5-4-3-2 무플러시.' }
+      : { src: GUIDE, txt: '7카드 스터드 — 7장 중 최고 5장. 족보는 홀덤과 동일.' }
+  };
 }
 
 // ═══════════════════════════════════════════════════
@@ -1226,6 +1316,7 @@ function nextAfterVerdict() {
 
 // 선택지 클릭
 function onChoice(i) {
+  if (PHASE === 'pbet') { onPBet(i); return; }
   var s = STEP;
   if (!s || PHASE !== 'ask') return;
   s.picked = i;
@@ -1236,7 +1327,7 @@ function onChoice(i) {
 
 // 좌석 클릭
 function onSeat(i) {
-  if (PHASE === 'pfirst') { onPSeat(i); return; }
+  if (PHASE === 'pfirst' || PHASE === 'pwin') { onPSeat(i); return; }
   var s = STEP;
   if (!s) return;
   if (PHASE === 'ask' && s.kind === 'seat') { judge(i === s.answer, s); return; }
@@ -1253,49 +1344,6 @@ function onPile(id) {
   if (!s || PHASE !== 'target' || !s.target || s.target.kind !== 'pile') return;
   judge(id === s.target.answer, s,
     id === s.target.answer ? '' : '절차는 맞았지만 어디로 보낼지가 틀렸다.');
-}
-
-// 칩 드래그
-var DRAG = null;
-function chipDown(ev, size) {
-  var roomBet = (PHASE === 'ask' && STEP && STEP.kind === 'bet');
-  if (!roomBet && PHASE !== 'pbet') return;
-  ev.preventDefault();
-  var g = document.createElement('div');
-  g.className = 'chip ghost ' + size;
-  g.innerHTML = '<small>' + CHIPS[size].ko + '</small>' + won(CHIPS[size].amt);
-  document.body.appendChild(g);
-  DRAG = { el: g, size: size };
-  moveGhost(ev);
-  window.addEventListener('pointermove', moveGhost);
-  window.addEventListener('pointerup', chipUp);
-}
-function moveGhost(ev) {
-  if (!DRAG) return;
-  DRAG.el.style.left = (ev.clientX - 31) + 'px';
-  DRAG.el.style.top = (ev.clientY - 31) + 'px';
-  var pot = document.querySelector('.pot');
-  if (pot) {
-    var r = pot.getBoundingClientRect();
-    var over = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
-    pot.classList.toggle('over', over);
-  }
-}
-function chipUp(ev) {
-  if (!DRAG) return;
-  var d = DRAG; DRAG = null;
-  window.removeEventListener('pointermove', moveGhost);
-  window.removeEventListener('pointerup', chipUp);
-  if (d.el.parentNode) d.el.parentNode.removeChild(d.el);
-  var pot = document.querySelector('.pot');
-  if (!pot) return;
-  pot.classList.remove('over');
-  var r = pot.getBoundingClientRect();
-  var inside = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
-  if (!inside) return;
-  if (PHASE === 'pbet') { onPChip(d.size); return; }
-  if (PHASE !== 'ask' || !STEP || STEP.kind !== 'bet') return;
-  judge(d.size === STEP.answer, STEP);
 }
 
 // ═══════════════════════════════════════════════════
@@ -1395,8 +1443,11 @@ function pRun(step) {
   if (step.act === 'draw') return doDrawRound(ix, pDone);
   if (step.act === 'betting') { doBets(ix, function () {}); return pDone(); }
   if (step.act === 'pot') {
-    log('팟 <b>' + won(H.pot) + '</b> 지급', 'hi');
-    P.finished = true; PHASE = 'pdone'; render(); return;
+    H.showdown = true;
+    log('쇼다운 — 카드를 공개한다', 'hi');
+    var w = mkAskWinner();
+    if (!w) { log('팟 <b>' + won(H.pot) + '</b> 지급', 'hi'); P.finished = true; PHASE = 'pdone'; render(); return; }
+    P.ask = w; PHASE = 'pwin'; render(); return;
   }
   if (step.act === 'first') {
     var a = mkAskSeat(ix);
@@ -1419,20 +1470,27 @@ function pDone() {
 
 function onPSeat(i) {
   if (i === P.ask.answer) {
-    log(H.seats[i].name + ' 첫 액션');
     P.msg = '';
+    if (PHASE === 'pwin') {
+      log(H.seats[i].name + '에게 팟 <b>' + won(H.pot) + '</b> 지급', 'hi');
+      /* 맞혔을 때야말로 근거를 볼 자리다 — 결과 화면까지 들고 간다 */
+      P.win = { name: H.seats[i].name, why: P.ask.why, cite: P.ask.cite };
+      P.finished = true; P.pi = P.steps.length; PHASE = 'pdone'; render(); return;
+    }
+    log(H.seats[i].name + ' 첫 액션');
     pDone();
   } else {
     P.stuck++;
     P.msg = '그 좌석이 아니다. ' + P.ask.why;
     log('좌석 오답', 'bad');
     render();
+    return;
   }
 }
 
-function onPChip(size) {
-  if (size === P.ask.answer) {
-    log(CHIPS[size].ko + ' <b>' + won(CHIPS[size].amt) + '</b> 선언');
+function onPBet(i) {
+  if (i === P.ask.correct) {
+    log(P.ask.choices[i] + ' 선언');
     P.msg = '';
     pDone();
   } else {
@@ -1464,6 +1522,10 @@ function practicePanelHTML() {
       '<div class="kicker">한 핸드 완주</div>' +
       '<div class="big">' + P.stuck + '</div>' +
       '<div class="cap">번 막혔습니다</div>' +
+      (P.win ? '<div class="verdict ok" style="text-align:left;margin-top:14px">' +
+        '<div class="hd">' + P.win.name + ' 에게 팟</div>' + P.win.why +
+        (P.win.cite ? '<div class="cite"><b>' + P.win.cite.src + '</b> — ' + P.win.cite.txt + '</div>' : '') +
+        '</div>' : '') +
       '<div class="qsub" style="text-align:center;margin-top:8px">' +
       (P.stuck === 0
         ? '한 번도 순서를 틀리지 않았습니다.'
@@ -1474,17 +1536,20 @@ function practicePanelHTML() {
       '<button class="btn ghostbtn" id="phome" style="max-width:320px;margin:8px auto 0">처음 화면으로</button>' +
       '</div>';
   }
-  if (PHASE === 'pfirst') {
-    h = '<div class="panel"><div class="kicker">직접 지목</div>' +
+  if (PHASE === 'pfirst' || PHASE === 'pwin') {
+    h = '<div class="panel"><div class="kicker">' + (PHASE === 'pwin' ? '팟 지급' : '직접 지목') + '</div>' +
       '<div class="q">' + P.ask.q + '</div>' +
       '<div class="qsub">' + H.stage + ' · 테이블에서 좌석을 클릭하세요.</div>';
     if (P.msg) h += '<div class="verdict no"><div class="hd">아직 아니다</div>' + P.msg + '</div>';
     return h + '</div>';
   }
   if (PHASE === 'pbet') {
-    h = '<div class="panel"><div class="kicker">직접 밀기</div>' +
-      '<div class="q">' + P.ask.q + '</div>' +
-      chipsHTML(P.ask, '맞는 칩을 팟으로 끌어다 놓으세요.');
+    h = '<div class="panel"><div class="kicker">벳 크기</div>' +
+      '<div class="q">' + P.ask.q + '</div><div class="choices">';
+    for (var ci = 0; ci < P.ask.choices.length; ci++) {
+      h += '<button class="ch" data-ch="' + ci + '">' + P.ask.choices[ci] + '</button>';
+    }
+    h += '</div>';
     if (P.msg) h += '<div class="verdict no"><div class="hd">아직 아니다</div>' + P.msg + '</div>';
     return h + '</div>';
   }
@@ -1552,7 +1617,7 @@ function topHTML() {
 
 function boardHTML() {
   var s = STEP;
-  var seatPick = PHASE === 'pfirst' ||
+  var seatPick = PHASE === 'pfirst' || PHASE === 'pwin' ||
                  (PHASE === 'ask' && s && s.kind === 'seat') ||
                  (PHASE === 'target' && s && s.target && s.target.kind === 'seat');
   var pilePick = (PHASE === 'target' && s && s.target && s.target.kind === 'pile');
@@ -1568,7 +1633,7 @@ function boardHTML() {
     pileHTML('burn', '번', H.burns + '장', pilePick) +
     pileHTML('discard', '디스카드', H.discards + '장', pilePick) +
     (H.spec.family === 'stud' ? pileHTML('center', '중앙', '—', pilePick) : '') +
-    '<div class="pot' + (PHASE === 'pbet' || (PHASE === 'ask' && s && s.kind === 'bet') ? ' drop' : '') + '">' +
+    '<div class="pot">' +
     '<div class="lb">팟</div><div class="n">' + won(H.pot) + '</div></div>' +
     '</div>';
 
@@ -1595,11 +1660,13 @@ function seatHTML(s, pick) {
     else if (s.pos === 2) tag = 'BB';
   }
   /* 노출 사고는 실제로 카드가 보여야 한다 — 빨간 테두리만으로는 사고가 안 보인다 */
-  var rv = (H.flags.reveal && H.flags.reveal.seat === s.i) ? H.flags.reveal.n : 0;
+  var revN = (H.flags.reveal && H.flags.reveal.seat === s.i) ? H.flags.reveal.n : 0;
+  var open = H.showdown && !s.folded;
   var cards = '';
   var i;
   for (i = 0; i < s.down.length; i++) {
-    cards += (i < rv && s.down[i]) ? cardHTML(s.down[i], 'big hot') : backHTML();
+    if (open && s.down[i]) cards += cardHTML(s.down[i], 'big');
+    else cards += (i < revN && s.down[i]) ? cardHTML(s.down[i], 'big hot') : backHTML();
   }
   for (i = 0; i < s.up.length; i++) cards += cardHTML(s.up[i], 'big');
   return '<div class="' + cls + '" data-seat="' + s.i + '">' +
@@ -1636,8 +1703,6 @@ function panelHTML() {
 
   if (s.kind === 'seat') {
     h += '<div class="hint">테이블에서 좌석을 클릭하세요.</div>';
-  } else if (s.kind === 'bet') {
-    h += chipsHTML(s, '맞는 칩을 팟으로 끌어다 놓으세요.');
   } else if (s.kind === 'incident') {
     if (PHASE === 'ask') {
       h += '<div class="choices">';
@@ -1731,12 +1796,6 @@ function wire() {
   var piles = document.querySelectorAll('[data-pile]');
   for (i = 0; i < piles.length; i++) {
     (function (el) { el.onclick = function () { onPile(el.getAttribute('data-pile')); }; })(piles[i]);
-  }
-  var chips = document.querySelectorAll('[data-chip]');
-  for (i = 0; i < chips.length; i++) {
-    (function (el) {
-      el.onpointerdown = function (ev) { chipDown(ev, el.getAttribute('data-chip')); };
-    })(chips[i]);
   }
   var lg = $('#log'); if (lg) lg.scrollTop = lg.scrollHeight;
 }
