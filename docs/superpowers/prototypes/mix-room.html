@@ -180,6 +180,9 @@ body {
 .q { font-size: 16px; font-weight: 800; line-height: 1.45; letter-spacing: -.01em; }
 .qsub { margin-top: 5px; font-size: 13px; color: var(--ink-2); line-height: 1.55; }
 .choices { display: grid; gap: 7px; margin-top: 11px; }
+.choices.palette { grid-template-columns: repeat(3, 1fr); }
+.choices.palette .ch { text-align: center; font-size: 13px; padding: 12px 6px; }
+@media (max-width: 560px) { .choices.palette { grid-template-columns: repeat(2, 1fr); } }
 .ch {
   text-align: left; font-family: var(--sans); font-size: 13.5px; font-weight: 700;
   line-height: 1.45; color: var(--ink); background: var(--surface);
@@ -337,7 +340,7 @@ function cardHTML(c, cls) {
 function backHTML(cls) { return '<span class="pcard back' + (cls ? ' ' + cls : '') + '"></span>'; }
 
 // 전역 상태 ───────────────────────────────────────
-var G = { lives: 3, hands: 0, incidents: 0, right: 0, wrong: 0, over: false, showEnd: false, started: false };
+var G = { lives: 3, hands: 0, incidents: 0, right: 0, wrong: 0, over: false, showEnd: false, started: false, mode: null };
 var H = null;
 var STEP = null;      // 현재 멈춰 있는 판단
 var PHASE = 'idle';   // idle | anim | ask | target | verdict
@@ -471,7 +474,7 @@ function stop(step) {
 }
 
 // 카드 배분 ───────────────────────────────────────
-function doDeal(ix) {
+function doDeal(ix, next) {
   var st = H.spec.streets[ix], plan = [], list = actives();
   var i, k;
   for (k = 0; k < st.deal.down; k++) for (i = 0; i < list.length; i++) plan.push({ seat: list[i].i, up: false });
@@ -483,7 +486,7 @@ function doDeal(ix) {
       (st.deal.down ? '다운 ' + st.deal.down + '장' : '') +
       (st.deal.down && st.deal.up ? ' · ' : '') +
       (st.deal.up ? '업 ' + st.deal.up + '장' : ''));
-    render(); advance();
+    render(); (next || advance)();
   });
 }
 
@@ -515,7 +518,7 @@ function upKey(s, wantMax) {
 }
 
 // 드로우 라운드 ───────────────────────────────────
-function doDrawRound(ix) {
+function doDrawRound(ix, next) {
   var list = actives(), plan = [], i;
   for (i = 0; i < list.length; i++) {
     var n = rnd(4);                      // 0~3장 교체
@@ -529,11 +532,11 @@ function doDrawRound(ix) {
   }).join(' · ');
   log('교체 장수 — ' + txt);
   H.discards += plan.length;
-  flyDeal(plan, function () { log(H.stage + ' 교체 완료'); render(); advance(); });
+  flyDeal(plan, function () { log(H.stage + ' 교체 완료'); render(); (next || advance)(); });
 }
 
 // 베팅 빨리 감기 ──────────────────────────────────
-function doBets(ix) {
+function doBets(ix, next) {
   var st = H.spec.streets[ix];
   var amt = st.size === 2 ? BIG : SMALL;
   var list = actives(), parts = [], callers = 0, i;
@@ -546,7 +549,7 @@ function doBets(ix) {
   H.pot += amt * callers;
   log('베팅 — ' + parts.join(' · ') + ' <b>(' + won(amt) + ')</b>');
   render();
-  advance();
+  (next || advance)();
 }
 
 function doEndHand() {
@@ -1118,7 +1121,7 @@ function judge(ok, step, extra) {
     render();   // 왜 죽었는지 먼저 읽게 두고, 결과는 버튼으로 넘어간다
     return;
   }
-  if (ok) setTimeout(function () { if (PHASE === 'verdict') nextAfterVerdict(); }, 1500);
+  /* 정답이어도 자동으로 넘어가지 않는다 — 근거를 읽을 시간은 사용자가 정한다 */
 }
 
 function nextAfterVerdict() {
@@ -1140,6 +1143,7 @@ function onChoice(i) {
 
 // 좌석 클릭
 function onSeat(i) {
+  if (PHASE === 'pfirst') { onPSeat(i); return; }
   var s = STEP;
   if (!s) return;
   if (PHASE === 'ask' && s.kind === 'seat') { judge(i === s.answer, s); return; }
@@ -1161,7 +1165,8 @@ function onPile(id) {
 // 칩 드래그
 var DRAG = null;
 function chipDown(ev, size) {
-  if (PHASE !== 'ask' || !STEP || STEP.kind !== 'bet') return;
+  var roomBet = (PHASE === 'ask' && STEP && STEP.kind === 'bet');
+  if (!roomBet && PHASE !== 'pbet') return;
   ev.preventDefault();
   var g = document.createElement('div');
   g.className = 'chip ghost ' + size;
@@ -1195,8 +1200,210 @@ function chipUp(ev) {
   var r = pot.getBoundingClientRect();
   var inside = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
   if (!inside) return;
+  if (PHASE === 'pbet') { onPChip(d.size); return; }
   if (PHASE !== 'ask' || !STEP || STEP.kind !== 'bet') return;
   judge(d.size === STEP.answer, STEP);
+}
+
+// ═══════════════════════════════════════════════════
+// 연습 모드 — 문제가 주어지지 않는다. 순서를 스스로 짠다.
+//
+// 팔레트는 항상 같다. 상황마다 보기가 새로 나오는 것이 아니라
+// 딜러가 할 수 있는 행동 전부가 늘 떠 있고, 그중 무엇을 먼저 할지를 고른다.
+// 그것이 4지선다와 갈리는 지점이다.
+// ═══════════════════════════════════════════════════
+var P = null;
+
+var ACTS = [
+  { id: 'ante',    ko: '앤티 수거' },
+  { id: 'blinds',  ko: '블라인드 수거' },
+  { id: 'burn',    ko: '번카드' },
+  { id: 'deal',    ko: '카드 딜' },
+  { id: 'draw',    ko: '카드 교체' },
+  { id: 'first',   ko: '첫 액션 지목' },
+  { id: 'bet',     ko: '벳 크기' },
+  { id: 'betting', ko: '베팅 진행' },
+  { id: 'pot',     ko: '팟 지급' }
+];
+
+function startPractice(specId) {
+  var spec = SPECS[specId];
+  var deck = newDeck(), seats = [], i;
+  var btn = rnd(SEAT_N);
+  for (i = 0; i < SEAT_N; i++) {
+    seats.push({ i: i, name: (i + 1) + '번', pos: (i - btn + SEAT_N) % SEAT_N,
+      down: [], up: [], folded: false, declared: 0, given: 0 });
+  }
+  H = { spec: spec, seats: seats, deck: deck, di: 0, btn: btn, pot: 0, burns: 0,
+        discards: 0, community: null, stage: '', stageIdx: -1, log: [], flags: {}, q: [], qi: 0 };
+  P = { steps: pSteps(spec), pi: 0, stuck: 0, msg: '', ask: null, finished: false, specId: specId };
+  G.mode = 'practice';
+  G.started = true;
+  PHASE = 'practice';
+  log('연습 시작 — ' + spec.ko, 'hi');
+  render();
+}
+
+function pSteps(spec) {
+  var out = [], k;
+  out.push({ act: spec.forced === 'ante+bringin' ? 'ante' : 'blinds', ix: -1 });
+  for (k = 0; k < spec.streets.length; k++) {
+    var st = spec.streets[k];
+    if (st.burn) out.push({ act: 'burn', ix: k });
+    out.push({ act: st.draw ? 'draw' : 'deal', ix: k });
+    out.push({ act: 'first', ix: k });
+    out.push({ act: 'bet', ix: k });
+    out.push({ act: 'betting', ix: k });
+  }
+  out.push({ act: 'pot', ix: -1 });
+  return out;
+}
+
+/* 틀렸을 때 무엇을 먼저 해야 하는지 한 줄로 말해 준다. 가리지 않는다 — 연습이다. */
+function pDeny(exp) {
+  var spec = H.spec;
+  if (exp.act === 'ante') return '아직 앤티를 걷지 않았다. 스터드는 앤티와 브링인으로 시작한다.';
+  if (exp.act === 'blinds') return '아직 블라인드를 걷지 않았다. 드로우게임은 SB·BB 로 시작한다.';
+  if (exp.act === 'burn') return spec.streets[exp.ix].ko + ' 전에 번카드를 내린다.';
+  if (exp.act === 'deal') return spec.streets[exp.ix].ko + '를 아직 딜하지 않았다.';
+  if (exp.act === 'draw') return spec.streets[exp.ix].ko + ' 교체가 아직이다.';
+  if (exp.act === 'first') return '누가 먼저 액션하는지를 먼저 정한다.';
+  if (exp.act === 'bet') return '이번 라운드의 벳 크기를 아직 정하지 않았다.';
+  if (exp.act === 'betting') return '베팅을 아직 진행하지 않았다.';
+  return '마지막은 팟 지급이다.';
+}
+
+function onPalette(act) {
+  if (!P || PHASE !== 'practice' || P.finished) return;
+  var exp = P.steps[P.pi];
+  if (act !== exp.act) {
+    P.stuck++;
+    P.msg = pDeny(exp);
+    log('순서 아님 — ' + P.msg, 'bad');
+    render();
+    return;
+  }
+  P.msg = '';
+  pRun(exp);
+}
+
+function pRun(step) {
+  var spec = H.spec, ix = step.ix;
+  if (ix >= 0) { H.stageIdx = ix; H.stage = spec.streets[ix].ko; }
+
+  if (step.act === 'ante') { H.pot += ANTE * SEAT_N; log('앤티 <b>' + won(ANTE) + '</b> ×6 수거'); return pDone(); }
+  if (step.act === 'blinds') { H.pot += SB + BB; log('SB <b>' + won(SB) + '</b> · BB <b>' + won(BB) + '</b>'); return pDone(); }
+  if (step.act === 'burn') {
+    return flyTo('burn', 1, function () {
+      H.burns++; log('번카드 <b>1장</b> (누적 ' + H.burns + '장)'); pDone();
+    });
+  }
+  if (step.act === 'deal') return doDeal(ix, pDone);
+  if (step.act === 'draw') return doDrawRound(ix, pDone);
+  if (step.act === 'betting') { doBets(ix, function () {}); return pDone(); }
+  if (step.act === 'pot') {
+    log('팟 <b>' + won(H.pot) + '</b> 지급', 'hi');
+    P.finished = true; PHASE = 'pdone'; render(); return;
+  }
+  if (step.act === 'first') {
+    var a = mkAskSeat(ix);
+    if (!a) { log('첫 액션 자동 처리'); return pDone(); }
+    P.ask = a; PHASE = 'pfirst'; render(); return;
+  }
+  if (step.act === 'bet') { P.ask = mkAskBet(ix); PHASE = 'pbet'; render(); return; }
+}
+
+function pDone() {
+  P.pi++;
+  P.ask = null;
+  PHASE = P.pi >= P.steps.length ? 'pdone' : 'practice';
+  render();
+}
+
+function onPSeat(i) {
+  if (i === P.ask.answer) {
+    log(H.seats[i].name + ' 첫 액션');
+    P.msg = '';
+    pDone();
+  } else {
+    P.stuck++;
+    P.msg = '그 좌석이 아니다. ' + P.ask.why;
+    log('좌석 오답', 'bad');
+    render();
+  }
+}
+
+function onPChip(size) {
+  if (size === P.ask.answer) {
+    log((size === 'big' ? '빅벳' : '스몰벳') + ' <b>' + won(size === 'big' ? BIG : SMALL) + '</b> 선언');
+    P.msg = '';
+    pDone();
+  } else {
+    P.stuck++;
+    P.msg = '그 크기가 아니다. ' + P.ask.why;
+    log('벳 크기 오답', 'bad');
+    render();
+  }
+}
+
+function practiceTopHTML() {
+  return '<div class="top">' +
+    '<span class="game">' + H.spec.ko + '</span>' +
+    '<span class="fam">연습 모드</span>' +
+    '<span class="spacer"></span>' +
+    '<span class="kv">단계 <b>' + Math.min(P.pi + 1, P.steps.length) + '</b>/' + P.steps.length + '</span>' +
+    '<span class="kv">막힘 <b>' + P.stuck + '</b></span>' +
+    '</div>';
+}
+
+function practicePanelHTML() {
+  var h = '';
+  if (PHASE === 'anim') {
+    return '<div class="panel"><div class="kicker">딜링 중</div><div class="q">' + H.stage +
+      '</div><div class="hint">화면을 클릭하면 건너뜁니다</div></div>';
+  }
+  if (PHASE === 'pdone') {
+    return '<div class="panel done">' +
+      '<div class="kicker">한 핸드 완주</div>' +
+      '<div class="big">' + P.stuck + '</div>' +
+      '<div class="cap">번 막혔습니다</div>' +
+      '<div class="qsub" style="text-align:center;margin-top:8px">' +
+      (P.stuck === 0
+        ? '한 번도 순서를 틀리지 않았습니다.'
+        : '막힐 때마다 무엇이 먼저였는지 로그에 남아 있습니다.') + '</div>' +
+      '<button class="btn" id="pagain" style="max-width:320px;margin:16px auto 0">같은 종목 한 핸드 더</button>' +
+      '<button class="btn ghostbtn" id="pother" style="max-width:320px;margin:8px auto 0">' +
+      (P.specId === 'stud7' ? '2-7 트리플 드로우로 바꾸기' : '7카드 스터드로 바꾸기') + '</button>' +
+      '<button class="btn ghostbtn" id="phome" style="max-width:320px;margin:8px auto 0">처음 화면으로</button>' +
+      '</div>';
+  }
+  if (PHASE === 'pfirst') {
+    h = '<div class="panel"><div class="kicker">직접 지목</div>' +
+      '<div class="q">' + P.ask.q + '</div>' +
+      '<div class="qsub">' + H.stage + ' · 테이블에서 좌석을 클릭하세요.</div>';
+    if (P.msg) h += '<div class="verdict no"><div class="hd">아직 아니다</div>' + P.msg + '</div>';
+    return h + '</div>';
+  }
+  if (PHASE === 'pbet') {
+    h = '<div class="panel"><div class="kicker">직접 밀기</div>' +
+      '<div class="q">' + P.ask.q + '</div>' +
+      '<div class="chips">' +
+      '<div class="chip small" data-chip="small"><small>스몰벳</small>' + won(SMALL) + '</div>' +
+      '<div class="chip big" data-chip="big"><small>빅벳</small>' + won(BIG) + '</div>' +
+      '<div class="chiphint">맞는 칩을 팟으로 끌어다 놓으세요.</div></div>';
+    if (P.msg) h += '<div class="verdict no"><div class="hd">아직 아니다</div>' + P.msg + '</div>';
+    return h + '</div>';
+  }
+  h = '<div class="panel"><div class="kicker">다음에 할 일을 고르세요</div>' +
+    '<div class="q">' + (H.stage || '핸드 시작') + '</div>' +
+    '<div class="qsub">목록은 항상 같습니다. 순서는 당신이 짜세요.</div>' +
+    '<div class="choices palette">';
+  for (var i = 0; i < ACTS.length; i++) {
+    h += '<button class="ch" data-act="' + ACTS[i].id + '">' + ACTS[i].ko + '</button>';
+  }
+  h += '</div>';
+  if (P.msg) h += '<div class="verdict no"><div class="hd">순서가 아니다</div>' + P.msg + '</div>';
+  return h + '</div>';
 }
 
 // ═══════════════════════════════════════════════════
@@ -1205,6 +1412,10 @@ function chipUp(ev) {
 function render() {
   var app = $('#app');
   if (!G.started) { app.innerHTML = introHTML(); wire(); return; }
+  if (G.mode === 'practice') {
+    app.innerHTML = practiceTopHTML() + boardHTML() + practicePanelHTML() + logHTML();
+    wire(); return;
+  }
   if (G.over && G.showEnd) { app.innerHTML = doneHTML(); wire(); return; }
   app.innerHTML = topHTML() + boardHTML() + panelHTML() + logHTML();
   wire();
@@ -1221,7 +1432,12 @@ function introHTML() {
     '핸드마다 종목이 바뀐다. <b>틀린 판단 세 번이면 끝이다.</b>' +
     '</div>' +
     (best ? '<div class="cap" style="margin-top:14px">최고 기록 <b style="font-family:var(--mono)">' + best + '핸드</b></div>' : '') +
-    '<button class="btn" id="go" style="max-width:300px;margin:18px auto 0">딜링 시작</button>' +
+    '<button class="btn" id="go" style="max-width:320px;margin:18px auto 0">딜링 룸 — 사고가 터진다</button>' +
+    '<div style="max-width:320px;margin:16px auto 0;padding-top:14px;border-top:1px solid var(--line)">' +
+    '<div class="cap" style="margin-bottom:8px">선택지 없이 절차만 혼자 연습하기</div>' +
+    '<button class="btn ghostbtn" id="pstud">연습 — 7카드 스터드</button>' +
+    '<button class="btn ghostbtn" id="ptd" style="margin-top:8px">연습 — 2-7 트리플 드로우</button>' +
+    '</div>' +
     '<div class="hint" style="text-align:center">카드가 날아가는 중에 화면을 클릭하면 건너뜁니다</div>' +
     '</div>';
 }
@@ -1242,7 +1458,8 @@ function topHTML() {
 
 function boardHTML() {
   var s = STEP;
-  var seatPick = (PHASE === 'ask' && s && s.kind === 'seat') ||
+  var seatPick = PHASE === 'pfirst' ||
+                 (PHASE === 'ask' && s && s.kind === 'seat') ||
                  (PHASE === 'target' && s && s.target && s.target.kind === 'seat');
   var pilePick = (PHASE === 'target' && s && s.target && s.target.kind === 'pile');
   var order = [0, 1, 2, 5, 4, 3];
@@ -1257,7 +1474,7 @@ function boardHTML() {
     pileHTML('burn', '번', H.burns + '장', pilePick) +
     pileHTML('discard', '디스카드', H.discards + '장', pilePick) +
     (H.spec.family === 'stud' ? pileHTML('center', '중앙', '—', pilePick) : '') +
-    '<div class="pot' + (PHASE === 'ask' && s && s.kind === 'bet' ? ' drop' : '') + '">' +
+    '<div class="pot' + (PHASE === 'pbet' || (PHASE === 'ask' && s && s.kind === 'bet') ? ' drop' : '') + '">' +
     '<div class="lb">팟</div><div class="n">' + won(H.pot) + '</div></div>' +
     '</div>';
 
@@ -1361,7 +1578,7 @@ function panelHTML() {
       '</div>';
     h += G.over
       ? '<button class="btn" id="showend">근무 종료 — 결과 보기</button>'
-      : '<button class="btn" id="cont">계속</button>';
+      : '<button class="btn" id="cont">다음</button>';
   }
   h += '</div>';
   return h;
@@ -1394,9 +1611,18 @@ function tl(a, b) { return '<div class="tline"><span>' + a + '</span><span class
 
 // 이벤트 배선 ─────────────────────────────────────
 function wire() {
-  var go = $('#go'); if (go) go.onclick = function () { G.started = true; startHand(); };
+  var go = $('#go'); if (go) go.onclick = function () { G.started = true; G.mode = 'room'; startHand(); };
+  var ps = $('#pstud'); if (ps) ps.onclick = function () { startPractice('stud7'); };
+  var pt = $('#ptd'); if (pt) pt.onclick = function () { startPractice('td27'); };
+  var pa = $('#pagain'); if (pa) pa.onclick = function () { startPractice(P.specId); };
+  var po = $('#pother'); if (po) po.onclick = function () { startPractice(P.specId === 'stud7' ? 'td27' : 'stud7'); };
+  var ph = $('#phome'); if (ph) ph.onclick = function () { G.started = false; G.mode = null; P = null; render(); };
+  var acts = document.querySelectorAll('[data-act]');
+  for (var ai = 0; ai < acts.length; ai++) {
+    (function (el) { el.onclick = function () { onPalette(el.getAttribute('data-act')); }; })(acts[ai]);
+  }
   var ag = $('#again'); if (ag) ag.onclick = function () {
-    G = { lives: 3, hands: 0, incidents: 0, right: 0, wrong: 0, over: false, showEnd: false, started: true };
+    G = { lives: 3, hands: 0, incidents: 0, right: 0, wrong: 0, over: false, showEnd: false, started: true, mode: 'room' };
     startHand();
   };
   var se = $('#showend'); if (se) se.onclick = function () { G.showEnd = true; render(); };
