@@ -279,6 +279,7 @@ var SPECS = {
     family: 'stud', familyKo: '스터드',
     holeCardCount: 7, forced: 'ante+bringin',
     bettingKo: '픽스 리밋', raiseCap: 5,
+    eval: { hi: 'standard', lo: null, qualifier: null },
     streets: [
       { id: '3rd', ko: '3번째 카드', short: '3번째', deal: { down: 2, up: 1 }, burn: false, firstToAct: 'lowest-upcard', size: 1 },
       { id: '4th', ko: '4번째 카드', short: '4번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'highest-upcard', size: 1 },
@@ -292,6 +293,7 @@ var SPECS = {
     family: 'draw', familyKo: '드로우',
     holeCardCount: 5, forced: 'blinds',
     bettingKo: '픽스 리밋', raiseCap: 5,
+    eval: { hi: null, lo: '27', qualifier: null },
     draw: { rounds: 3, maxDiscard: 5 },
     streets: [
       { id: 'predraw', ko: '첫 베팅 라운드', short: '첫 베팅', deal: { down: 5, up: 0 }, burn: false, firstToAct: 'left-of-bb', size: 1 },
@@ -299,8 +301,47 @@ var SPECS = {
       { id: 'draw2', ko: '두 번째 드로우', short: '드로우 2', draw: true, burn: true, firstToAct: 'left-of-button', size: 2 },
       { id: 'draw3', ko: '세 번째 드로우', short: '드로우 3', draw: true, burn: true, firstToAct: 'left-of-button', size: 2 }
     ]
+  },
+
+  /* Razz — 스터드와 방향이 반대다. 브링인이 가장 높은 업카드고,
+     이후에는 보드 로우가 가장 좋은 좌석이 먼저 액션한다.
+     이 두 가지는 자료에 없어 사용자가 확정했다 (2026-09-03). */
+  razz: {
+    id: 'razz', ko: '라즈', en: 'Razz',
+    family: 'stud', familyKo: '스터드',
+    holeCardCount: 7, forced: 'ante+bringin',
+    bettingKo: '픽스 리밋', raiseCap: 5,
+    eval: { hi: null, lo: 'a5', qualifier: null },
+    streets: [
+      { id: '3rd', ko: '3번째 카드', short: '3번째', deal: { down: 2, up: 1 }, burn: false, firstToAct: 'highest-upcard-a5', size: 1 },
+      { id: '4th', ko: '4번째 카드', short: '4번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'lowest-hand', size: 1 },
+      { id: '5th', ko: '5번째 카드', short: '5번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'lowest-hand', size: 2 },
+      { id: '6th', ko: '6번째 카드', short: '6번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'lowest-hand', size: 2 },
+      { id: '7th', ko: '7번째 카드', short: '7번째', deal: { down: 1, up: 0 }, burn: true, firstToAct: 'lowest-hand', size: 2 }
+    ]
+  },
+
+  /* 7-Card Stud Hi/Lo 8 — 프로토콜이 Hi-Low Regular 를 "Stud/8 의 규칙을 따르되
+     로우에 자격이 없고 첫 라운드는 무늬 포함 최고 카드가 액션한다"는 예외로 정의한다.
+     그 예외의 반대가 곧 Stud/8 이다 — 일반 스터드 순서에 8-or-better 로우가 붙는다. */
+  stud8: {
+    id: 'stud8', ko: '스터드 하이로우 8', en: '7-Card Stud Hi/Lo 8',
+    family: 'stud', familyKo: '스터드',
+    holeCardCount: 7, forced: 'ante+bringin',
+    bettingKo: '픽스 리밋', raiseCap: 5,
+    eval: { hi: 'standard', lo: 'a5', qualifier: 8 },
+    streets: [
+      { id: '3rd', ko: '3번째 카드', short: '3번째', deal: { down: 2, up: 1 }, burn: false, firstToAct: 'lowest-upcard', size: 1 },
+      { id: '4th', ko: '4번째 카드', short: '4번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'highest-upcard', size: 1 },
+      { id: '5th', ko: '5번째 카드', short: '5번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'highest-upcard', size: 2 },
+      { id: '6th', ko: '6번째 카드', short: '6번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'highest-upcard', size: 2 },
+      { id: '7th', ko: '7번째 카드', short: '7번째', deal: { down: 1, up: 0 }, burn: true, firstToAct: 'highest-upcard', size: 2 }
+    ]
   }
 };
+
+/* 핸드마다 종목이 바뀐다. 손이 하는 일이 종목마다 달라지는 것이 이 축의 훈련이다. */
+var ROTATION = ['stud7', 'td27', 'razz', 'stud8'];
 
 var GUIDE = 'Mix Game Guide v1';
 var PROTO = 'Mixed Games Rules & Protocols (2026-01)';
@@ -338,7 +379,7 @@ try { best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (
 // 핸드 만들기
 // ═══════════════════════════════════════════════════
 function startHand() {
-  var spec = SPECS[G.hands % 2 === 0 ? 'stud7' : 'td27'];
+  var spec = SPECS[ROTATION[G.hands % ROTATION.length]];
   var deck = newDeck();
   var seats = [], i;
   var btn = rnd(SEAT_N);
@@ -420,6 +461,7 @@ function buildQueue() {
   }
   q.push({ t: 'showdown' });
   q.push({ t: 'askwinner' });
+  q.push({ t: 'asklow' });
   q.push({ t: 'endhand' });
   H.q = q;
   H.qi = 0;
@@ -455,6 +497,7 @@ function advance() {
     render(); return advance();
   }
   if (s.t === 'askwinner') { var w = mkAskWinner(); return w ? stop(w) : advance(); }
+  if (s.t === 'asklow') { var lw = mkAskLow(); return lw ? stop(lw) : advance(); }
 
   if (s.t === 'askseat') { var a = mkAskSeat(s.ix); return a ? stop(a) : advance(); }
   if (s.t === 'askbet') { var bq = mkAskBet(s.ix); return bq ? stop(bq) : advance(); }
@@ -489,10 +532,9 @@ function doDeal(ix, next) {
    동률 자체를 만들지 않는다 — 짐작으로 채우지 않기 위해서다. */
 function fixTies(ix) {
   var st = H.spec.streets[ix];
-  var wantMax = st.firstToAct === 'highest-upcard';
   for (var guard = 0; guard < 40; guard++) {
     var list = actives();
-    if ((wantMax ? bestUpSeat(list) : lowUpSeat(list)) !== null) return true;
+    if (actorSeat(list, st.firstToAct) !== null) return true;
     /* 동률인 좌석 하나의 방금 나간 업카드만 바꾼다. 아직 아무도 보지 않은 시점이다. */
     var victim = list[rnd(list.length)];
     if (!victim.up.length) return false;
@@ -607,7 +649,7 @@ function doBets(ix, next) {
 
 function doEndHand() {
   var n = actives().length;
-  log('쇼다운 — ' + n + '명. 팟 <b>' + won(H.pot) + '</b> 지급', 'hi');
+  log('쇼다운 ' + n + '명 — ' + payoutLine(), 'hi');
   PHASE = 'handend';
   render();
 }
@@ -619,18 +661,36 @@ function mkAskSeat(ix) {
   var st = H.spec.streets[ix], list = actives(), ans = null, why = '', cite = null;
 
   if (st.firstToAct === 'lowest-upcard') {
-    var lo = lowUpSeat(list);
+    var lo = actorSeat(list, 'lowest-upcard');
     if (!lo) return null;
     ans = lo.i;
     why = '가장 낮은 업카드가 브링인이다. 지금은 ' + lo.name + '의 ' +
       lo.up[0].r + lo.up[0].su.s + ' 가 가장 낮다.';
     cite = { src: GUIDE, txt: '3번째 카드의 첫 액션은 가장 낮은 업카드. 브링인 금액을 내거나 컴플리트한다.' };
+  } else if (st.firstToAct === 'highest-upcard-a5') {
+    var rhi = actorSeat(list, 'highest-upcard-a5');
+    if (!rhi) return null;
+    ans = rhi.i;
+    why = '<b>라즈는 스터드와 반대다.</b> 가장 <b>높은</b> 업카드가 브링인이고, A 는 로우에서 최저 카드라 ' +
+      '가장 높은 카드가 아니라 <b>가장 낮은</b> 카드다. 지금은 ' + rhi.name + '의 ' +
+      rhi.up[0].r + rhi.up[0].su.s + ' 가 가장 높다.';
+    cite = { src: '사용자 확인 (2026-09-03)', txt: '라즈 3번째 카드의 브링인은 가장 높은 업카드. 자료에 근거가 없어 확정받았다.' };
+  } else if (st.firstToAct === 'lowest-hand') {
+    var rlo = actorSeat(list, 'lowest-hand');
+    if (!rlo) return null;
+    ans = rlo.i;
+    var rest = list.filter(function (x) { return x.i !== rlo.i; });
+    var rrun = actorSeat(rest, 'lowest-hand') || rest[0];
+    why = '라즈는 4번째 카드부터 <b>보드 로우가 가장 좋은</b>(가장 낮은) 좌석이 먼저 액션한다. ' +
+      '지금은 ' + rlo.name + '의 <b>' + lowKo(evalLowA5(rlo.up)) + '</b>' +
+      (rrun ? ' 이 ' + rrun.name + '의 ' + lowKo(evalLowA5(rrun.up)) + ' 보다 낮다.' : ' 이 가장 낮다.');
+    cite = { src: '사용자 확인 (2026-09-03)', txt: '라즈는 4번째 카드부터 보드 로우가 가장 좋은 좌석이 먼저 액션한다.' };
   } else if (st.firstToAct === 'highest-upcard') {
-    var hi = bestUpSeat(list);
+    var hi = actorSeat(list, 'highest-upcard');
     if (!hi) return null;
     ans = hi.i;
     var second = list.filter(function (x) { return x.i !== hi.i; });
-    var runner = bestUpSeat(second) || second[0];
+    var runner = actorSeat(second, 'highest-upcard') || second[0];
     why = '4번째 카드부터는 <b>업카드로 만든 핸드가 가장 높은</b> 좌석이 먼저 액션한다. ' +
       '카드 한 장을 비교하는 것이 아니라 족보로 본다 — 페어가 에이스 하이보다 높다. ' +
       '지금은 ' + hi.name + '의 <b>' + handName(hi) + '</b>' +
@@ -681,10 +741,12 @@ function mkAskBet(ix) {
       };
     }
     /* 4번째 카드에 오픈페어가 있으면 빅벳을 고를 수 있다 — 정답이 하나가 아니므로 묻지 않는다 (ADR-003). */
-    if (ix === 1 && openPair(actives())) return null;
+    if (ix === 1 && H.spec.eval.hi && openPair(actives())) return null;
     why = isBig
       ? '스터드는 5번째 카드부터 빅벳이다.'
-      : '4번째 카드는 스몰벳이다. 단 업카드에 페어가 뜨면 빅벳을 고를 수 있다.';
+      : (H.spec.eval.hi
+          ? '4번째 카드는 스몰벳이다. 단 업카드에 페어가 뜨면 빅벳을 고를 수 있다.'
+          : '4번째 카드는 스몰벳이다.');
     cite = { src: GUIDE, txt: '픽스리밋 2배 지점 — 스터드는 5번째 카드부터.' };
   } else {
     var roundNo = ix + 1;
@@ -781,38 +843,183 @@ function handKo(h, lowball) {
   return r[h.key[1]] + ' 하이';
 }
 
-function showdown() {
-  var lowball = H.spec.id === 'td27';
-  var evals = actives().map(function (s) {
-    return { seat: s, h: bestFive(s.down.concat(s.up), !lowball) };
-  });
-  evals.sort(function (x, y) {
-    var c = cmpKey(x.h.key, y.h.key);
-    return lowball ? c : -c;
-  });
-  var tied = evals.length > 1 && cmpKey(evals[0].h.key, evals[1].h.key) === 0;
-  return { evals: evals, tied: tied, lowball: lowball };
+
+/* ── A-5 로우볼 ────────────────────────────────────
+   A 가 최저이고 스트레이트·플러시를 무시한다. 그래서 최고 로우가 5-4-3-2-A 다.
+   8-or-better 는 별개 평가기가 아니라 이 위에 얹은 자격 규칙이다 (PRD §6-3). */
+var A5RANK = ['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K'];
+var LOWCAT = { 0: '', 1: '원페어', 2: '투페어', 3: '트리플', 7: '포카드' };
+
+function a5v(c) { return c.r === 'A' ? 0 : rv(c) + 1; }
+function a5vOf(n) { return n - 1; }          // 숫자 8 → 값 7
+
+function evalLowA5(cards) {
+  var counts = {}, i, k;
+  for (i = 0; i < cards.length; i++) {
+    var v = a5v(cards[i]);
+    counts[v] = (counts[v] || 0) + 1;
+  }
+  var groups = [];
+  for (k in counts) if (counts.hasOwnProperty(k)) groups.push({ v: parseInt(k, 10), n: counts[k] });
+  groups.sort(function (a, b) { return b.n - a.n || b.v - a.v; });
+  var cat = groups[0].n >= 4 ? 7
+          : groups[0].n === 3 ? 3
+          : (groups[0].n === 2 && groups[1] && groups[1].n === 2) ? 2
+          : groups[0].n === 2 ? 1 : 0;
+  var key = [cat];
+  for (i = 0; i < groups.length; i++) key.push(groups[i].v);
+  return { cat: cat, key: key, cards: cards.slice() };
 }
 
+function combos5(cards, fn) {
+  var n = cards.length, a, b, c, d, e;
+  if (n <= 5) { fn(cards); return; }
+  for (a = 0; a < n; a++) for (b = a + 1; b < n; b++) for (c = b + 1; c < n; c++)
+    for (d = c + 1; d < n; d++) for (e = d + 1; e < n; e++)
+      fn([cards[a], cards[b], cards[c], cards[d], cards[e]]);
+}
+
+/* qualifier 가 있으면 페어 없이 다섯 장 전부 그 숫자 이하여야 로우가 성립한다.
+   성립하지 않으면 null — 하이가 팟을 전부 가져간다. */
+function bestLowA5(cards, qualifier) {
+  var best = null;
+  combos5(cards, function (five) {
+    if (five.length < 5) return;
+    var h = evalLowA5(five);
+    if (qualifier) {
+      if (h.cat !== 0) return;
+      if (h.key[1] > a5vOf(qualifier)) return;
+    }
+    if (!best || cmpKey(h.key, best.key) < 0) best = h;
+  });
+  return best;
+}
+
+function lowKo(h) {
+  var line = h.cards.map(a5v).sort(function (x, y) { return y - x; })
+    .map(function (v) { return A5RANK[v]; }).join('-');
+  return h.cat === 0 ? line : line + ' (' + LOWCAT[h.cat] + ')';
+}
+
+/* ── 누가 먼저 액션하나 ────────────────────────────
+   종목마다 방향이 다르다. Razz 는 스터드와 반대다. */
+function actorCmp(a, b, mode) {          // a 가 먼저면 양수
+  if (mode === 'lowest-upcard')     return rv(b.up[0]) - rv(a.up[0]);
+  if (mode === 'highest-upcard-a5') return a5v(a.up[0]) - a5v(b.up[0]);
+  if (mode === 'highest-upcard')    return cmpKey(upRank(a).key, upRank(b).key);
+  if (mode === 'lowest-hand')       return -cmpKey(evalLowA5(a.up).key, evalLowA5(b.up).key);
+  return 0;
+}
+function actorSeat(list, mode) {
+  if (!list.length) return null;
+  var best = null, tied = false, i;
+  for (i = 0; i < list.length; i++) {
+    if (best === null) { best = list[i]; continue; }
+    var c = actorCmp(list[i], best, mode);
+    if (c > 0) { best = list[i]; tied = false; }
+    else if (c === 0) tied = true;
+  }
+  return tied ? null : best;
+}
+function bringInKo(spec) {
+  return spec.streets[0].firstToAct === 'highest-upcard-a5' ? '가장 높은 업카드' : '가장 낮은 업카드';
+}
+
+/* ── 쇼다운 ────────────────────────────────────────
+   하이만, 로우만, 하이/로우 스플릿 세 경우를 한 곳에서 낸다. */
+function showdownResult() {
+  var spec = H.spec, ev = spec.eval, list = actives(), i;
+  var hi = null, lo = null;
+  if (ev.hi) {
+    hi = list.map(function (s) { return { seat: s, h: bestFive(s.down.concat(s.up), true) }; });
+    hi.sort(function (x, y) { return -cmpKey(x.h.key, y.h.key); });
+  }
+  if (ev.lo === '27') {
+    lo = list.map(function (s) { return { seat: s, h: bestFive(s.down.concat(s.up), false) }; });
+    lo.sort(function (x, y) { return cmpKey(x.h.key, y.h.key); });
+  } else if (ev.lo === 'a5') {
+    lo = [];
+    for (i = 0; i < list.length; i++) {
+      var h = bestLowA5(list[i].down.concat(list[i].up), ev.qualifier);
+      if (h) lo.push({ seat: list[i], h: h });
+    }
+    lo.sort(function (x, y) { return cmpKey(x.h.key, y.h.key); });
+  }
+  function tiedTop(arr, dir) {
+    if (!arr || arr.length < 2) return false;
+    return cmpKey(arr[0].h.key, arr[1].h.key) === 0;
+  }
+  return {
+    hi: hi, lo: lo,
+    hiTied: tiedTop(hi), loTied: tiedTop(lo),
+    split: !!(ev.hi && ev.lo),
+    loKind: ev.lo
+  };
+}
+function handNameOf(e, kind) {
+  return kind === 'a5' ? lowKo(e.h) : handKo(e.h, kind === '27');
+}
+
+var CHIPUNIT = 500;   // 홀칩은 이 단위로 갈린다
+
 function mkAskWinner() {
-  var r = showdown();
-  if (r.evals.length < 2) { log('한 명만 남아 팟을 그대로 지급한다'); return null; }
-  if (r.tied) { log('동점 — 팟을 나눈다', 'hi'); return null; }
-  var win = r.evals[0], run = r.evals[1];
+  var r = showdownResult();
+  H.sd = r;
+  var main = r.hi || r.lo;
+  var kind = r.hi ? 'hi' : r.loKind;
+  if (!main || main.length < 2) { log('한 명만 남아 팟을 그대로 지급한다'); return null; }
+  if (r.hi ? r.hiTied : r.loTied) { log('동점 — 팟을 나눈다', 'hi'); return null; }
+  var win = main[0], run = main[1];
+  var head = r.split ? '하이는 누가 이깁니까?' : '이 팟은 누구에게 갑니까?';
+  var lead;
+  if (kind === 'hi') lead = '7장 중 최고 5장으로 겨룬다. ';
+  else if (kind === '27') lead = '2-7 로우볼은 <b>가장 낮은 핸드</b>가 이긴다. A 는 항상 높고 스트레이트·플러시는 인정되므로 손해다. ';
+  else lead = '<b>라즈는 A 가 최저</b>이고 스트레이트·플러시를 따지지 않는다. 가장 낮은 다섯 장이 이긴다. ';
   return {
     kind: 'seat', tone: '', kicker: '판단 · 팟 지급',
-    q: '이 팟은 누구에게 갑니까?',
+    q: head,
     sub: '쇼다운 · 좌석을 클릭하세요.',
     answer: win.seat.i,
-    why: (r.lowball
-      ? '2-7 로우볼은 <b>가장 낮은 핸드</b>가 이긴다. A 는 항상 높고 스트레이트·플러시는 인정되므로 손해다. '
-      : '7장 중 최고 5장으로 겨룬다. ') +
-      win.seat.name + '의 <b>' + handKo(win.h, r.lowball) + '</b> 이 ' +
-      run.seat.name + '의 ' + handKo(run.h, r.lowball) + ' 을 이긴다.',
-    cite: r.lowball
-      ? { src: GUIDE, txt: '2-7 — A 는 최고, 스트레이트·플러시 인정. 최고 핸드는 7-5-4-3-2 무플러시.' }
-      : { src: GUIDE, txt: '7카드 스터드 — 7장 중 최고 5장. 족보는 홀덤과 동일.' }
+    why: lead + win.seat.name + '의 <b>' + handNameOf(win, kind) + '</b> 이 ' +
+         run.seat.name + '의 ' + handNameOf(run, kind) + ' 을 이긴다.',
+    cite: kind === 'hi'
+      ? { src: GUIDE, txt: '7카드 스터드 — 7장 중 최고 5장. 족보는 홀덤과 동일.' }
+      : kind === '27'
+        ? { src: GUIDE, txt: '2-7 — A 는 최고, 스트레이트·플러시 인정. 최고 핸드는 7-5-4-3-2 무플러시.' }
+        : { src: '사용자 확인 (2026-09-03)', txt: '라즈는 A-5 로우볼 — A 가 최저, 스트레이트·플러시 무시, 자격 없음.' }
   };
+}
+
+/* 스플릿 게임에서만 나온다. 로우가 성립하는지부터 묻고, 성립하면 누구인지 지목한다. */
+function mkAskLow() {
+  var r = H.sd;
+  if (!r || !r.split) return null;
+  var has = !!(r.lo && r.lo.length);
+  if (has && r.loTied) { log('로우 동점 — 로우 몫을 나눈다', 'hi'); return null; }
+  return {
+    kind: 'incident', tone: '', kicker: '판단 · 로우',
+    q: '이 핸드에 <b>8 이하 로우</b>가 성립합니까?',
+    sub: '로우는 A 가 최저이고 스트레이트·플러시를 따지지 않습니다. 페어가 있으면 로우가 아닙니다.',
+    choices: ['로우가 성립한다', '로우가 없다 — 하이가 팟을 전부 가져간다'],
+    correct: has ? 0 : 1,
+    target: has ? { kind: 'seat', prompt: '로우는 누가 이깁니까?', answer: r.lo[0].seat.i } : null,
+    why: has
+      ? r.lo[0].seat.name + '의 <b>' + lowKo(r.lo[0].h) + '</b> 이 로우를 가져간다. 팟의 절반이고, 홀칩은 하이 승자에게 간다.'
+      : '페어 없이 8 이하 다섯 장을 만든 사람이 없다. 로우가 성립하지 않으면 하이가 팟을 전부 가져간다.',
+    cite: { src: GUIDE, txt: 'Lo 족보는 A-5 와 일치하되 8 이하만 인정된다. 로우를 만들 수 없으면 Hi 승자에게 팟 전부. 홀칩은 Hi 승자에게.' }
+  };
+}
+
+/* 팟을 실제로 나눈다 — 절반씩, 남는 칩은 하이에게. */
+function payoutLine() {
+  var r = H.sd;
+  if (r && r.split && r.lo && r.lo.length && r.hi && r.hi.length) {
+    var half = Math.floor(H.pot / 2 / CHIPUNIT) * CHIPUNIT;
+    var odd = H.pot - half * 2;
+    return '하이 ' + r.hi[0].seat.name + ' <b>' + won(half + odd) + '</b> · 로우 ' +
+      r.lo[0].seat.name + ' <b>' + won(half) + '</b>' + (odd ? ' (홀칩 ' + won(odd) + ' 은 하이에게)' : '');
+  }
+  return '팟 <b>' + won(H.pot) + '</b> 지급';
 }
 
 // ═══════════════════════════════════════════════════
@@ -971,7 +1178,7 @@ var INC = {
   },
   // 잘못된 브링인 — 다음 사람이 아직 액션하지 않았다
   bringin_clean: function (list, st, ix) {
-    var lo = lowUpSeat(list), wrong = null;
+    var lo = actorSeat(list, H.spec.streets[0].firstToAct), wrong = null;
     if (!lo) return null;
     var others = list.filter(function (s) { return s.i !== lo.i; });
     if (!others.length) return null;
@@ -982,12 +1189,12 @@ var INC = {
       q: wrong.name + '이 브링인을 냈습니다. <b>다음 사람은 아직 액션하지 않았습니다.</b>',
       sub: '업카드를 다시 보고 처리하세요.',
       choices: [
-        '칩을 돌려주고, 진짜 최저 업카드가 브링인하게 정정한다',
+        '칩을 돌려주고, 진짜 브링인 좌석이 내게 정정한다',
         '그대로 진행한다. 이미 낸 칩은 유효하다',
         '핸드를 무효로 한다'
       ],
       correct: 0,
-      target: { kind: 'seat', prompt: '진짜 브링인은 누구입니까?', answer: lo.i },
+      target: { kind: 'seat', prompt: '진짜 브링인은 누구입니까? (' + bringInKo(H.spec) + ')', answer: lo.i },
       why: '다음 사람이 아직 액션하지 않았으면 칩을 회수하고 정정한다. ' +
            '이미 액션했다면 반대로 그 벳이 유효해진다 — 그 한 가지로 답이 갈린다.',
       cite: { src: PROTO, txt: '잘못된 브링인/컴플리트 — 다음 사람이 아직 액션하지 않았으면 칩을 회수하고 정정한다.' }
@@ -995,7 +1202,7 @@ var INC = {
   },
   // 같은 사고인데 다음 사람이 이미 액션했다 → 답이 뒤집힌다
   bringin_acted: function (list, st, ix) {
-    var lo = lowUpSeat(list);
+    var lo = actorSeat(list, H.spec.streets[0].firstToAct);
     if (!lo) return null;
     var others = list.filter(function (s) { return s.i !== lo.i; });
     if (!others.length) return null;
@@ -1007,7 +1214,7 @@ var INC = {
       sub: '어떻게 처리합니까?',
       choices: [
         '그 벳을 유효한 것으로 두고 진행한다. 진짜 최저 카드는 브링인 의무가 없어진다',
-        '칩을 돌려주고 진짜 최저 업카드가 브링인하게 정정한다',
+        '칩을 돌려주고 진짜 브링인 좌석이 내게 정정한다',
         '핸드를 무효로 한다'
       ],
       correct: 0,
@@ -1144,7 +1351,7 @@ var OBJ = {
   },
   // 브링인 지목에 대한 항의 — 업카드를 실제로 비교해야 한다
   ob_bringin: function (list, ix) {
-    var lo = lowUpSeat(list);
+    var lo = actorSeat(list, H.spec.streets[0].firstToAct);
     if (!lo) return null;
     var others = list.filter(function (s) { return s.i !== lo.i; });
     if (!others.length) return null;
@@ -1155,18 +1362,19 @@ var OBJ = {
     return {
       who: claimer.name,
       title: '브링인 지목',
-      q: '“브링인이 저라고요? 저보다 낮은 업카드가 있는데요.”',
-      sub: claimer.name + '을 브링인으로 지목한 상황입니다. 테이블의 업카드를 직접 확인하세요.',
+      q: '“브링인이 저라고요? 저 말고 다른 사람인데요.”',
+      sub: claimer.name + '을 브링인으로 지목한 상황입니다. 이 게임의 브링인은 <b>' +
+        bringInKo(H.spec) + '</b>입니다. 테이블을 직접 확인하세요.',
       choices: [
-        '항의를 받아들인다 — 최저 업카드는 다른 좌석이다',
-        '기각한다 — ' + claimer.name + '의 업카드가 최저가 맞다',
+        '항의를 받아들인다 — 브링인은 다른 좌석이다',
+        '기각한다 — ' + claimer.name + '이 브링인이 맞다',
         '플로어를 부른다'
       ],
       correct: truthful ? 0 : 1,
       target: null,
       why: truthful
-        ? '업카드를 비교하면 ' + lo.name + '이 더 낮다. 항의가 맞다.'
-        : claimer.name + '의 업카드가 실제로 최저다. 손님 말이 항상 맞지는 않는다.',
+        ? '업카드를 비교하면 브링인은 ' + lo.name + '이다. 항의가 맞다.'
+        : claimer.name + '이 실제로 브링인이 맞다. 손님 말이 항상 맞지는 않는다.',
       cite: { src: GUIDE, txt: '3번째 카드의 첫 액션은 가장 낮은 업카드.' }
     };
   },
@@ -1317,6 +1525,7 @@ function nextAfterVerdict() {
 // 선택지 클릭
 function onChoice(i) {
   if (PHASE === 'pbet') { onPBet(i); return; }
+  if (PHASE === 'pchoice') { onPChoice(i); return; }
   var s = STEP;
   if (!s || PHASE !== 'ask') return;
   s.picked = i;
@@ -1327,7 +1536,7 @@ function onChoice(i) {
 
 // 좌석 클릭
 function onSeat(i) {
-  if (PHASE === 'pfirst' || PHASE === 'pwin') { onPSeat(i); return; }
+  if (PHASE === 'pfirst' || PHASE === 'pwin' || PHASE === 'ptarget') { onPSeat(i); return; }
   var s = STEP;
   if (!s) return;
   if (PHASE === 'ask' && s.kind === 'seat') { judge(i === s.answer, s); return; }
@@ -1445,9 +1654,13 @@ function pRun(step) {
   if (step.act === 'pot') {
     H.showdown = true;
     log('쇼다운 — 카드를 공개한다', 'hi');
+    P.tail = [];
     var w = mkAskWinner();
-    if (!w) { log('팟 <b>' + won(H.pot) + '</b> 지급', 'hi'); P.finished = true; PHASE = 'pdone'; render(); return; }
-    P.ask = w; PHASE = 'pwin'; render(); return;
+    if (w) P.tail.push(w);
+    var lw = mkAskLow();
+    if (lw) P.tail.push(lw);
+    if (!P.tail.length) { log(payoutLine(), 'hi'); P.finished = true; PHASE = 'pdone'; render(); return; }
+    pAskNext(); return;
   }
   if (step.act === 'first') {
     var a = mkAskSeat(ix);
@@ -1468,24 +1681,51 @@ function pDone() {
   render();
 }
 
+/* 쇼다운은 판단이 하나가 아닐 수 있다 (스플릿). 남은 판단을 차례로 낸다. */
+function pAskNext() {
+  if (!P.tail || !P.tail.length) {
+    log(payoutLine(), 'hi');
+    P.finished = true; P.pi = P.steps.length; PHASE = 'pdone'; render(); return;
+  }
+  P.ask = P.tail.shift();
+  P.msg = '';
+  PHASE = P.ask.kind === 'seat' ? 'pwin' : 'pchoice';
+  render();
+}
+function pRecord(name) {
+  if (!P.wins) P.wins = [];
+  P.wins.push({ name: name, kicker: P.ask.kicker, why: P.ask.why, cite: P.ask.cite });
+}
+
 function onPSeat(i) {
-  if (i === P.ask.answer) {
-    P.msg = '';
-    if (PHASE === 'pwin') {
-      log(H.seats[i].name + '에게 팟 <b>' + won(H.pot) + '</b> 지급', 'hi');
-      /* 맞혔을 때야말로 근거를 볼 자리다 — 결과 화면까지 들고 간다 */
-      P.win = { name: H.seats[i].name, why: P.ask.why, cite: P.ask.cite };
-      P.finished = true; P.pi = P.steps.length; PHASE = 'pdone'; render(); return;
-    }
-    log(H.seats[i].name + ' 첫 액션');
-    pDone();
-  } else {
-    P.stuck++;
-    P.msg = '그 좌석이 아니다. ' + P.ask.why;
-    log('좌석 오답', 'bad');
-    render();
+  if (PHASE === 'pfirst') {
+    if (i === P.ask.answer) { P.msg = ''; log(H.seats[i].name + ' 첫 액션'); pDone(); }
+    else { pMiss('그 좌석이 아니다. '); }
     return;
   }
+  if (PHASE === 'pwin') {
+    if (i === P.ask.answer) { pRecord(H.seats[i].name); P.msg = ''; pAskNext(); }
+    else { pMiss('그 좌석이 아니다. '); }
+    return;
+  }
+  if (PHASE === 'ptarget') {
+    if (i === P.ask.target.answer) { pRecord(H.seats[i].name); P.msg = ''; pAskNext(); }
+    else { pMiss('그 좌석이 아니다. '); }
+    return;
+  }
+}
+function pMiss(head) {
+  P.stuck++;
+  P.msg = head + P.ask.why;
+  log('오답 — ' + P.ask.kicker, 'bad');
+  render();
+}
+function onPChoice(i) {
+  if (i !== P.ask.correct) { pMiss('그 답이 아니다. '); return; }
+  P.msg = '';
+  if (P.ask.target) { PHASE = 'ptarget'; render(); return; }
+  pRecord('');
+  pAskNext();
 }
 
 function onPBet(i) {
@@ -1522,24 +1762,45 @@ function practicePanelHTML() {
       '<div class="kicker">한 핸드 완주</div>' +
       '<div class="big">' + P.stuck + '</div>' +
       '<div class="cap">번 막혔습니다</div>' +
-      (P.win ? '<div class="verdict ok" style="text-align:left;margin-top:14px">' +
-        '<div class="hd">' + P.win.name + ' 에게 팟</div>' + P.win.why +
-        (P.win.cite ? '<div class="cite"><b>' + P.win.cite.src + '</b> — ' + P.win.cite.txt + '</div>' : '') +
-        '</div>' : '') +
+      (P.wins || []).map(function (w) {
+        return '<div class="verdict ok" style="text-align:left;margin-top:12px">' +
+          '<div class="hd">' + w.kicker + (w.name ? ' — ' + w.name : '') + '</div>' + w.why +
+          (w.cite ? '<div class="cite"><b>' + w.cite.src + '</b> — ' + w.cite.txt + '</div>' : '') +
+          '</div>';
+      }).join('') +
       '<div class="qsub" style="text-align:center;margin-top:8px">' +
       (P.stuck === 0
         ? '한 번도 순서를 틀리지 않았습니다.'
         : '막힐 때마다 무엇이 먼저였는지 로그에 남아 있습니다.') + '</div>' +
       '<button class="btn" id="pagain" style="max-width:320px;margin:16px auto 0">같은 종목 한 핸드 더</button>' +
       '<button class="btn ghostbtn" id="pother" style="max-width:320px;margin:8px auto 0">' +
-      (P.specId === 'stud7' ? '2-7 트리플 드로우로 바꾸기' : '7카드 스터드로 바꾸기') + '</button>' +
+      SPECS[ROTATION[(ROTATION.indexOf(P.specId) + 1) % ROTATION.length]].ko + ' 로 바꾸기</button>' +
       '<button class="btn ghostbtn" id="phome" style="max-width:320px;margin:8px auto 0">처음 화면으로</button>' +
       '</div>';
   }
   if (PHASE === 'pfirst' || PHASE === 'pwin') {
-    h = '<div class="panel"><div class="kicker">' + (PHASE === 'pwin' ? '팟 지급' : '직접 지목') + '</div>' +
+    h = '<div class="panel"><div class="kicker">' + (PHASE === 'pwin' ? P.ask.kicker : '직접 지목') + '</div>' +
       '<div class="q">' + P.ask.q + '</div>' +
-      '<div class="qsub">' + H.stage + ' · 테이블에서 좌석을 클릭하세요.</div>';
+      '<div class="qsub">' + (PHASE === 'pwin' ? '쇼다운' : H.stage) + ' · 테이블에서 좌석을 클릭하세요.</div>';
+    if (P.msg) h += '<div class="verdict no"><div class="hd">아직 아니다</div>' + P.msg + '</div>';
+    return h + '</div>';
+  }
+  if (PHASE === 'ptarget') {
+    h = '<div class="panel"><div class="kicker">' + P.ask.kicker + '</div>' +
+      '<div class="q">' + P.ask.target.prompt + '</div>' +
+      '<div class="qsub">테이블에서 좌석을 클릭하세요.</div>';
+    if (P.msg) h += '<div class="verdict no"><div class="hd">아직 아니다</div>' + P.msg + '</div>';
+    return h + '</div>';
+  }
+  if (PHASE === 'pchoice') {
+    h = '<div class="panel"><div class="kicker">' + P.ask.kicker + '</div>' +
+      '<div class="q">' + P.ask.q + '</div>' +
+      (P.ask.sub ? '<div class="qsub">' + P.ask.sub + '</div>' : '') +
+      '<div class="choices">';
+    for (var qi = 0; qi < P.ask.choices.length; qi++) {
+      h += '<button class="ch" data-ch="' + qi + '">' + P.ask.choices[qi] + '</button>';
+    }
+    h += '</div>';
     if (P.msg) h += '<div class="verdict no"><div class="hd">아직 아니다</div>' + P.msg + '</div>';
     return h + '</div>';
   }
@@ -1596,6 +1857,8 @@ function introHTML() {
     '<div class="cap" style="margin-bottom:8px">선택지 없이 절차만 혼자 연습하기</div>' +
     '<button class="btn ghostbtn" id="pstud">연습 — 7카드 스터드</button>' +
     '<button class="btn ghostbtn" id="ptd" style="margin-top:8px">연습 — 2-7 트리플 드로우</button>' +
+    '<button class="btn ghostbtn" id="prazz" style="margin-top:8px">연습 — 라즈</button>' +
+    '<button class="btn ghostbtn" id="ps8" style="margin-top:8px">연습 — 스터드 하이로우 8</button>' +
     '</div>' +
     '<div class="hint" style="text-align:center">카드가 날아가는 중에 화면을 클릭하면 건너뜁니다</div>' +
     '</div>';
@@ -1617,7 +1880,7 @@ function topHTML() {
 
 function boardHTML() {
   var s = STEP;
-  var seatPick = PHASE === 'pfirst' || PHASE === 'pwin' ||
+  var seatPick = PHASE === 'pfirst' || PHASE === 'pwin' || PHASE === 'ptarget' ||
                  (PHASE === 'ask' && s && s.kind === 'seat') ||
                  (PHASE === 'target' && s && s.target && s.target.kind === 'seat');
   var pilePick = (PHASE === 'target' && s && s.target && s.target.kind === 'pile');
@@ -1690,7 +1953,7 @@ function panelHTML() {
   if (PHASE === 'handend') {
     return '<div class="panel"><div class="kicker">핸드 종료</div>' +
       '<div class="q">' + G.hands + '번째 핸드를 끝냈습니다.</div>' +
-      '<div class="qsub">다음 핸드는 <b>' + SPECS[G.hands % 2 === 0 ? 'stud7' : 'td27'].ko + '</b>입니다.</div>' +
+      '<div class="qsub">다음 핸드는 <b>' + SPECS[ROTATION[G.hands % ROTATION.length]].ko + '</b>입니다.</div>' +
       '<button class="btn" id="nexthand">다음 핸드</button></div>';
   }
   var s = STEP;
@@ -1770,8 +2033,13 @@ function wire() {
   var go = $('#go'); if (go) go.onclick = function () { G.started = true; G.mode = 'room'; startHand(); };
   var ps = $('#pstud'); if (ps) ps.onclick = function () { startPractice('stud7'); };
   var pt = $('#ptd'); if (pt) pt.onclick = function () { startPractice('td27'); };
+  var pz = $('#prazz'); if (pz) pz.onclick = function () { startPractice('razz'); };
+  var p8 = $('#ps8'); if (p8) p8.onclick = function () { startPractice('stud8'); };
   var pa = $('#pagain'); if (pa) pa.onclick = function () { startPractice(P.specId); };
-  var po = $('#pother'); if (po) po.onclick = function () { startPractice(P.specId === 'stud7' ? 'td27' : 'stud7'); };
+  var po = $('#pother'); if (po) po.onclick = function () {
+    var k = ROTATION.indexOf(P.specId);
+    startPractice(ROTATION[(k + 1) % ROTATION.length]);
+  };
   var ph = $('#phome'); if (ph) ph.onclick = function () { G.started = false; G.mode = null; P = null; render(); };
   var acts = document.querySelectorAll('[data-act]');
   for (var ai = 0; ai < acts.length; ai++) {

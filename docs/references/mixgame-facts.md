@@ -68,6 +68,44 @@
 - 이후 라운드 첫 액션 = **가장 낮은 핸드**
 - 7th 스텁 부족 시 **커뮤니티 카드를 쓰지 않는다.** 스텁 + 먹 + 번을 합쳐 컷하고 번 후 다운으로 배분
 
+### Razz — `family: stud` · `fixed-limit` · A-5 로우볼
+
+**⚠️ 자료에 규칙 서술이 없다.** 가이드가 다루는 6종(PLO·PLO8·2-7TD·2-7SD·Badugi·7-Card Stud)에
+Razz 가 빠져 있고, 프로토콜에는 HORSE 종목 이름으로만 나온다.
+`KakaoTalk_..._02.png` 맨 아래 "Stud (GAME)(BRING-IN)(First Action)" 표가 정본이 될 자료인데
+제목만 찍히고 잘렸다 — 다음 장(`_03`)은 다른 날짜 시트라 이어지지 않는다.
+
+**아래는 사용자 확정(2026-09-03)이다. 자료가 아니다.**
+
+| 필드 | 값 | 출처 |
+|---|---|---|
+| 3번째 카드 첫 액션 | **가장 높은 업카드**가 브링인 — 7카드 스터드와 **반대** | 사용자 확인 2026-09-03 |
+| 4번째 이후 첫 액션 | **보드 로우가 가장 좋은**(가장 낮은) 좌석 | 사용자 확인 2026-09-03 |
+| 승자 판정 | A-5 로우볼, **자격 없음**. A 가 최저, 스트레이트·플러시 무시 | PRD §6-3 |
+
+그 외(앤티+브링인·베팅 5회·번카드·픽스리밋 2배 지점)는 7카드 스터드와 같다고 본다.
+**표 전체 이미지를 받으면 이 절을 자료 근거로 바꾼다.**
+
+### 7-Card Stud Hi/Lo 8 — `family: stud` · `fixed-limit` · 하이 + A-5(8 자격)
+
+단독 절은 없지만 **프로토콜에서 유도된다.** 프로토콜의 Hi-Low Regular 항목이 이렇게 적혀 있다:
+
+> All rules of Seven Card Stud/8 apply **except** there is no qualifier for low and the high card by
+> suit initiates the action on the first round with the king of spades being the highest card by rank
+> and suit. Also on subsequent betting rounds, the low hand initiates the action.
+
+Regular 이 Stud/8 의 **예외**로 정의됐으므로, 그 예외를 뒤집은 것이 Stud/8 이다.
+
+| 필드 | 값 | 출처 |
+|---|---|---|
+| 3번째 카드 첫 액션 | 가장 낮은 업카드 (일반 스터드) | 프로토콜 Hi-Low Regular 조항의 대우 |
+| 4번째 이후 첫 액션 | 가장 높은 업카드 = 보드 족보 최고 (일반 스터드) | 같음 |
+| 로우 | A-5 + **8-or-better 자격** | 프로토콜 ("no qualifier for low"이 Regular 의 예외) |
+| 스플릿 | Hi 절반 · Lo 절반. 로우 성립자 없으면 Hi 가 전부 | 가이드 p5 (PLO8) |
+| 홀칩 | **Hi 승자에게** | 가이드 p5 (PLO8) |
+
+스플릿·홀칩 두 줄은 가이드의 **PLO8 절**에서 왔다. Stud/8 에 대한 직접 서술은 아니다.
+
 ### 2-7 Triple Draw — `family: draw` · `fixed-limit`
 
 | 필드 | 값 | 출처 |
@@ -179,8 +217,10 @@
 
 ## 5. 자료에 없는 것 — 짐작으로 채우지 마라
 
-- **Razz · Stud Hi/Lo 8 · A-5 Triple Draw** 의 단독 설명이 없다. 7-Card Stud + 로우볼 설명으로
-  유도는 되지만 **원문 근거가 아니다.** 3단계(평가기 2종)에서 필요해지면 자료를 더 받아야 한다.
+- **A-5 Triple Draw** 의 단독 설명이 없다. 필요해지면 자료를 더 받아야 한다.
+- **Razz** 는 §2 에 넣었지만 **자료가 아니라 사용자 확정**이다. 표 이미지를 받으면 교체할 것.
+- **Stud Hi/Lo 8** 은 프로토콜의 Hi-Low Regular 조항에서 유도했다. 스플릿·홀칩 두 줄만 PLO8 절에서 빌려 왔다.
 - 가이드 p3·p4 의 팟 계산 예시 **그림**은 이미지라 읽지 못했다 (텍스트 설명은 §1 에 옮겼다).
 - KakaoTalk `_02` 하단의 **"Stud / (GAME) (BRING-IN) (First Action)" 표**가 잘려 있다.
   스터드 종목별 브링인·첫 액션의 정본이 될 자료라 전체 이미지가 필요하다.
+  **2026-09-03 확인**: `_03` 은 다른 날짜 시트라 이어지지 않는다. 이 표는 지금 자료에 없다.
