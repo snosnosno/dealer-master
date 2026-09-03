@@ -312,6 +312,21 @@ function shuffle(a) {
   return a;
 }
 function won(n) { return n.toLocaleString('ko-KR'); }
+
+/* 조사는 앞 글자의 받침으로 갈린다. 족보 이름이 한글("풀하우스")로도 숫자("7-5-4")로도
+   영문자("...-2-A")로도 끝나서 세 경우를 다 봐야 한다. 읽는 소리 기준이다 —
+   1은 "일"이라 받침이 있고, A 는 "에이"라 없다. */
+function josa(word, withB, withoutB) {
+  var t = String(word).replace(/<[^>]*>/g, '').replace(/\s+$/, '');
+  if (!t.length) return withoutB;
+  var ch = t.charAt(t.length - 1), c = ch.charCodeAt(0), has;
+  if (c >= 0xAC00 && c <= 0xD7A3) has = (c - 0xAC00) % 28 !== 0;
+  else if (ch >= '0' && ch <= '9') has = '0136780'.indexOf(ch) >= 0;
+  else has = 'LMNRlmnr'.indexOf(ch) >= 0;
+  return has ? withB : withoutB;
+}
+function eunGa(w) { return josa(w, '이', '가'); }
+function eulReul(w) { return josa(w, '을', '를'); }
 function $(s) { return document.querySelector(s); }
 
 // 게임 스펙 ───────────────────────────────────────
@@ -438,6 +453,26 @@ var SPECS = {
     ]
   },
 
+  /* NLH — 홀덤 하이 × 플랍 × 노리밋. 홀 2장, 보드 5장, 일곱 장 중 최고 다섯 장을
+     자유롭게 고른다. 오마하와 갈리는 지점이 그것이다 — 강제 조합이 없어 보드만으로도 친다.
+
+     ⚠ 이 종목은 자료에 규칙 서술이 없다. 가이드가 다루는 6종에도 프로토콜에도 없다.
+     사용자가 확정했다 (2026-09-04) — 채점 화면 출처가 `사용자 확인` 으로 뜬다. */
+  nlh: {
+    id: 'nlh', ko: '노리밋 홀덤', en: "No-Limit Hold'em",
+    game: 'holdem', gameKo: '홀덤 하이',
+    family: 'flop', familyKo: '플랍',
+    betting: 'NL', bettingKo: '노 리밋', raiseCap: 0,
+    holeCardCount: 2, forced: 'blinds',
+    eval: { hi: 'standard', lo: null, qualifier: null },
+    streets: [
+      { id: 'preflop', ko: '프리플랍', short: '프리플랍', deal: { down: 2, up: 0 }, burn: false, firstToAct: 'left-of-bb' },
+      { id: 'flop',    ko: '플랍',     short: '플랍',     board: 3, burn: true, firstToAct: 'left-of-button' },
+      { id: 'turn',    ko: '턴',       short: '턴',       board: 1, burn: true, firstToAct: 'left-of-button' },
+      { id: 'river',   ko: '리버',     short: '리버',     board: 1, burn: true, firstToAct: 'left-of-button' }
+    ]
+  },
+
   /* PLO — 오마하 하이 × 플랍 × 팟리밋. 홀 4장, 쇼다운에 홀 2 + 보드 3 강제 (가이드 p4~5). */
   plo: {
     id: 'plo', ko: 'PLO', en: 'Pot-Limit Omaha',
@@ -476,7 +511,7 @@ var SPECS = {
 
 /* 핸드마다 종목이 바뀐다. 구성이 바뀌면 손이 하는 일이 통째로 달라지는 것이 이 축의 훈련이다.
    스터드 → 드로우 → 플랍 순으로 묶어 뒀다. */
-var ROTATION = ['stud7', 'stud8', 'studreg', 'razz', 'td27', 'sd27', 'badugi', 'plo', 'plo8'];
+var ROTATION = ['stud7', 'stud8', 'studreg', 'razz', 'td27', 'sd27', 'badugi', 'nlh', 'plo', 'plo8'];
 
 /* 게임 구성 — 손이 하는 일을 정하는 축이다. 카드가 어떻게 나가느냐가 여기서 갈린다. */
 var FAMILIES = [
@@ -862,8 +897,8 @@ function mkAskSeat(ix) {
     var rrun = actorSeat(rest, 'lowest-hand') || rest[0];
     why = (H.spec.id === 'razz' ? '라즈는' : '레귤러는') +
       ' 4번째 카드부터 <b>보드 로우가 가장 좋은</b>(가장 낮은) 좌석이 먼저 액션한다. ' +
-      '지금은 ' + rlo.name + '의 <b>' + lowKo(evalLowA5(rlo.up)) + '</b>' +
-      (rrun ? ' 이 ' + rrun.name + '의 ' + lowKo(evalLowA5(rrun.up)) + ' 보다 낮다.' : ' 이 가장 낮다.');
+      '지금은 ' + rlo.name + '의 <b>' + lowKo(evalLowA5(rlo.up)) + '</b>' + eunGa(lowKo(evalLowA5(rlo.up))) +
+      (rrun ? ' ' + rrun.name + '의 ' + lowKo(evalLowA5(rrun.up)) + ' 보다 낮다.' : ' 가장 낮다.');
     cite = H.spec.id === 'razz'
       ? { src: '사용자 확인 (2026-09-03)', txt: '라즈는 4번째 카드부터 보드 로우가 가장 좋은 좌석이 먼저 액션한다.' }
       : { src: PROTO, txt: 'Hi-Low Regular — 이후 베팅 라운드는 가장 낮은 핸드가 액션을 시작한다.' };
@@ -875,23 +910,30 @@ function mkAskSeat(ix) {
     var runner = actorSeat(second, 'highest-upcard') || second[0];
     why = '4번째 카드부터는 <b>업카드로 만든 핸드가 가장 높은</b> 좌석이 먼저 액션한다. ' +
       '카드 한 장을 비교하는 것이 아니라 족보로 본다 — 페어가 에이스 하이보다 높다. ' +
-      '지금은 ' + hi.name + '의 <b>' + handName(hi) + '</b>' +
-      (runner ? ' 이 ' + runner.name + '의 ' + handName(runner) + ' 보다 높다.' : ' 이 가장 높다.');
+      '지금은 ' + hi.name + '의 <b>' + handName(hi) + '</b>' + eunGa(handName(hi)) +
+      (runner ? ' ' + runner.name + '의 ' + handName(runner) + ' 보다 높다.' : ' 가장 높다.') +
+      (runner && handName(hi) === handName(runner)
+        ? ' 이름은 같지만 <b>' + (tieBreakKo(upRank(hi), upRank(runner)) || '') + '</b> 한 장으로 갈린다.'
+        : '');
     cite = { src: GUIDE, txt: '4번째 카드 이후 첫 액션은 가장 높은 업카드 — 보드에 뜬 족보 순서로 정한다.' };
   } else if (st.firstToAct === 'left-of-bb') {
     ans = H.seats.filter(function (s) { return s.pos === 3; })[0].i;
     why = 'BB 왼쪽이 첫 액션이다. 버튼이 ' + seatByPos(0).name + ', BB 가 ' + seatByPos(2).name + ' 이므로 ' + seatByPos(3).name + '.';
-    cite = H.spec.family === 'flop'
-      ? { src: GUIDE, txt: '플랍게임 프리플랍의 첫 액션은 BB 왼쪽(UTG).' }
-      : { src: GUIDE, txt: '2-7 트리플 드로우 첫 베팅 라운드의 첫 액션은 BB 왼쪽.' };
+    cite = H.spec.id === 'nlh'
+      ? { src: '사용자 확인 (2026-09-04)', txt: '노리밋 홀덤 프리플랍의 첫 액션은 BB 왼쪽(UTG).' }
+      : H.spec.family === 'flop'
+        ? { src: GUIDE, txt: '플랍게임 프리플랍의 첫 액션은 BB 왼쪽(UTG).' }
+        : { src: GUIDE, txt: '2-7 트리플 드로우 첫 베팅 라운드의 첫 액션은 BB 왼쪽.' };
   } else {
     ans = seatByPos(1).i;
     why = H.spec.family === 'flop'
       ? '보드가 깔린 뒤부터는 버튼 왼쪽(SB)부터다. <b>프리플랍만 BB 왼쪽</b>이었고, 플랍에서 기준이 한 칸 앞으로 옮겨진다.'
       : '드로우 라운드부터는 버튼 왼쪽(SB)부터다. 교체 장수 확인도 SB 부터 시작한다.';
-    cite = H.spec.family === 'flop'
-      ? { src: GUIDE, txt: '플랍게임은 플랍 이후 버튼 왼쪽(SB)부터 액션한다.' }
-      : { src: GUIDE, txt: '드로우 순서는 버튼 왼쪽(SB)부터 장수 확인 → 번카드 1장 → SB 부터 회수·배분.' };
+    cite = H.spec.id === 'nlh'
+      ? { src: '사용자 확인 (2026-09-04)', txt: '노리밋 홀덤은 플랍 이후 버튼 왼쪽(SB)부터 액션한다.' }
+      : H.spec.family === 'flop'
+        ? { src: GUIDE, txt: '플랍게임은 플랍 이후 버튼 왼쪽(SB)부터 액션한다.' }
+        : { src: GUIDE, txt: '드로우 순서는 버튼 왼쪽(SB)부터 장수 확인 → 번카드 1장 → SB 부터 회수·배분.' };
   }
   if (ans === null) return null;
   var s2 = H.seats[ans];
@@ -1252,19 +1294,25 @@ function bringInKo(spec) {
 
 /* ── 쇼다운 ────────────────────────────────────────
    하이만, 로우만, 하이/로우 스플릿 세 경우를 한 곳에서 낸다. */
+/* 그 좌석이 판정에 쓰는 카드. 플랍게임은 보드가 공용이라 손패에 보드를 더한다 —
+   이걸 빠뜨리면 홀덤이 홀 2장만으로 판정된다. 오마하만 예외로 따로 센다 (강제 조합). */
+function playCards(s) {
+  return H.spec.family === 'flop' ? s.down.concat(H.board) : s.down.concat(s.up);
+}
+
 function showdownResult() {
   var spec = H.spec, ev = spec.eval, list = actives(), i;
   var om = spec.omaha;
   var hi = null, lo = null;
   if (ev.hi) {
     hi = list.map(function (s) {
-      return { seat: s, h: om ? bestOmahaHi(s.down, H.board) : bestFive(s.down.concat(s.up), true) };
+      return { seat: s, h: om ? bestOmahaHi(s.down, H.board) : bestFive(playCards(s), true) };
     });
     hi = hi.filter(function (x) { return !!x.h; });
     hi.sort(function (x, y) { return -cmpKey(x.h.key, y.h.key); });
   }
   if (ev.lo === '27') {
-    lo = list.map(function (s) { return { seat: s, h: bestFive(s.down.concat(s.up), false) }; });
+    lo = list.map(function (s) { return { seat: s, h: bestFive(playCards(s), false) }; });
     lo.sort(function (x, y) { return cmpKey(x.h.key, y.h.key); });
   } else if (ev.lo === 'badugi') {
     lo = list.map(function (x) { return { seat: x, h: evalBadugi(x.down) }; });
@@ -1273,7 +1321,7 @@ function showdownResult() {
     lo = [];
     for (i = 0; i < list.length; i++) {
       var h = om ? bestOmahaLow(list[i].down, H.board, ev.qualifier)
-                 : bestLowA5(list[i].down.concat(list[i].up), ev.qualifier);
+                 : bestLowA5(playCards(list[i]), ev.qualifier);
       if (h) lo.push({ seat: list[i], h: h });
     }
     lo.sort(function (x, y) { return cmpKey(x.h.key, y.h.key); });
@@ -1289,6 +1337,19 @@ function showdownResult() {
     loKind: ev.lo
   };
 }
+/* 족보 이름이 양쪽 다 같게 나오는 경우가 있다 — 보드를 같이 쓰는 홀덤에서 흔하다.
+   "K·J 투페어가 K·J 투페어를 이긴다"는 아무것도 설명하지 못한다.
+   키를 앞에서부터 훑어 처음 갈리는 자리를 찾아, 무엇 한 장으로 갈렸는지 말해 준다. */
+function tieBreakKo(win, run) {
+  var i, m = Math.max(win.key.length, run.key.length);
+  for (i = 1; i < m; i++) {
+    var x = i < win.key.length ? win.key[i] : -1;
+    var y = i < run.key.length ? run.key[i] : -1;
+    if (x !== y) return RANKS[x] || null;
+  }
+  return null;
+}
+
 function handNameOf(e, kind) {
   if (kind === 'a5') return lowKo(e.h);
   if (kind === 'badugi') return badugiKo(e.h);
@@ -1309,7 +1370,9 @@ function mkAskWinner() {
   var lead;
   if (kind === 'hi') lead = H.spec.omaha
     ? '오마하는 <b>홀 4장 중 2장 + 보드 5장 중 3장</b>이 강제다. 보드에 무늬가 넉 장 떠도 홀에 그 무늬가 2장 없으면 플러시가 아니다. '
-    : '7장 중 최고 5장으로 겨룬다. ';
+    : H.spec.family === 'flop'
+      ? '홀덤은 홀 2장과 보드 5장, <b>일곱 장 중 최고 다섯 장</b>을 자유롭게 고른다. 강제 조합이 없어 <b>보드만으로도 칠 수 있다</b> — 오마하와 갈리는 지점이 그것이다. '
+      : '7장 중 최고 5장으로 겨룬다. ';
   else if (kind === '27') lead = '2-7 로우볼은 <b>가장 낮은 핸드</b>가 이긴다. A 는 항상 높고 스트레이트·플러시는 인정되므로 손해다. ';
   else if (kind === 'badugi') lead = '바두기는 <b>숫자도 무늬도 겹치지 않는 카드만</b> 친다. 베이스가 많은 쪽이 무조건 이기고, 같으면 낮은 쪽이 이긴다. ';
   else lead = '<b>A-5 로우볼은 A 가 최저</b>이고 스트레이트·플러시를 따지지 않는다. 가장 낮은 다섯 장이 이긴다. ';
@@ -1318,12 +1381,19 @@ function mkAskWinner() {
     q: head,
     sub: '쇼다운 · 좌석을 클릭하세요.',
     answer: win.seat.i,
-    why: lead + win.seat.name + '의 <b>' + handNameOf(win, kind) + '</b> 이 ' +
-         run.seat.name + '의 ' + handNameOf(run, kind) + ' 을 이긴다.',
+    why: (function () {
+      var wn = handNameOf(win, kind), rn = handNameOf(run, kind);
+      var tb = (kind === 'hi' && wn === rn) ? tieBreakKo(win.h, run.h) : null;
+      return lead + win.seat.name + '의 <b>' + wn + '</b>' + eunGa(wn) + ' ' +
+        run.seat.name + '의 ' + rn + eulReul(rn) + ' 이긴다.' +
+        (tb ? ' 족보 이름은 같고 <b>' + tb + '</b> 한 장으로 갈린다 — 다섯 장을 끝까지 비교한다.' : '');
+    })(),
     cite: kind === 'hi'
       ? (H.spec.omaha
           ? { src: GUIDE, txt: 'PLO — 홀카드 4장, 쇼다운에 홀 2장 + 보드 3장 강제. 족보는 홀덤과 동일.' }
-          : { src: GUIDE, txt: '7카드 스터드 — 7장 중 최고 5장. 족보는 홀덤과 동일.' })
+          : H.spec.family === 'flop'
+            ? { src: '사용자 확인 (2026-09-04)', txt: '노리밋 홀덤 — 홀 2장 + 보드 5장, 일곱 장 중 최고 다섯 장 자유 조합. 강제 조합이 없다. 자료에 규칙 서술이 없어 확정받았다.' }
+            : { src: GUIDE, txt: '7카드 스터드 — 7장 중 최고 5장. 족보는 홀덤과 동일.' })
       : kind === '27'
         ? { src: GUIDE, txt: '2-7 — A 는 최고, 스트레이트·플러시 인정. 최고 핸드는 7-5-4-3-2 무플러시.' }
         : kind === 'badugi'
@@ -1350,7 +1420,7 @@ function mkAskLow() {
       q: '로우는 누가 이깁니까?',
       sub: '자격이 없는 하이로우입니다 — 로우는 <b>언제나 성립합니다.</b> 좌석을 클릭하세요.',
       answer: r.lo[0].seat.i,
-      why: r.lo[0].seat.name + '의 <b>' + lowKo(r.lo[0].h) + '</b> 이 가장 낮다. ' +
+      why: r.lo[0].seat.name + '의 <b>' + lowKo(r.lo[0].h) + '</b>' + eunGa(lowKo(r.lo[0].h)) + ' 가장 낮다. ' +
            '8 이하 자격이 없으므로 K 하이라도 최저면 로우를 가져간다 — 스터드8 과 갈리는 지점이다. ' +
            '팟의 절반이고, 홀칩은 하이 승자에게 간다.',
       cite: { src: PROTO, txt: 'Hi-Low Regular — 로우에 자격(8-or-better)이 없다.' }
@@ -1367,7 +1437,8 @@ function mkAskLow() {
     correct: has ? 0 : 1,
     target: has ? { kind: 'seat', prompt: '로우는 누가 이깁니까?', answer: r.lo[0].seat.i } : null,
     why: has
-      ? r.lo[0].seat.name + '의 <b>' + lowKo(r.lo[0].h) + '</b> 이 로우를 가져간다. 팟의 절반이고, 홀칩은 하이 승자에게 간다.'
+      ? r.lo[0].seat.name + '의 <b>' + lowKo(r.lo[0].h) + '</b>' + eunGa(lowKo(r.lo[0].h)) +
+        ' 로우를 가져간다. 팟의 절반이고, 홀칩은 하이 승자에게 간다.'
       : (H.spec.omaha && boardLowCards(H.board, 8) < 3
           ? '<b>보드에 8 이하가 세 장이 안 된다.</b> 로우도 보드에서 반드시 3장을 써야 하므로 홀카드를 볼 것도 없이 로우가 불가능하다. 하이가 팟을 전부 가져간다.'
           : '페어 없이 8 이하 다섯 장을 만든 사람이 없다. 로우가 성립하지 않으면 하이가 팟을 전부 가져간다.'),
