@@ -235,9 +235,15 @@ body {
 .tline .s { font-family: var(--mono); font-weight: 800; }
 
 /* 종목 고르기 ─────────────────────── */
-.picklist { display: grid; gap: 7px; max-width: 390px; margin: 0 auto; }
+.picklist { display: grid; gap: 6px; max-width: 400px; margin: 0 auto 14px; }
 .picklist .ch { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .picklist .ch .sub { font-family: var(--mono); font-size: 10.5px; font-weight: 800; color: var(--ink-3); }
+.famhd {
+  display: flex; align-items: baseline; gap: 8px; text-align: left;
+  margin: 2px 0 1px; padding-top: 4px;
+}
+.famhd b { font-size: 12.5px; font-weight: 900; color: var(--ink); }
+.famhd span { font-size: 11px; color: var(--ink-3); font-weight: 700; }
 
 /* 커뮤니티 보드 ─────────────────────── */
 .commu {
@@ -311,11 +317,13 @@ function $(s) { return document.querySelector(s); }
 // 게임 스펙 ───────────────────────────────────────
 /* mix-rush · mix-deal 과 같은 모양이다. 버리지 않는다 (ADR-003). */
 var SPECS = {
+  /* 7-Card Stud — 하이 × 스터드 × 픽스리밋 (가이드 p7~8) */
   stud7: {
     id: 'stud7', ko: '7카드 스터드', en: '7-Card Stud',
+    game: 'high',  gameKo: '하이',
     family: 'stud', familyKo: '스터드',
+    betting: 'FL', bettingKo: '픽스 리밋', raiseCap: 5,
     holeCardCount: 7, forced: 'ante+bringin',
-    bettingKo: '픽스 리밋', raiseCap: 5,
     eval: { hi: 'standard', lo: null, qualifier: null },
     streets: [
       { id: '3rd', ko: '3번째 카드', short: '3번째', deal: { down: 2, up: 1 }, burn: false, firstToAct: 'lowest-upcard', size: 1 },
@@ -325,47 +333,15 @@ var SPECS = {
       { id: '7th', ko: '7번째 카드', short: '7번째', deal: { down: 1, up: 0 }, burn: true, firstToAct: 'highest-upcard', size: 2 }
     ]
   },
-  td27: {
-    id: 'td27', ko: '2-7 트리플 드로우', en: '2-7 Triple Draw',
-    family: 'draw', familyKo: '드로우',
-    holeCardCount: 5, forced: 'blinds',
-    bettingKo: '픽스 리밋', raiseCap: 5,
-    eval: { hi: null, lo: '27', qualifier: null },
-    draw: { rounds: 3, maxDiscard: 5 },
-    streets: [
-      { id: 'predraw', ko: '첫 베팅 라운드', short: '첫 베팅', deal: { down: 5, up: 0 }, burn: false, firstToAct: 'left-of-bb', size: 1 },
-      { id: 'draw1', ko: '첫 번째 드로우', short: '드로우 1', draw: true, burn: true, firstToAct: 'left-of-button', size: 1 },
-      { id: 'draw2', ko: '두 번째 드로우', short: '드로우 2', draw: true, burn: true, firstToAct: 'left-of-button', size: 2 },
-      { id: 'draw3', ko: '세 번째 드로우', short: '드로우 3', draw: true, burn: true, firstToAct: 'left-of-button', size: 2 }
-    ]
-  },
 
-  /* Razz — 스터드와 방향이 반대다. 브링인이 가장 높은 업카드고,
-     이후에는 보드 로우가 가장 좋은 좌석이 먼저 액션한다.
-     이 두 가지는 자료에 없어 사용자가 확정했다 (2026-09-03). */
-  razz: {
-    id: 'razz', ko: '라즈', en: 'Razz',
-    family: 'stud', familyKo: '스터드',
-    holeCardCount: 7, forced: 'ante+bringin',
-    bettingKo: '픽스 리밋', raiseCap: 5,
-    eval: { hi: null, lo: 'a5', qualifier: null },
-    streets: [
-      { id: '3rd', ko: '3번째 카드', short: '3번째', deal: { down: 2, up: 1 }, burn: false, firstToAct: 'highest-upcard-a5', size: 1 },
-      { id: '4th', ko: '4번째 카드', short: '4번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'lowest-hand', size: 1 },
-      { id: '5th', ko: '5번째 카드', short: '5번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'lowest-hand', size: 2 },
-      { id: '6th', ko: '6번째 카드', short: '6번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'lowest-hand', size: 2 },
-      { id: '7th', ko: '7번째 카드', short: '7번째', deal: { down: 1, up: 0 }, burn: true, firstToAct: 'lowest-hand', size: 2 }
-    ]
-  },
-
-  /* 7-Card Stud Hi/Lo 8 — 프로토콜이 Hi-Low Regular 를 "Stud/8 의 규칙을 따르되
-     로우에 자격이 없고 첫 라운드는 무늬 포함 최고 카드가 액션한다"는 예외로 정의한다.
-     그 예외의 반대가 곧 Stud/8 이다 — 일반 스터드 순서에 8-or-better 로우가 붙는다. */
+  /* 7-Card Stud Hi/Lo 8 — 하이로우 8 × 스터드 × 픽스리밋.
+     프로토콜이 Hi-Low Regular 를 Stud/8 의 예외로 정의하므로 그 예외를 뒤집으면 이것이 나온다. */
   stud8: {
     id: 'stud8', ko: '스터드 하이로우 8', en: '7-Card Stud Hi/Lo 8',
+    game: 'hilo8', gameKo: '하이로우 8',
     family: 'stud', familyKo: '스터드',
+    betting: 'FL', bettingKo: '픽스 리밋', raiseCap: 5,
     holeCardCount: 7, forced: 'ante+bringin',
-    bettingKo: '픽스 리밋', raiseCap: 5,
     eval: { hi: 'standard', lo: 'a5', qualifier: 8 },
     streets: [
       { id: '3rd', ko: '3번째 카드', short: '3번째', deal: { down: 2, up: 1 }, burn: false, firstToAct: 'lowest-upcard', size: 1 },
@@ -376,14 +352,117 @@ var SPECS = {
     ]
   },
 
-  /* PLO8 — 이 레포의 첫 플랍게임이다. 앞의 넷과 세 군데가 다르다.
-     보드가 공용이고, 쇼다운이 홀 2 + 보드 3 강제이며, 벳 크기가 계산으로 나온다.
-     omaha 필드가 그 강제 조합을 스펙에 적어 둔 것이다 (가이드 p4~5). */
-  plo8: {
-    id: 'plo8', ko: 'PLO 하이로우 8', en: 'Pot-Limit Omaha Hi/Lo 8',
-    family: 'flop', familyKo: '플랍',
+  /* Stud Hi/Lo Regular — 같은 하이로우인데 자격이 없다. 그래서 첫 액션 방향까지 뒤집힌다:
+     첫 라운드는 가장 높은 카드, 이후에는 가장 낮은 핸드다 (프로토콜 Hi-Low Regular 조항). */
+  studreg: {
+    id: 'studreg', ko: '스터드 하이로우 레귤러', en: 'Stud Hi/Lo Regular',
+    game: 'hilo', gameKo: '하이로우 (자격 없음)',
+    family: 'stud', familyKo: '스터드',
+    betting: 'FL', bettingKo: '픽스 리밋', raiseCap: 5,
+    holeCardCount: 7, forced: 'ante+bringin',
+    eval: { hi: 'standard', lo: 'a5', qualifier: null },
+    streets: [
+      { id: '3rd', ko: '3번째 카드', short: '3번째', deal: { down: 2, up: 1 }, burn: false, firstToAct: 'highest-upcard-rank', size: 1 },
+      { id: '4th', ko: '4번째 카드', short: '4번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'lowest-hand', size: 1 },
+      { id: '5th', ko: '5번째 카드', short: '5번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'lowest-hand', size: 2 },
+      { id: '6th', ko: '6번째 카드', short: '6번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'lowest-hand', size: 2 },
+      { id: '7th', ko: '7번째 카드', short: '7번째', deal: { down: 1, up: 0 }, burn: true, firstToAct: 'lowest-hand', size: 2 }
+    ]
+  },
+
+  /* Razz — A-5 × 스터드. 같은 A-5 라도 드로우 구성이면 A-5 로우볼이라 이름이 달라진다.
+     브링인 방향과 이후 첫 액션은 자료에 없어 사용자가 확정했다 (2026-09-03). */
+  razz: {
+    id: 'razz', ko: '라즈', en: 'Razz',
+    game: 'a5', gameKo: 'A-5 로우볼',
+    family: 'stud', familyKo: '스터드',
+    betting: 'FL', bettingKo: '픽스 리밋', raiseCap: 5,
+    holeCardCount: 7, forced: 'ante+bringin',
+    eval: { hi: null, lo: 'a5', qualifier: null },
+    streets: [
+      { id: '3rd', ko: '3번째 카드', short: '3번째', deal: { down: 2, up: 1 }, burn: false, firstToAct: 'highest-upcard-a5', size: 1 },
+      { id: '4th', ko: '4번째 카드', short: '4번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'lowest-hand', size: 1 },
+      { id: '5th', ko: '5번째 카드', short: '5번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'lowest-hand', size: 2 },
+      { id: '6th', ko: '6번째 카드', short: '6번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'lowest-hand', size: 2 },
+      { id: '7th', ko: '7번째 카드', short: '7번째', deal: { down: 1, up: 0 }, burn: true, firstToAct: 'lowest-hand', size: 2 }
+    ]
+  },
+
+  /* 2-7 Triple Draw — 2-7 × 드로우 × 픽스리밋 (가이드 p6) */
+  td27: {
+    id: 'td27', ko: '2-7 트리플 드로우', en: '2-7 Triple Draw',
+    game: '27', gameKo: '2-7 로우볼',
+    family: 'draw', familyKo: '드로우',
+    betting: 'FL', bettingKo: '픽스 리밋', raiseCap: 5,
+    holeCardCount: 5, forced: 'blinds',
+    eval: { hi: null, lo: '27', qualifier: null },
+    draw: { rounds: 3, maxDiscard: 5 },
+    streets: [
+      { id: 'predraw', ko: '첫 베팅 라운드', short: '첫 베팅', deal: { down: 5, up: 0 }, burn: false, firstToAct: 'left-of-bb', size: 1 },
+      { id: 'draw1', ko: '첫 번째 드로우', short: '드로우 1', draw: true, burn: true, firstToAct: 'left-of-button', size: 1 },
+      { id: 'draw2', ko: '두 번째 드로우', short: '드로우 2', draw: true, burn: true, firstToAct: 'left-of-button', size: 2 },
+      { id: 'draw3', ko: '세 번째 드로우', short: '드로우 3', draw: true, burn: true, firstToAct: 'left-of-button', size: 2 }
+    ]
+  },
+
+  /* 2-7 Single Draw — 같은 2-7 · 같은 드로우인데 베팅이 노리밋이라 다른 게임이 된다.
+     베팅 2회 · 드로우 1회 (가이드 p6). */
+  sd27: {
+    id: 'sd27', ko: '2-7 싱글 드로우', en: '2-7 Single Draw',
+    game: '27', gameKo: '2-7 로우볼',
+    family: 'draw', familyKo: '드로우',
+    betting: 'NL', bettingKo: '노 리밋', raiseCap: 0,
+    holeCardCount: 5, forced: 'blinds',
+    eval: { hi: null, lo: '27', qualifier: null },
+    draw: { rounds: 1, maxDiscard: 5 },
+    streets: [
+      { id: 'predraw', ko: '첫 베팅 라운드', short: '첫 베팅', deal: { down: 5, up: 0 }, burn: false, firstToAct: 'left-of-bb' },
+      { id: 'draw1', ko: '드로우', short: '드로우', draw: true, burn: true, firstToAct: 'left-of-button' }
+    ]
+  },
+
+  /* Badugi — 바두기 × 드로우 × 픽스리밋. 홀 4장, 베팅 4회 · 드로우 3회 (가이드 p6~7). */
+  badugi: {
+    id: 'badugi', ko: '바두기', en: 'Badugi',
+    game: 'badugi', gameKo: '바두기',
+    family: 'draw', familyKo: '드로우',
+    betting: 'FL', bettingKo: '픽스 리밋', raiseCap: 5,
     holeCardCount: 4, forced: 'blinds',
-    bettingKo: '팟 리밋', raiseCap: 0,
+    eval: { hi: null, lo: 'badugi', qualifier: null },
+    draw: { rounds: 3, maxDiscard: 4 },
+    streets: [
+      { id: 'predraw', ko: '첫 베팅 라운드', short: '첫 베팅', deal: { down: 4, up: 0 }, burn: false, firstToAct: 'left-of-bb', size: 1 },
+      { id: 'draw1', ko: '첫 번째 드로우', short: '드로우 1', draw: true, burn: true, firstToAct: 'left-of-button', size: 1 },
+      { id: 'draw2', ko: '두 번째 드로우', short: '드로우 2', draw: true, burn: true, firstToAct: 'left-of-button', size: 2 },
+      { id: 'draw3', ko: '세 번째 드로우', short: '드로우 3', draw: true, burn: true, firstToAct: 'left-of-button', size: 2 }
+    ]
+  },
+
+  /* PLO — 오마하 하이 × 플랍 × 팟리밋. 홀 4장, 쇼다운에 홀 2 + 보드 3 강제 (가이드 p4~5). */
+  plo: {
+    id: 'plo', ko: 'PLO', en: 'Pot-Limit Omaha',
+    game: 'omaha', gameKo: '오마하 하이',
+    family: 'flop', familyKo: '플랍',
+    betting: 'PL', bettingKo: '팟 리밋', raiseCap: 0,
+    holeCardCount: 4, forced: 'blinds',
+    eval: { hi: 'standard', lo: null, qualifier: null },
+    omaha: { hole: 2, board: 3 },
+    streets: [
+      { id: 'preflop', ko: '프리플랍', short: '프리플랍', deal: { down: 4, up: 0 }, burn: false, firstToAct: 'left-of-bb' },
+      { id: 'flop',    ko: '플랍',     short: '플랍',     board: 3, burn: true, firstToAct: 'left-of-button' },
+      { id: 'turn',    ko: '턴',       short: '턴',       board: 1, burn: true, firstToAct: 'left-of-button' },
+      { id: 'river',   ko: '리버',     short: '리버',     board: 1, burn: true, firstToAct: 'left-of-button' }
+    ]
+  },
+
+  /* PLO8 — 같은 오마하 · 같은 플랍 · 같은 팟리밋인데 종류가 하이로우 8 이라 팟이 갈린다.
+     로우도 보드에서 3장을 써야 하므로 보드에 8 이하가 3장 없으면 로우 자체가 불가능하다. */
+  plo8: {
+    id: 'plo8', ko: 'PLO8', en: 'Pot-Limit Omaha Hi/Lo 8',
+    game: 'omaha8', gameKo: '오마하 하이로우 8',
+    family: 'flop', familyKo: '플랍',
+    betting: 'PL', bettingKo: '팟 리밋', raiseCap: 0,
+    holeCardCount: 4, forced: 'blinds',
     eval: { hi: 'standard', lo: 'a5', qualifier: 8 },
     omaha: { hole: 2, board: 3 },
     streets: [
@@ -395,8 +474,16 @@ var SPECS = {
   }
 };
 
-/* 핸드마다 종목이 바뀐다. 손이 하는 일이 종목마다 달라지는 것이 이 축의 훈련이다. */
-var ROTATION = ['stud7', 'td27', 'razz', 'stud8', 'plo8'];
+/* 핸드마다 종목이 바뀐다. 구성이 바뀌면 손이 하는 일이 통째로 달라지는 것이 이 축의 훈련이다.
+   스터드 → 드로우 → 플랍 순으로 묶어 뒀다. */
+var ROTATION = ['stud7', 'stud8', 'studreg', 'razz', 'td27', 'sd27', 'badugi', 'plo', 'plo8'];
+
+/* 게임 구성 — 손이 하는 일을 정하는 축이다. 카드가 어떻게 나가느냐가 여기서 갈린다. */
+var FAMILIES = [
+  { id: 'stud', ko: '스터드', note: '앤티 + 브링인 · 업카드가 보인다' },
+  { id: 'draw', ko: '드로우', note: '블라인드 · 카드를 바꾼다' },
+  { id: 'flop', ko: '플랍',  note: '블라인드 · 보드가 공용이다' }
+];
 
 var GUIDE = 'Mix Game Guide v1';
 var PROTO = 'Mixed Games Rules & Protocols (2026-01)';
@@ -491,7 +578,7 @@ function buildQueue() {
   if (pool.length) askOpenAt[pool[0]] = true;
   if (pool.length > 2 && Math.random() < .55) askOpenAt[pool[1]] = true;
   /* 팟리밋 계산은 라운드가 열린 뒤 레이즈 시점에만 성립한다 — 플랍게임에서만 낸다. */
-  if (spec.bettingKo === '팟 리밋' && pool.length) {
+  if (spec.betting === 'PL' && pool.length) {
     shuffle(pool);
     askPotAt[pool[0]] = true;
   }
@@ -702,11 +789,11 @@ function doDrawRound(ix, next) {
 // 베팅 빨리 감기 ──────────────────────────────────
 function doBets(ix, next) {
   var st = H.spec.streets[ix];
-  var potLimit = H.spec.bettingKo === '팟 리밋';
+  var potLimit = H.spec.betting === 'PL';
 
   /* 팟리밋에서 매 라운드 전원이 콜하면 팟이 지수적으로 부푼다 —
      실제로는 체크로 넘어가는 라운드가 흔하다. 프리플랍만 반드시 액션이 돈다. */
-  if (potLimit && ix > 0 && Math.random() < .45) {
+  if (H.spec.betting !== 'FL' && ix > 0 && Math.random() < .45) {
     log('베팅 — 전원 체크');
     render();
     return (next || advance)();
@@ -715,7 +802,9 @@ function doBets(ix, next) {
   /* 팟리밋은 정해진 벳 단위가 없다 — 팟에서 나온 금액으로 돈다. */
   var amt = potLimit
     ? Math.max(BB, Math.round(H.pot * 0.4 / CHIPUNIT) * CHIPUNIT)
-    : (st.size === 2 ? BIG : SMALL);
+    : H.spec.betting === 'NL'
+      ? BB * (2 + rnd(3))
+      : (st.size === 2 ? BIG : SMALL);
   var list = actives(), parts = [], callers = 0, i;
   for (i = 0; i < list.length; i++) {
     var s = list[i];
@@ -757,16 +846,27 @@ function mkAskSeat(ix) {
       '가장 높은 카드가 아니라 <b>가장 낮은</b> 카드다. 지금은 ' + rhi.name + '의 ' +
       rhi.up[0].r + rhi.up[0].su.s + ' 가 가장 높다.';
     cite = { src: '사용자 확인 (2026-09-03)', txt: '라즈 3번째 카드의 브링인은 가장 높은 업카드. 자료에 근거가 없어 확정받았다.' };
+  } else if (st.firstToAct === 'highest-upcard-rank') {
+    var rr = actorSeat(list, 'highest-upcard-rank');
+    if (!rr) return null;
+    ans = rr.i;
+    why = '<b>레귤러는 자격 없는 하이로우</b>라 첫 라운드가 스터드와 반대다 — 가장 <b>높은</b> 카드가 액션을 연다. ' +
+      '지금은 ' + rr.name + '의 ' + rr.up[0].r + rr.up[0].su.s + ' 가 가장 높다. ' +
+      '동률이면 무늬로 가르고 <b>스페이드 K 가 최고</b>지만, 이 화면은 동률 상황을 출제하지 않는다.';
+    cite = { src: PROTO, txt: 'Hi-Low Regular — 첫 라운드는 무늬 포함 최고 카드가 액션을 시작하며 스페이드 K 가 최고다.' };
   } else if (st.firstToAct === 'lowest-hand') {
     var rlo = actorSeat(list, 'lowest-hand');
     if (!rlo) return null;
     ans = rlo.i;
     var rest = list.filter(function (x) { return x.i !== rlo.i; });
     var rrun = actorSeat(rest, 'lowest-hand') || rest[0];
-    why = '라즈는 4번째 카드부터 <b>보드 로우가 가장 좋은</b>(가장 낮은) 좌석이 먼저 액션한다. ' +
+    why = (H.spec.id === 'razz' ? '라즈는' : '레귤러는') +
+      ' 4번째 카드부터 <b>보드 로우가 가장 좋은</b>(가장 낮은) 좌석이 먼저 액션한다. ' +
       '지금은 ' + rlo.name + '의 <b>' + lowKo(evalLowA5(rlo.up)) + '</b>' +
       (rrun ? ' 이 ' + rrun.name + '의 ' + lowKo(evalLowA5(rrun.up)) + ' 보다 낮다.' : ' 이 가장 낮다.');
-    cite = { src: '사용자 확인 (2026-09-03)', txt: '라즈는 4번째 카드부터 보드 로우가 가장 좋은 좌석이 먼저 액션한다.' };
+    cite = H.spec.id === 'razz'
+      ? { src: '사용자 확인 (2026-09-03)', txt: '라즈는 4번째 카드부터 보드 로우가 가장 좋은 좌석이 먼저 액션한다.' }
+      : { src: PROTO, txt: 'Hi-Low Regular — 이후 베팅 라운드는 가장 낮은 핸드가 액션을 시작한다.' };
   } else if (st.firstToAct === 'highest-upcard') {
     var hi = actorSeat(list, 'highest-upcard');
     if (!hi) return null;
@@ -873,7 +973,9 @@ function mkPotRaise(ix) {
 
 function mkAskBet(ix, who) {
   var st = H.spec.streets[ix];
-  if (H.spec.bettingKo === '팟 리밋') return mkPotBet(ix, who);
+  if (H.spec.betting === 'PL') return mkPotBet(ix, who);
+  /* 노리밋은 BB 부터 스택 전부까지라 정답이 하나가 아니다 — 묻지 않는다 (ADR-003). */
+  if (H.spec.betting === 'NL') return null;
   var isBig = st.size === 2;
   var why, cite;
   if (H.spec.family === 'stud') {
@@ -1046,6 +1148,38 @@ function bestLowA5(cards, qualifier) {
   return best;
 }
 
+/* ── 바두기 ────────────────────────────────────────
+   숫자도 무늬도 겹치지 않는 카드만 핸드로 친다. 넷을 다 살리면 4베이스,
+   하나라도 겹치면 3베이스로 내려간다. 베이스가 많은 쪽이 무조건 이기고,
+   같으면 높은 카드부터 비교해 낮은 쪽이 이긴다. A 가 최저다. (가이드 p6~7)
+
+   그래서 최고 핸드는 무늬가 모두 다른 4-3-2-A 다. */
+function evalBadugi(cards) {
+  var best = null, i, sub, k;
+  /* 4장이면 부분집합이 16개뿐이라 전부 본다 */
+  for (i = 1; i < (1 << cards.length); i++) {
+    sub = [];
+    for (k = 0; k < cards.length; k++) if (i & (1 << k)) sub.push(cards[k]);
+    var ranks = {}, suits = {}, okSet = true;
+    for (k = 0; k < sub.length; k++) {
+      var rk = sub[k].r, sk = sub[k].su.s;
+      if (ranks[rk] || suits[sk]) { okSet = false; break; }
+      ranks[rk] = 1; suits[sk] = 1;
+    }
+    if (!okSet) continue;
+    var vals = sub.map(a5v).sort(function (x, y) { return y - x; });
+    /* 베이스가 많을수록 앞자리가 작아진다 — cmpKey 에서 작은 쪽이 이긴다 */
+    var key = [cards.length - sub.length].concat(vals);
+    if (!best || cmpKey(key, best.key) < 0) best = { base: sub.length, key: key, cards: sub.slice() };
+  }
+  return best;
+}
+function badugiKo(h) {
+  var line = h.cards.map(a5v).sort(function (x, y) { return y - x; })
+    .map(function (v) { return A5RANK[v]; }).join('-');
+  return h.base + '베이스 ' + line;
+}
+
 /* ── 오마하 강제 조합 ──────────────────────────────
    홀 4장 중 반드시 2장, 보드 5장 중 반드시 3장이다. 7장 자유 조합과 결과가 다르다 —
    보드에 같은 무늬가 넉 장 떠도 홀에 그 무늬가 2장 없으면 플러시가 아니다. (가이드 p4~5) */
@@ -1095,6 +1229,7 @@ function lowKo(h) {
 function actorCmp(a, b, mode) {          // a 가 먼저면 양수
   if (mode === 'lowest-upcard')     return rv(b.up[0]) - rv(a.up[0]);
   if (mode === 'highest-upcard-a5') return a5v(a.up[0]) - a5v(b.up[0]);
+  if (mode === 'highest-upcard-rank') return rv(a.up[0]) - rv(b.up[0]);
   if (mode === 'highest-upcard')    return cmpKey(upRank(a).key, upRank(b).key);
   if (mode === 'lowest-hand')       return -cmpKey(evalLowA5(a.up).key, evalLowA5(b.up).key);
   return 0;
@@ -1111,7 +1246,8 @@ function actorSeat(list, mode) {
   return tied ? null : best;
 }
 function bringInKo(spec) {
-  return spec.streets[0].firstToAct === 'highest-upcard-a5' ? '가장 높은 업카드' : '가장 낮은 업카드';
+  var m = spec.streets[0].firstToAct;
+  return (m === 'highest-upcard-a5' || m === 'highest-upcard-rank') ? '가장 높은 업카드' : '가장 낮은 업카드';
 }
 
 /* ── 쇼다운 ────────────────────────────────────────
@@ -1129,6 +1265,9 @@ function showdownResult() {
   }
   if (ev.lo === '27') {
     lo = list.map(function (s) { return { seat: s, h: bestFive(s.down.concat(s.up), false) }; });
+    lo.sort(function (x, y) { return cmpKey(x.h.key, y.h.key); });
+  } else if (ev.lo === 'badugi') {
+    lo = list.map(function (x) { return { seat: x, h: evalBadugi(x.down) }; });
     lo.sort(function (x, y) { return cmpKey(x.h.key, y.h.key); });
   } else if (ev.lo === 'a5') {
     lo = [];
@@ -1151,7 +1290,9 @@ function showdownResult() {
   };
 }
 function handNameOf(e, kind) {
-  return kind === 'a5' ? lowKo(e.h) : handKo(e.h, kind === '27');
+  if (kind === 'a5') return lowKo(e.h);
+  if (kind === 'badugi') return badugiKo(e.h);
+  return handKo(e.h, kind === '27');
 }
 
 var CHIPUNIT = 500;   // 홀칩은 이 단위로 갈린다
@@ -1170,7 +1311,8 @@ function mkAskWinner() {
     ? '오마하는 <b>홀 4장 중 2장 + 보드 5장 중 3장</b>이 강제다. 보드에 무늬가 넉 장 떠도 홀에 그 무늬가 2장 없으면 플러시가 아니다. '
     : '7장 중 최고 5장으로 겨룬다. ';
   else if (kind === '27') lead = '2-7 로우볼은 <b>가장 낮은 핸드</b>가 이긴다. A 는 항상 높고 스트레이트·플러시는 인정되므로 손해다. ';
-  else lead = '<b>라즈는 A 가 최저</b>이고 스트레이트·플러시를 따지지 않는다. 가장 낮은 다섯 장이 이긴다. ';
+  else if (kind === 'badugi') lead = '바두기는 <b>숫자도 무늬도 겹치지 않는 카드만</b> 친다. 베이스가 많은 쪽이 무조건 이기고, 같으면 낮은 쪽이 이긴다. ';
+  else lead = '<b>A-5 로우볼은 A 가 최저</b>이고 스트레이트·플러시를 따지지 않는다. 가장 낮은 다섯 장이 이긴다. ';
   return {
     kind: 'seat', tone: '', kicker: '판단 · 팟 지급',
     q: head,
@@ -1184,7 +1326,11 @@ function mkAskWinner() {
           : { src: GUIDE, txt: '7카드 스터드 — 7장 중 최고 5장. 족보는 홀덤과 동일.' })
       : kind === '27'
         ? { src: GUIDE, txt: '2-7 — A 는 최고, 스트레이트·플러시 인정. 최고 핸드는 7-5-4-3-2 무플러시.' }
-        : { src: '사용자 확인 (2026-09-03)', txt: '라즈는 A-5 로우볼 — A 가 최저, 스트레이트·플러시 무시, 자격 없음.' }
+        : kind === 'badugi'
+          ? { src: GUIDE, txt: '바두기 — 페어 없고 무늬 겹치지 않는 낮은 4장. 최고는 무늬가 모두 다른 A-2-3-4. A 가 최저.' }
+          : H.spec.id === 'razz'
+            ? { src: '사용자 확인 (2026-09-03)', txt: '라즈는 A-5 로우볼 — A 가 최저, 스트레이트·플러시 무시, 자격 없음.' }
+            : { src: PROTO, txt: 'Hi-Low Regular 는 로우에 자격이 없다 — A-5 로우볼 그대로다.' }
   };
 }
 
@@ -1194,6 +1340,23 @@ function mkAskLow() {
   if (!r || !r.split) return null;
   var has = !!(r.lo && r.lo.length);
   if (has && r.loTied) { log('로우 동점 — 로우 몫을 나눈다', 'hi'); return null; }
+
+  /* 자격이 없으면 로우는 언제나 성립한다 — 물을 것이 「누가」뿐이다.
+     이 한 줄이 스터드8 과 레귤러를 가른다. */
+  if (!H.spec.eval.qualifier) {
+    if (!has) return null;
+    return {
+      kind: 'seat', tone: '', kicker: '판단 · 로우',
+      q: '로우는 누가 이깁니까?',
+      sub: '자격이 없는 하이로우입니다 — 로우는 <b>언제나 성립합니다.</b> 좌석을 클릭하세요.',
+      answer: r.lo[0].seat.i,
+      why: r.lo[0].seat.name + '의 <b>' + lowKo(r.lo[0].h) + '</b> 이 가장 낮다. ' +
+           '8 이하 자격이 없으므로 K 하이라도 최저면 로우를 가져간다 — 스터드8 과 갈리는 지점이다. ' +
+           '팟의 절반이고, 홀칩은 하이 승자에게 간다.',
+      cite: { src: PROTO, txt: 'Hi-Low Regular — 로우에 자격(8-or-better)이 없다.' }
+    };
+  }
+
   return {
     kind: 'incident', tone: '', kicker: '판단 · 로우',
     q: '이 핸드에 <b>8 이하 로우</b>가 성립합니까?',
@@ -1859,7 +2022,7 @@ function startPractice(specId) {
   P = { steps: pSteps(spec), pi: 0, stuck: 0, msg: '', ask: null, finished: false, specId: specId };
   /* 팟리밋 계산은 베팅이 한 번 돈 뒤에 낸다 — 그래야 콜 금액이 생긴다 */
   P.potAt = -1;
-  if (spec.bettingKo === '팟 리밋' && spec.streets.length > 1) P.potAt = 1 + rnd(spec.streets.length - 1);
+  if (spec.betting === 'PL' && spec.streets.length > 1) P.potAt = 1 + rnd(spec.streets.length - 1);
   G.mode = 'practice';
   G.started = true;
   PHASE = 'practice';
@@ -2141,14 +2304,23 @@ function introHTML() {
     '<b>손이 하는 일은 판단뿐이다</b> — 라운드를 열고(누가 먼저, 얼마), ' +
     '사고가 터지면 수습하고, 마지막에 팟을 지급한다.' +
     '</div>' +
-    '<div class="cap" style="margin:18px 0 9px">연습 — 문제가 주어지지 않는다. 순서를 스스로 짠다</div>' +
-    '<div class="picklist">';
-  for (var i = 0; i < ROTATION.length; i++) {
-    var sp = SPECS[ROTATION[i]];
-    h += '<button class="ch" data-prac="' + sp.id + '">' + sp.ko +
-      '<span class="sub">' + sp.familyKo + ' · ' + sp.bettingKo + '</span></button>';
+    '<div class="cap" style="margin:18px 0 9px">연습 — 문제가 주어지지 않는다. 순서를 스스로 짠다</div>';
+
+  /* 게임은 세 축의 조합이다. 구성이 손이 하는 일을 정하므로 구성으로 묶어 보여준다. */
+  for (var f = 0; f < FAMILIES.length; f++) {
+    var fam = FAMILIES[f];
+    var picks = ROTATION.filter(function (id) { return SPECS[id].family === fam.id; });
+    if (!picks.length) continue;
+    h += '<div class="picklist">' +
+      '<div class="famhd"><b>' + fam.ko + '</b><span>' + fam.note + '</span></div>';
+    for (var i = 0; i < picks.length; i++) {
+      var sp = SPECS[picks[i]];
+      h += '<button class="ch" data-prac="' + sp.id + '">' + sp.ko +
+        '<span class="sub">' + sp.gameKo + ' · ' + sp.bettingKo + '</span></button>';
+    }
+    h += '</div>';
   }
-  h += '</div>' +
+  h +=
     '<div style="max-width:390px;margin:20px auto 0;padding-top:14px;border-top:1px solid var(--line)">' +
     '<div class="cap" style="margin-bottom:8px">시험 — 사고가 터지고, 틀린 판단 세 번이면 끝이다</div>' +
     '<button class="btn ghostbtn" id="go">딜링 룸 — 핸드마다 종목이 바뀐다</button>' +
@@ -2274,6 +2446,9 @@ function panelHTML() {
   } else if (s.kind === 'open') {
     if (s.seatPicked < 0) {
       h += '<div class="hint">테이블에서 좌석을 클릭하세요.</div>';
+    } else if (!s.bet) {
+      /* 노리밋은 벳 크기를 묻지 않는다 — 좌석 지목에서 판단이 끝난다 */
+      h += '<div class="picked">첫 액션 — ' + H.seats[s.seatPicked].name + ' 지목 완료</div>';
     } else {
       h += '<div class="picked">첫 액션 — ' + H.seats[s.seatPicked].name + ' 지목 완료</div>';
       h += '<div class="q" style="margin-top:8px">' + s.bet.q + '</div>' +
