@@ -234,6 +234,43 @@ body {
 .tline { display: flex; justify-content: space-between; padding: 7px 0; border-top: 1px solid var(--line); font-size: 13px; }
 .tline .s { font-family: var(--mono); font-weight: 800; }
 
+/* 종목 고르기 ─────────────────────── */
+.picklist { display: grid; gap: 7px; max-width: 390px; margin: 0 auto; }
+.picklist .ch { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.picklist .ch .sub { font-family: var(--mono); font-size: 10.5px; font-weight: 800; color: var(--ink-3); }
+
+/* 커뮤니티 보드 ─────────────────────── */
+.commu {
+  display: flex; align-items: center; gap: 5px; color: var(--felt-ink);
+  padding: 5px 9px; border-radius: 9px; background: rgba(0,0,0,.20);
+}
+.commu .lb { font-size: 10px; font-weight: 800; opacity: .8; margin-right: 2px; }
+.commu .slot {
+  width: 30px; height: 41px; border-radius: 3.5px; flex: none;
+  border: 1px dashed rgba(255,255,255,.26);
+}
+
+/* 금액 입력 ─────────────────────────── */
+.amt { display: flex; gap: 7px; margin-top: 11px; }
+.amt input {
+  flex: 1; min-width: 0; font-family: var(--mono); font-size: 19px; font-weight: 800;
+  text-align: right; color: var(--ink); background: var(--surface);
+  border: 1.5px solid var(--line-strong); border-radius: 10px; padding: 10px 12px;
+}
+.amt input:focus { outline: none; border-color: var(--felt); }
+.amt .go {
+  flex: none; padding: 0 18px; border: none; border-radius: 10px;
+  background: var(--felt); color: #fff; font-family: var(--sans);
+  font-size: 14px; font-weight: 900; cursor: pointer;
+}
+.amt .go:hover { background: var(--felt-edge); }
+.calc { margin-top: 9px; font-family: var(--mono); font-size: 12px; color: var(--ink-2); line-height: 1.7; }
+.calc b { color: var(--ink); font-weight: 800; }
+.picked {
+  margin-top: 10px; font-size: 12.5px; font-weight: 800; color: var(--ok);
+  padding-top: 9px; border-top: 1px dashed var(--line-strong);
+}
+
 /* 비행 카드 ─────────────────────────── */
 #fly { position: fixed; inset: 0; pointer-events: none; z-index: 50; }
 .flier { position: fixed; transition: transform .15s cubic-bezier(.3,.7,.4,1); will-change: transform; }
@@ -337,11 +374,29 @@ var SPECS = {
       { id: '6th', ko: '6번째 카드', short: '6번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'highest-upcard', size: 2 },
       { id: '7th', ko: '7번째 카드', short: '7번째', deal: { down: 1, up: 0 }, burn: true, firstToAct: 'highest-upcard', size: 2 }
     ]
+  },
+
+  /* PLO8 — 이 레포의 첫 플랍게임이다. 앞의 넷과 세 군데가 다르다.
+     보드가 공용이고, 쇼다운이 홀 2 + 보드 3 강제이며, 벳 크기가 계산으로 나온다.
+     omaha 필드가 그 강제 조합을 스펙에 적어 둔 것이다 (가이드 p4~5). */
+  plo8: {
+    id: 'plo8', ko: 'PLO 하이로우 8', en: 'Pot-Limit Omaha Hi/Lo 8',
+    family: 'flop', familyKo: '플랍',
+    holeCardCount: 4, forced: 'blinds',
+    bettingKo: '팟 리밋', raiseCap: 0,
+    eval: { hi: 'standard', lo: 'a5', qualifier: 8 },
+    omaha: { hole: 2, board: 3 },
+    streets: [
+      { id: 'preflop', ko: '프리플랍', short: '프리플랍', deal: { down: 4, up: 0 }, burn: false, firstToAct: 'left-of-bb' },
+      { id: 'flop',    ko: '플랍',     short: '플랍',     board: 3, burn: true, firstToAct: 'left-of-button' },
+      { id: 'turn',    ko: '턴',       short: '턴',       board: 1, burn: true, firstToAct: 'left-of-button' },
+      { id: 'river',   ko: '리버',     short: '리버',     board: 1, burn: true, firstToAct: 'left-of-button' }
+    ]
   }
 };
 
 /* 핸드마다 종목이 바뀐다. 손이 하는 일이 종목마다 달라지는 것이 이 축의 훈련이다. */
-var ROTATION = ['stud7', 'td27', 'razz', 'stud8'];
+var ROTATION = ['stud7', 'td27', 'razz', 'stud8', 'plo8'];
 
 var GUIDE = 'Mix Game Guide v1';
 var PROTO = 'Mixed Games Rules & Protocols (2026-01)';
@@ -391,7 +446,7 @@ function startHand() {
   }
   H = {
     spec: spec, seats: seats, deck: deck, di: 0, btn: btn,
-    pot: 0, burns: 0, discards: 0, community: null,
+    pot: 0, burns: 0, discards: 0, board: [],
     stage: '', stageIdx: -1, log: [], flags: {}, incidents: [],
     q: [], qi: 0
   };
@@ -426,17 +481,20 @@ function buildQueue() {
     q.push({ t: 'money', txt: 'SB <b>' + won(SB) + '</b> · BB <b>' + won(BB) + '</b>', add: SB + BB });
   }
 
-  // 어느 스트릿에서 무엇을 물을지 미리 뽑는다 (매번 다르게)
-  var askSeatAt = {}, askBetAt = {};
+  /* 어느 스트릿에서 무엇을 물을지 미리 뽑는다 (매번 다르게).
+     「누가 먼저」와 「얼마」는 한 라운드를 여는 동작 하나라 한 판단으로 묶여 있다. */
+  var askOpenAt = {}, askPotAt = {};
   var pool = [], k;
   for (k = 1; k < spec.streets.length; k++) pool.push(k);
   shuffle(pool);
-  askSeatAt[0] = true;                       // 첫 액션은 항상 묻는다
-  if (pool.length) askSeatAt[pool[0]] = true;
-  if (pool.length > 2 && Math.random() < .55) askSeatAt[pool[1]] = true;
-  shuffle(pool);
-  askBetAt[pool[0]] = true;
-  if (pool.length > 1 && Math.random() < .5) askBetAt[pool[1]] = true;
+  askOpenAt[0] = true;                       // 첫 라운드는 항상 묻는다
+  if (pool.length) askOpenAt[pool[0]] = true;
+  if (pool.length > 2 && Math.random() < .55) askOpenAt[pool[1]] = true;
+  /* 팟리밋 계산은 라운드가 열린 뒤 레이즈 시점에만 성립한다 — 플랍게임에서만 낸다. */
+  if (spec.bettingKo === '팟 리밋' && pool.length) {
+    shuffle(pool);
+    askPotAt[pool[0]] = true;
+  }
 
   // 사고 배치 — 0~2건
   var r = Math.random();
@@ -454,9 +512,9 @@ function buildQueue() {
     else q.push({ t: 'deal', ix: k });
 
     if (incSlots.indexOf(k) >= 0) q.push({ t: 'incident', ix: k });
-    if (askSeatAt[k]) q.push({ t: 'askseat', ix: k });
-    if (askBetAt[k]) q.push({ t: 'askbet', ix: k });
+    if (askOpenAt[k]) q.push({ t: 'askopen', ix: k });
     if (k === obAt) q.push({ t: 'objection', ix: k });
+    if (askPotAt[k]) q.push({ t: 'askpot', ix: k });
     q.push({ t: 'bets', ix: k });
   }
   q.push({ t: 'showdown' });
@@ -499,8 +557,8 @@ function advance() {
   if (s.t === 'askwinner') { var w = mkAskWinner(); return w ? stop(w) : advance(); }
   if (s.t === 'asklow') { var lw = mkAskLow(); return lw ? stop(lw) : advance(); }
 
-  if (s.t === 'askseat') { var a = mkAskSeat(s.ix); return a ? stop(a) : advance(); }
-  if (s.t === 'askbet') { var bq = mkAskBet(s.ix); return bq ? stop(bq) : advance(); }
+  if (s.t === 'askopen') { var a = mkAskOpen(s.ix); return a ? stop(a) : advance(); }
+  if (s.t === 'askpot') { var pr = mkPotRaise(s.ix); return pr ? stop(pr) : advance(); }
   if (s.t === 'incident') { var inc = mkIncident(s.ix); return inc ? stop(inc) : advance(); }
   if (s.t === 'objection') { var ob = mkObjection(s.ix); return ob ? stop(ob) : advance(); }
   return advance();
@@ -514,6 +572,17 @@ function stop(step) {
 function doDeal(ix, next) {
   var st = H.spec.streets[ix], plan = [], list = actives();
   var i, k;
+
+  /* 플랍게임의 보드는 좌석이 아니라 펠트 중앙으로 간다. 전원 공용이라 한 장씩만 나간다. */
+  if (st.board) {
+    for (k = 0; k < st.board; k++) plan.push({ board: true });
+    flyDeal(plan, function () {
+      log(H.stage + ' — 보드에 ' + st.board + '장');
+      render(); (next || advance)();
+    });
+    return;
+  }
+
   for (k = 0; k < st.deal.down; k++) for (i = 0; i < list.length; i++) plan.push({ seat: list[i].i, up: false });
   for (k = 0; k < st.deal.up; k++) for (i = 0; i < list.length; i++) plan.push({ seat: list[i].i, up: true });
 
@@ -633,7 +702,20 @@ function doDrawRound(ix, next) {
 // 베팅 빨리 감기 ──────────────────────────────────
 function doBets(ix, next) {
   var st = H.spec.streets[ix];
-  var amt = st.size === 2 ? BIG : SMALL;
+  var potLimit = H.spec.bettingKo === '팟 리밋';
+
+  /* 팟리밋에서 매 라운드 전원이 콜하면 팟이 지수적으로 부푼다 —
+     실제로는 체크로 넘어가는 라운드가 흔하다. 프리플랍만 반드시 액션이 돈다. */
+  if (potLimit && ix > 0 && Math.random() < .45) {
+    log('베팅 — 전원 체크');
+    render();
+    return (next || advance)();
+  }
+
+  /* 팟리밋은 정해진 벳 단위가 없다 — 팟에서 나온 금액으로 돈다. */
+  var amt = potLimit
+    ? Math.max(BB, Math.round(H.pot * 0.4 / CHIPUNIT) * CHIPUNIT)
+    : (st.size === 2 ? BIG : SMALL);
   var list = actives(), parts = [], callers = 0, i;
   for (i = 0; i < list.length; i++) {
     var s = list[i];
@@ -699,11 +781,17 @@ function mkAskSeat(ix) {
   } else if (st.firstToAct === 'left-of-bb') {
     ans = H.seats.filter(function (s) { return s.pos === 3; })[0].i;
     why = 'BB 왼쪽이 첫 액션이다. 버튼이 ' + seatByPos(0).name + ', BB 가 ' + seatByPos(2).name + ' 이므로 ' + seatByPos(3).name + '.';
-    cite = { src: GUIDE, txt: '2-7 트리플 드로우 첫 베팅 라운드의 첫 액션은 BB 왼쪽.' };
+    cite = H.spec.family === 'flop'
+      ? { src: GUIDE, txt: '플랍게임 프리플랍의 첫 액션은 BB 왼쪽(UTG).' }
+      : { src: GUIDE, txt: '2-7 트리플 드로우 첫 베팅 라운드의 첫 액션은 BB 왼쪽.' };
   } else {
     ans = seatByPos(1).i;
-    why = '드로우 라운드부터는 버튼 왼쪽(SB)부터다. 교체 장수 확인도 SB 부터 시작한다.';
-    cite = { src: GUIDE, txt: '드로우 순서는 버튼 왼쪽(SB)부터 장수 확인 → 번카드 1장 → SB 부터 회수·배분.' };
+    why = H.spec.family === 'flop'
+      ? '보드가 깔린 뒤부터는 버튼 왼쪽(SB)부터다. <b>프리플랍만 BB 왼쪽</b>이었고, 플랍에서 기준이 한 칸 앞으로 옮겨진다.'
+      : '드로우 라운드부터는 버튼 왼쪽(SB)부터다. 교체 장수 확인도 SB 부터 시작한다.';
+    cite = H.spec.family === 'flop'
+      ? { src: GUIDE, txt: '플랍게임은 플랍 이후 버튼 왼쪽(SB)부터 액션한다.' }
+      : { src: GUIDE, txt: '드로우 순서는 버튼 왼쪽(SB)부터 장수 확인 → 번카드 1장 → SB 부터 회수·배분.' };
   }
   if (ans === null) return null;
   var s2 = H.seats[ans];
@@ -721,8 +809,71 @@ function seatByPos(p) { return H.seats.filter(function (s) { return s.pos === p;
 // ═══════════════════════════════════════════════════
 // 판단 2 — 벳 크기 (칩을 팟으로 민다)
 // ═══════════════════════════════════════════════════
-function mkAskBet(ix) {
+/* 「누가 먼저」와 「얼마」는 한 라운드를 여는 동작 하나다.
+   두 화면으로 쪼개 놓으면 벳 크기가 2지선다로 남아 찍히고, 좌석 지목은 따로 반복된다.
+   한 화면에서 좌석을 먼저 지목하고 이어서 금액을 낸다 — 둘 다 맞아야 정답이다. */
+function mkAskOpen(ix) {
+  var seatQ = mkAskSeat(ix);
+  if (!seatQ) return null;
+  return {
+    kind: 'open', tone: '', kicker: '판단 · 라운드 열기',
+    q: seatQ.q, sub: seatQ.sub,
+    answer: seatQ.answer, why: seatQ.why, cite: seatQ.cite,
+    bet: mkAskBet(ix, H.seats[seatQ.answer].name), seatPicked: -1, typed: null
+  };
+}
+
+/* 팟벳 = 콜 금액 + 콜한 뒤 팟에 있는 금액 (가이드 p2~p4).
+   콜한 뒤의 팟에는 방금 넣은 콜도 들어 있으므로 콜 금액이 두 번 더해진다. */
+function potBet(potNow, callAmt) { return callAmt * 2 + potNow; }
+
+/* 팟리밋에서는 벳 크기가 선택이 아니라 계산이다. 그래서 숫자를 직접 받는다. */
+function mkPotBet(ix, who) {
+  var callAmt = ix === 0 ? BB : 0;
+  var potNow = H.pot;
+  var ans = potBet(potNow, callAmt);
+  var why = callAmt
+    ? '팟벳은 <b>콜 금액 + 콜한 뒤 팟에 있는 금액</b>이다. 콜 ' + won(callAmt) + ' 을 넣으면 팟이 ' +
+      won(potNow) + ' + ' + won(callAmt) + ' = ' + won(potNow + callAmt) +
+      ' 이 되고, 거기에 콜 금액을 더해 <b>' + won(ans) + '</b> 이다. 앤티는 팟 계산에서 뺀다.'
+    : '앞에 벳이 없으면 콜 금액이 0 이라 팟벳은 <b>팟 금액 그대로</b>인 ' + won(ans) + ' 이다. ' +
+      '공식은 같다 — 콜 0 + 콜한 뒤 팟 ' + won(potNow) + '.';
+  return {
+    q: (who || '이 좌석') + '이 <b>팟벳</b>을 하면 얼마입니까?',
+    sub: '팟 <b>' + won(potNow) + '</b>' + (callAmt ? ' · 콜 금액 <b>' + won(callAmt) + '</b>' : ' · 앞에 벳 없음'),
+    input: 'amount', amount: ans,
+    why: why,
+    cite: { src: GUIDE, txt: '팟벳 = 마지막 배팅을 콜 하는 데 필요한 금액 + 콜 한 후에 팟에 있는 금액. 앤티는 프리플랍 팟 계산에서 제외하는 것이 보편적이다 (대회사마다 다를 수 있음).' }
+  };
+}
+
+/* 가이드의 두 번째 예제가 이것이다 — 앞선 팟벳을 다시 팟까지 올리는 금액.
+   실제로 팟을 건드리지 않는 가정 문제라 진행에는 영향을 주지 않는다. */
+function mkPotRaise(ix) {
+  var list = actives();
+  if (list.length < 2) return null;
+  var bettor = pick(list);
+  var rest = list.filter(function (x) { return x.i !== bettor.i; });
+  var hero = pick(rest);
+  var potBefore = H.pot;
+  var bet = Math.max(BB, Math.round(potBefore * (0.5 + rnd(3) * 0.25) / CHIPUNIT) * CHIPUNIT);
+  var potNow = potBefore + bet;
+  var ans = potBet(potNow, bet);
+  H.flags.hotSeat = bettor.i;
+  return {
+    kind: 'amount', tone: '', kicker: '판단 · 팟리밋 계산',
+    q: hero.name + '이 <b>팟까지 레이즈</b>하면 얼마를 냅니까?',
+    sub: '팟에 <b>' + won(potBefore) + '</b> 이 있고, ' + bettor.name + '이 <b>' + won(bet) + '</b> 벳했습니다.',
+    input: 'amount', amount: ans,
+    why: '먼저 콜 ' + won(bet) + ' 을 넣는다. 그러면 팟이 ' + won(potBefore) + ' + ' + won(bet) + ' + ' + won(bet) +
+         ' = ' + won(potNow + bet) + ' 이 되고, 거기에 콜 금액을 더해 <b>' + won(ans) + '</b> 이다.',
+    cite: { src: GUIDE, txt: '팟벳 = 콜 금액 + 콜 한 후에 팟에 있는 금액. 예 — 팟 60,000 에 40,000 벳이면 40,000 + (60,000+40,000) = 140,000.' }
+  };
+}
+
+function mkAskBet(ix, who) {
   var st = H.spec.streets[ix];
+  if (H.spec.bettingKo === '팟 리밋') return mkPotBet(ix, who);
   var isBig = st.size === 2;
   var why, cite;
   if (H.spec.family === 'stud') {
@@ -895,6 +1046,44 @@ function bestLowA5(cards, qualifier) {
   return best;
 }
 
+/* ── 오마하 강제 조합 ──────────────────────────────
+   홀 4장 중 반드시 2장, 보드 5장 중 반드시 3장이다. 7장 자유 조합과 결과가 다르다 —
+   보드에 같은 무늬가 넉 장 떠도 홀에 그 무늬가 2장 없으면 플러시가 아니다. (가이드 p4~5) */
+function omahaCombos(hole, board, fn) {
+  var a, b, c, d, e;
+  if (board.length < 3 || hole.length < 2) return;
+  for (a = 0; a < hole.length; a++) for (b = a + 1; b < hole.length; b++)
+    for (c = 0; c < board.length; c++) for (d = c + 1; d < board.length; d++)
+      for (e = d + 1; e < board.length; e++)
+        fn([hole[a], hole[b], board[c], board[d], board[e]]);
+}
+function bestOmahaHi(hole, board) {
+  var best = null;
+  omahaCombos(hole, board, function (five) {
+    var h = evalFive(five, true);
+    if (!best || cmpKey(h.key, best.key) > 0) best = h;
+  });
+  return best;
+}
+function bestOmahaLow(hole, board, qualifier) {
+  var best = null;
+  omahaCombos(hole, board, function (five) {
+    var h = evalLowA5(five);
+    if (qualifier) {
+      if (h.cat !== 0) return;
+      if (h.key[1] > a5vOf(qualifier)) return;
+    }
+    if (!best || cmpKey(h.key, best.key) < 0) best = h;
+  });
+  return best;
+}
+/* 보드에 8 이하가 세 장 없으면 누구도 로우를 만들 수 없다 — 홀을 볼 것도 없다. */
+function boardLowCards(board, qualifier) {
+  var c = 0;
+  for (var i = 0; i < board.length; i++) if (a5v(board[i]) <= a5vOf(qualifier)) c++;
+  return c;
+}
+
 function lowKo(h) {
   var line = h.cards.map(a5v).sort(function (x, y) { return y - x; })
     .map(function (v) { return A5RANK[v]; }).join('-');
@@ -929,9 +1118,13 @@ function bringInKo(spec) {
    하이만, 로우만, 하이/로우 스플릿 세 경우를 한 곳에서 낸다. */
 function showdownResult() {
   var spec = H.spec, ev = spec.eval, list = actives(), i;
+  var om = spec.omaha;
   var hi = null, lo = null;
   if (ev.hi) {
-    hi = list.map(function (s) { return { seat: s, h: bestFive(s.down.concat(s.up), true) }; });
+    hi = list.map(function (s) {
+      return { seat: s, h: om ? bestOmahaHi(s.down, H.board) : bestFive(s.down.concat(s.up), true) };
+    });
+    hi = hi.filter(function (x) { return !!x.h; });
     hi.sort(function (x, y) { return -cmpKey(x.h.key, y.h.key); });
   }
   if (ev.lo === '27') {
@@ -940,7 +1133,8 @@ function showdownResult() {
   } else if (ev.lo === 'a5') {
     lo = [];
     for (i = 0; i < list.length; i++) {
-      var h = bestLowA5(list[i].down.concat(list[i].up), ev.qualifier);
+      var h = om ? bestOmahaLow(list[i].down, H.board, ev.qualifier)
+                 : bestLowA5(list[i].down.concat(list[i].up), ev.qualifier);
       if (h) lo.push({ seat: list[i], h: h });
     }
     lo.sort(function (x, y) { return cmpKey(x.h.key, y.h.key); });
@@ -972,7 +1166,9 @@ function mkAskWinner() {
   var win = main[0], run = main[1];
   var head = r.split ? '하이는 누가 이깁니까?' : '이 팟은 누구에게 갑니까?';
   var lead;
-  if (kind === 'hi') lead = '7장 중 최고 5장으로 겨룬다. ';
+  if (kind === 'hi') lead = H.spec.omaha
+    ? '오마하는 <b>홀 4장 중 2장 + 보드 5장 중 3장</b>이 강제다. 보드에 무늬가 넉 장 떠도 홀에 그 무늬가 2장 없으면 플러시가 아니다. '
+    : '7장 중 최고 5장으로 겨룬다. ';
   else if (kind === '27') lead = '2-7 로우볼은 <b>가장 낮은 핸드</b>가 이긴다. A 는 항상 높고 스트레이트·플러시는 인정되므로 손해다. ';
   else lead = '<b>라즈는 A 가 최저</b>이고 스트레이트·플러시를 따지지 않는다. 가장 낮은 다섯 장이 이긴다. ';
   return {
@@ -983,7 +1179,9 @@ function mkAskWinner() {
     why: lead + win.seat.name + '의 <b>' + handNameOf(win, kind) + '</b> 이 ' +
          run.seat.name + '의 ' + handNameOf(run, kind) + ' 을 이긴다.',
     cite: kind === 'hi'
-      ? { src: GUIDE, txt: '7카드 스터드 — 7장 중 최고 5장. 족보는 홀덤과 동일.' }
+      ? (H.spec.omaha
+          ? { src: GUIDE, txt: 'PLO — 홀카드 4장, 쇼다운에 홀 2장 + 보드 3장 강제. 족보는 홀덤과 동일.' }
+          : { src: GUIDE, txt: '7카드 스터드 — 7장 중 최고 5장. 족보는 홀덤과 동일.' })
       : kind === '27'
         ? { src: GUIDE, txt: '2-7 — A 는 최고, 스트레이트·플러시 인정. 최고 핸드는 7-5-4-3-2 무플러시.' }
         : { src: '사용자 확인 (2026-09-03)', txt: '라즈는 A-5 로우볼 — A 가 최저, 스트레이트·플러시 무시, 자격 없음.' }
@@ -999,13 +1197,17 @@ function mkAskLow() {
   return {
     kind: 'incident', tone: '', kicker: '판단 · 로우',
     q: '이 핸드에 <b>8 이하 로우</b>가 성립합니까?',
-    sub: '로우는 A 가 최저이고 스트레이트·플러시를 따지지 않습니다. 페어가 있으면 로우가 아닙니다.',
+    sub: H.spec.omaha
+      ? '보드의 8 이하가 <b>' + boardLowCards(H.board, H.spec.eval.qualifier || 8) + '장</b>입니다. 로우도 보드에서 3장을 써야 합니다.'
+      : '로우는 A 가 최저이고 스트레이트·플러시를 따지지 않습니다. 페어가 있으면 로우가 아닙니다.',
     choices: ['로우가 성립한다', '로우가 없다 — 하이가 팟을 전부 가져간다'],
     correct: has ? 0 : 1,
     target: has ? { kind: 'seat', prompt: '로우는 누가 이깁니까?', answer: r.lo[0].seat.i } : null,
     why: has
       ? r.lo[0].seat.name + '의 <b>' + lowKo(r.lo[0].h) + '</b> 이 로우를 가져간다. 팟의 절반이고, 홀칩은 하이 승자에게 간다.'
-      : '페어 없이 8 이하 다섯 장을 만든 사람이 없다. 로우가 성립하지 않으면 하이가 팟을 전부 가져간다.',
+      : (H.spec.omaha && boardLowCards(H.board, 8) < 3
+          ? '<b>보드에 8 이하가 세 장이 안 된다.</b> 로우도 보드에서 반드시 3장을 써야 하므로 홀카드를 볼 것도 없이 로우가 불가능하다. 하이가 팟을 전부 가져간다.'
+          : '페어 없이 8 이하 다섯 장을 만든 사람이 없다. 로우가 성립하지 않으면 하이가 팟을 전부 가져간다.'),
     cite: { src: GUIDE, txt: 'Lo 족보는 A-5 와 일치하되 8 이하만 인정된다. 로우를 만들 수 없으면 Hi 승자에게 팟 전부. 홀칩은 Hi 승자에게.' }
   };
 }
@@ -1028,6 +1230,10 @@ function payoutLine() {
 function mkIncident(ix) {
   var spec = H.spec, st = spec.streets[ix], list = actives();
   var cands = [];
+
+  /* 플랍게임의 예외 처리는 자료에 없다 — mixgame-facts §3 의 노출·스텁 표는 스터드와 드로우만 다룬다.
+     짐작으로 채우지 않는다. PLO8 은 사고 없이 판단만 낸다. */
+  if (spec.family === 'flop') return null;
 
   if (spec.family === 'stud') {
     if (ix === 0) { cands.push('exp_stud_initial'); cands.push('exp_stud_twodown'); cands.push('bringin_clean'); cands.push('bringin_acted'); }
@@ -1271,7 +1477,9 @@ function mkObjection(ix) {
   if (list.length < 2) return null;
   var pool = spec.family === 'draw'
     ? (ix > 0 ? ['ob_count_short', 'ob_change_count', 'ob_change_card'] : [])
-    : (ix === 0 ? ['ob_bringin'] : ['ob_order']);
+    : spec.family === 'flop'
+      ? ['ob_potsize']
+      : (ix === 0 ? ['ob_bringin'] : ['ob_order']);
   if (!pool.length) return null;
   var ob = OBJ[pick(pool)](list, ix);
   if (!ob) return null;
@@ -1281,6 +1489,27 @@ function mkObjection(ix) {
 }
 
 var OBJ = {
+  // 팟리밋에서 팟 금액을 묻는다 — 딜러가 알려줘도 되는 몇 안 되는 정보다
+  ob_potsize: function (list) {
+    var s = pick(list);
+    H.flags.hotSeat = s.i;
+    return {
+      who: s.name,
+      title: '팟 금액 문의',
+      q: '“지금 팟이 얼마죠?”',
+      sub: '팟리밋 게임입니다. 어떻게 합니까?',
+      choices: [
+        '팟 금액을 알려준다',
+        '알려주지 않는다 — 팟은 본인이 세는 것이다',
+        '플로어를 부른다'
+      ],
+      correct: 0,
+      target: null,
+      why: '팟리밋에서는 딜러가 팟 금액을 알려줄 수 있고, 팟을 미리 카운트해 두는 것도 허용된다. ' +
+           '벳 상한이 팟에서 나오는 구조라 팟 금액이 공개 정보인 것이다. 지금 팟은 <b>' + won(H.pot) + '</b> 이다.',
+      cite: { src: GUIDE, txt: 'PLO — 딜러는 팟 금액을 알려줄 수 있고, 팟을 카운트해 두는 것도 허용된다.' }
+    };
+  },
   // 선언 장수와 받은 장수가 다르다 — 진위가 랜덤이다
   ob_count_short: function (list) {
     var cands = list.filter(function (x) { return x.declared >= 1; });
@@ -1410,6 +1639,7 @@ var FLIGHT = null;
 
 function flyDeal(plan, done) {
   runFlight(plan.map(function (p) {
+    if (p.board) return { to: '[data-board]', commit: function () { H.board.push(draw1()); } };
     return { to: '[data-seat="' + p.seat + '"]', commit: function () {
       var s = H.seats[p.seat];
       if (p.up) s.up.push(draw1());
@@ -1524,22 +1754,63 @@ function nextAfterVerdict() {
 
 // 선택지 클릭
 function onChoice(i) {
-  if (PHASE === 'pbet') { onPBet(i); return; }
+  if (PHASE === 'popenbet') { onPBet(i); return; }
   if (PHASE === 'pchoice') { onPChoice(i); return; }
   var s = STEP;
-  if (!s || PHASE !== 'ask') return;
+  if (!s) return;
+  /* 라운드 열기의 2단계 — 좌석은 이미 맞혔고 금액만 남았다 */
+  if (PHASE === 'openbet') {
+    s.picked = i;
+    judge(i === s.bet.correct, s);
+    return;
+  }
+  if (PHASE !== 'ask') return;
   s.picked = i;
   if (i !== s.correct) { judge(false, s); return; }
   if (s.target) { PHASE = 'target'; render(); return; }
   judge(true, s);
 }
 
+/* 팟리밋은 선택지가 없다 — 숫자를 받는다. 쉼표는 지우고 읽는다. */
+function submitAmount() {
+  var el = $('#amtin');
+  if (!el) return;
+  var raw = String(el.value).replace(/[^0-9]/g, '');
+  if (!raw.length) return;
+  var v = parseInt(raw, 10);
+  if (PHASE === 'popenbet' || PHASE === 'pamount') { onPAmount(v); return; }
+  onAmount(v);
+}
+
+function onAmount(v) {
+  var s = STEP;
+  if (!s) return;
+  if (PHASE === 'openbet' && s.bet) {
+    s.typed = v;
+    judge(v === s.bet.amount, s, v === s.bet.amount ? '' : won(v) + ' 을 냈다.');
+    return;
+  }
+  if (PHASE === 'ask' && s.kind === 'amount') {
+    s.typed = v;
+    judge(v === s.amount, s, v === s.amount ? '' : won(v) + ' 을 냈다.');
+  }
+}
+
 // 좌석 클릭
 function onSeat(i) {
-  if (PHASE === 'pfirst' || PHASE === 'pwin' || PHASE === 'ptarget') { onPSeat(i); return; }
+  if (PHASE === 'popen' || PHASE === 'pwin' || PHASE === 'ptarget') { onPSeat(i); return; }
   var s = STEP;
   if (!s) return;
   if (PHASE === 'ask' && s.kind === 'seat') { judge(i === s.answer, s); return; }
+  if (PHASE === 'ask' && s.kind === 'open') {
+    if (i !== s.answer) { judge(false, s); return; }
+    s.seatPicked = i;
+    log(H.seats[i].name + ' — 첫 액션');
+    if (!s.bet) { judge(true, s); return; }
+    /* 금액 단계로 넘어가면 채점 근거도 금액 쪽으로 바뀐다 */
+    s.why = s.bet.why; s.cite = s.bet.cite;
+    PHASE = 'openbet'; render(); return;
+  }
   if (PHASE === 'target' && s.target && s.target.kind === 'seat') {
     judge(i === s.target.answer, s,
       i === s.target.answer ? '' : '절차는 맞았지만 지목이 틀렸다.');
@@ -1570,8 +1841,7 @@ var ACTS = [
   { id: 'burn',    ko: '번카드' },
   { id: 'deal',    ko: '카드 딜' },
   { id: 'draw',    ko: '카드 교체' },
-  { id: 'first',   ko: '첫 액션 지목' },
-  { id: 'bet',     ko: '벳 크기' },
+  { id: 'open',    ko: '라운드 열기' },
   { id: 'betting', ko: '베팅 진행' },
   { id: 'pot',     ko: '팟 지급' }
 ];
@@ -1585,8 +1855,11 @@ function startPractice(specId) {
       down: [], up: [], folded: false, declared: 0, given: 0 });
   }
   H = { spec: spec, seats: seats, deck: deck, di: 0, btn: btn, pot: 0, burns: 0,
-        discards: 0, community: null, stage: '', stageIdx: -1, log: [], flags: {}, q: [], qi: 0 };
+        discards: 0, board: [], stage: '', stageIdx: -1, log: [], flags: {}, q: [], qi: 0 };
   P = { steps: pSteps(spec), pi: 0, stuck: 0, msg: '', ask: null, finished: false, specId: specId };
+  /* 팟리밋 계산은 베팅이 한 번 돈 뒤에 낸다 — 그래야 콜 금액이 생긴다 */
+  P.potAt = -1;
+  if (spec.bettingKo === '팟 리밋' && spec.streets.length > 1) P.potAt = 1 + rnd(spec.streets.length - 1);
   G.mode = 'practice';
   G.started = true;
   PHASE = 'practice';
@@ -1601,8 +1874,7 @@ function pSteps(spec) {
     var st = spec.streets[k];
     if (st.burn) out.push({ act: 'burn', ix: k });
     out.push({ act: st.draw ? 'draw' : 'deal', ix: k });
-    out.push({ act: 'first', ix: k });
-    out.push({ act: 'bet', ix: k });
+    out.push({ act: 'open', ix: k });
     out.push({ act: 'betting', ix: k });
   }
   out.push({ act: 'pot', ix: -1 });
@@ -1617,8 +1889,7 @@ function pDeny(exp) {
   if (exp.act === 'burn') return spec.streets[exp.ix].ko + ' 전에 번카드를 내린다.';
   if (exp.act === 'deal') return spec.streets[exp.ix].ko + '를 아직 딜하지 않았다.';
   if (exp.act === 'draw') return spec.streets[exp.ix].ko + ' 교체가 아직이다.';
-  if (exp.act === 'first') return '누가 먼저 액션하는지를 먼저 정한다.';
-  if (exp.act === 'bet') return '이번 라운드의 벳 크기를 아직 정하지 않았다.';
+  if (exp.act === 'open') return '이번 라운드를 아직 열지 않았다 — 누가 먼저 액션하는지와 벳 크기를 정한다.';
   if (exp.act === 'betting') return '베팅을 아직 진행하지 않았다.';
   return '마지막은 팟 지급이다.';
 }
@@ -1650,7 +1921,14 @@ function pRun(step) {
   }
   if (step.act === 'deal') return doDeal(ix, pDone);
   if (step.act === 'draw') return doDrawRound(ix, pDone);
-  if (step.act === 'betting') { doBets(ix, function () {}); return pDone(); }
+  if (step.act === 'betting') {
+    doBets(ix, function () {});
+    if (ix === P.potAt) {
+      var pr = mkPotRaise(ix);
+      if (pr) { P.ask = pr; P.msg = ''; PHASE = 'pamount'; render(); return; }
+    }
+    return pDone();
+  }
   if (step.act === 'pot') {
     H.showdown = true;
     log('쇼다운 — 카드를 공개한다', 'hi');
@@ -1662,15 +1940,10 @@ function pRun(step) {
     if (!P.tail.length) { log(payoutLine(), 'hi'); P.finished = true; PHASE = 'pdone'; render(); return; }
     pAskNext(); return;
   }
-  if (step.act === 'first') {
-    var a = mkAskSeat(ix);
-    if (!a) { log('첫 액션 자동 처리'); return pDone(); }
-    P.ask = a; PHASE = 'pfirst'; render(); return;
-  }
-  if (step.act === 'bet') {
-    var bq = mkAskBet(ix);
-    if (!bq) { log('업카드에 페어가 떠 빅벳도 고를 수 있다 — 이 상황은 출제하지 않는다'); return pDone(); }
-    P.ask = bq; PHASE = 'pbet'; render(); return;
+  if (step.act === 'open') {
+    var a = mkAskOpen(ix);
+    if (!a) { log('첫 액션이 동률이라 이 라운드는 묻지 않는다'); return pDone(); }
+    P.ask = a; PHASE = 'popen'; render(); return;
   }
 }
 
@@ -1698,9 +1971,13 @@ function pRecord(name) {
 }
 
 function onPSeat(i) {
-  if (PHASE === 'pfirst') {
-    if (i === P.ask.answer) { P.msg = ''; log(H.seats[i].name + ' 첫 액션'); pDone(); }
-    else { pMiss('그 좌석이 아니다. '); }
+  if (PHASE === 'popen') {
+    if (i !== P.ask.answer) { pMiss('그 좌석이 아니다. '); return; }
+    P.msg = '';
+    P.ask.seatPicked = i;
+    log(H.seats[i].name + ' 첫 액션');
+    if (!P.ask.bet) { pDone(); return; }
+    PHASE = 'popenbet'; render();
     return;
   }
   if (PHASE === 'pwin') {
@@ -1729,16 +2006,21 @@ function onPChoice(i) {
 }
 
 function onPBet(i) {
-  if (i === P.ask.correct) {
-    log(P.ask.choices[i] + ' 선언');
-    P.msg = '';
-    pDone();
-  } else {
-    P.stuck++;
-    P.msg = '그 크기가 아니다. ' + P.ask.why;
-    log('벳 크기 오답', 'bad');
-    render();
-  }
+  var b = P.ask.bet;
+  if (i === b.correct) { log(b.choices[i] + ' 선언'); P.msg = ''; pDone(); return; }
+  P.stuck++;
+  P.msg = '그 크기가 아니다. ' + b.why;
+  log('벳 크기 오답', 'bad');
+  render();
+}
+
+function onPAmount(v) {
+  var b = P.ask.bet || P.ask;
+  if (v === b.amount) { log('팟벳 <b>' + won(v) + '</b> 선언'); P.msg = ''; pDone(); return; }
+  P.stuck++;
+  P.msg = won(v) + ' 이 아니다. ' + b.why;
+  log('팟벳 계산 오답', 'bad');
+  render();
 }
 
 function practiceTopHTML() {
@@ -1778,8 +2060,8 @@ function practicePanelHTML() {
       '<button class="btn ghostbtn" id="phome" style="max-width:320px;margin:8px auto 0">처음 화면으로</button>' +
       '</div>';
   }
-  if (PHASE === 'pfirst' || PHASE === 'pwin') {
-    h = '<div class="panel"><div class="kicker">' + (PHASE === 'pwin' ? P.ask.kicker : '직접 지목') + '</div>' +
+  if (PHASE === 'popen' || PHASE === 'pwin') {
+    h = '<div class="panel"><div class="kicker">' + (PHASE === 'pwin' ? P.ask.kicker : '라운드 열기 · 1단계') + '</div>' +
       '<div class="q">' + P.ask.q + '</div>' +
       '<div class="qsub">' + (PHASE === 'pwin' ? '쇼다운' : H.stage) + ' · 테이블에서 좌석을 클릭하세요.</div>';
     if (P.msg) h += '<div class="verdict no"><div class="hd">아직 아니다</div>' + P.msg + '</div>';
@@ -1804,13 +2086,22 @@ function practicePanelHTML() {
     if (P.msg) h += '<div class="verdict no"><div class="hd">아직 아니다</div>' + P.msg + '</div>';
     return h + '</div>';
   }
-  if (PHASE === 'pbet') {
-    h = '<div class="panel"><div class="kicker">벳 크기</div>' +
-      '<div class="q">' + P.ask.q + '</div><div class="choices">';
-    for (var ci = 0; ci < P.ask.choices.length; ci++) {
-      h += '<button class="ch" data-ch="' + ci + '">' + P.ask.choices[ci] + '</button>';
-    }
-    h += '</div>';
+  if (PHASE === 'pamount') {
+    h = '<div class="panel"><div class="kicker">' + P.ask.kicker + '</div>' +
+      '<div class="q">' + P.ask.q + '</div>' +
+      (P.ask.sub ? '<div class="qsub">' + P.ask.sub + '</div>' : '') +
+      amtHTML(P.ask, true, null);
+    if (P.msg) h += '<div class="verdict no"><div class="hd">아직 아니다</div>' + P.msg + '</div>';
+    return h + '</div>';
+  }
+  if (PHASE === 'popenbet') {
+    var b = P.ask.bet;
+    h = '<div class="panel"><div class="kicker">라운드 열기 · 2단계</div>' +
+      '<div class="picked" style="margin-top:0;padding-top:0;border-top:none">첫 액션 — ' +
+      H.seats[P.ask.seatPicked].name + ' 지목 완료</div>' +
+      '<div class="q" style="margin-top:8px">' + b.q + '</div>' +
+      (b.sub ? '<div class="qsub">' + b.sub + '</div>' : '');
+    h += b.input === 'amount' ? amtHTML(b, true, null) : choiceHTML(b.choices, true, -1, -1);
     if (P.msg) h += '<div class="verdict no"><div class="hd">아직 아니다</div>' + P.msg + '</div>';
     return h + '</div>';
   }
@@ -1842,26 +2133,30 @@ function render() {
 }
 
 function introHTML() {
-  return '<div class="panel done">' +
+  var h = '<div class="panel done">' +
     '<div class="kicker">축 3 프로토타입 · 3번째 판본</div>' +
     '<div style="font-size:27px;font-weight:900;letter-spacing:-.02em;margin:6px 0 4px">딜링 룸</div>' +
     '<div style="font-size:13.5px;color:var(--ink-2);line-height:1.65;max-width:470px;margin:0 auto">' +
     '당신은 믹스게임 테이블의 딜러다. 카드는 알아서 나간다.<br>' +
-    '<b>손이 하는 일은 판단뿐이다</b> — 누가 먼저 액션하는지 지목하고, ' +
-    '벳 크기만큼 칩을 팟으로 밀고, 사고가 터지면 수습한다.<br><br>' +
-    '핸드마다 종목이 바뀐다. <b>틀린 판단 세 번이면 끝이다.</b>' +
+    '<b>손이 하는 일은 판단뿐이다</b> — 라운드를 열고(누가 먼저, 얼마), ' +
+    '사고가 터지면 수습하고, 마지막에 팟을 지급한다.' +
     '</div>' +
-    (best ? '<div class="cap" style="margin-top:14px">최고 기록 <b style="font-family:var(--mono)">' + best + '핸드</b></div>' : '') +
-    '<button class="btn" id="go" style="max-width:320px;margin:18px auto 0">딜링 룸 — 사고가 터진다</button>' +
-    '<div style="max-width:320px;margin:16px auto 0;padding-top:14px;border-top:1px solid var(--line)">' +
-    '<div class="cap" style="margin-bottom:8px">선택지 없이 절차만 혼자 연습하기</div>' +
-    '<button class="btn ghostbtn" id="pstud">연습 — 7카드 스터드</button>' +
-    '<button class="btn ghostbtn" id="ptd" style="margin-top:8px">연습 — 2-7 트리플 드로우</button>' +
-    '<button class="btn ghostbtn" id="prazz" style="margin-top:8px">연습 — 라즈</button>' +
-    '<button class="btn ghostbtn" id="ps8" style="margin-top:8px">연습 — 스터드 하이로우 8</button>' +
+    '<div class="cap" style="margin:18px 0 9px">연습 — 문제가 주어지지 않는다. 순서를 스스로 짠다</div>' +
+    '<div class="picklist">';
+  for (var i = 0; i < ROTATION.length; i++) {
+    var sp = SPECS[ROTATION[i]];
+    h += '<button class="ch" data-prac="' + sp.id + '">' + sp.ko +
+      '<span class="sub">' + sp.familyKo + ' · ' + sp.bettingKo + '</span></button>';
+  }
+  h += '</div>' +
+    '<div style="max-width:390px;margin:20px auto 0;padding-top:14px;border-top:1px solid var(--line)">' +
+    '<div class="cap" style="margin-bottom:8px">시험 — 사고가 터지고, 틀린 판단 세 번이면 끝이다</div>' +
+    '<button class="btn ghostbtn" id="go">딜링 룸 — 핸드마다 종목이 바뀐다</button>' +
+    (best ? '<div class="cap" style="margin-top:10px">최고 기록 <b style="font-family:var(--mono)">' + best + '핸드</b></div>' : '') +
     '</div>' +
     '<div class="hint" style="text-align:center">카드가 날아가는 중에 화면을 클릭하면 건너뜁니다</div>' +
     '</div>';
+  return h;
 }
 
 function topHTML() {
@@ -1880,8 +2175,8 @@ function topHTML() {
 
 function boardHTML() {
   var s = STEP;
-  var seatPick = PHASE === 'pfirst' || PHASE === 'pwin' || PHASE === 'ptarget' ||
-                 (PHASE === 'ask' && s && s.kind === 'seat') ||
+  var seatPick = PHASE === 'popen' || PHASE === 'pwin' || PHASE === 'ptarget' ||
+                 (PHASE === 'ask' && s && (s.kind === 'seat' || s.kind === 'open')) ||
                  (PHASE === 'target' && s && s.target && s.target.kind === 'seat');
   var pilePick = (PHASE === 'target' && s && s.target && s.target.kind === 'pile');
   var order = [0, 1, 2, 5, 4, 3];
@@ -1896,6 +2191,7 @@ function boardHTML() {
     pileHTML('burn', '번', H.burns + '장', pilePick) +
     pileHTML('discard', '디스카드', H.discards + '장', pilePick) +
     (H.spec.family === 'stud' ? pileHTML('center', '중앙', '—', pilePick) : '') +
+    (H.spec.family === 'flop' ? commuHTML() : '') +
     '<div class="pot">' +
     '<div class="lb">팟</div><div class="n">' + won(H.pot) + '</div></div>' +
     '</div>';
@@ -1913,11 +2209,20 @@ function boardHTML() {
   return h;
 }
 
+/* 커뮤니티 보드 — 다섯 자리를 미리 비워 둔다. 몇 장이 더 올지 눈에 보여야 한다. */
+function commuHTML() {
+  var h = '<div class="commu" data-board="1"><span class="lb">보드</span>';
+  for (var i = 0; i < 5; i++) {
+    h += H.board[i] ? cardHTML(H.board[i], 'big') : '<span class="slot"></span>';
+  }
+  return h + '</div>';
+}
+
 function seatHTML(s, pick) {
   var cls = 'seat' + (s.folded ? ' folded' : '') + (pick && !s.folded ? ' pickable' : '') +
             (H.flags.hotSeat === s.i ? ' flag' : '');
   var tag = '';
-  if (H.spec.family === 'draw') {
+  if (H.spec.forced === 'blinds') {
     if (s.pos === 0) tag = 'D';
     else if (s.pos === 1) tag = 'SB';
     else if (s.pos === 2) tag = 'BB';
@@ -1966,26 +2271,24 @@ function panelHTML() {
 
   if (s.kind === 'seat') {
     h += '<div class="hint">테이블에서 좌석을 클릭하세요.</div>';
-  } else if (s.kind === 'incident') {
-    if (PHASE === 'ask') {
-      h += '<div class="choices">';
-      for (var i = 0; i < s.choices.length; i++) {
-        h += '<button class="ch" data-ch="' + i + '">' + s.choices[i] + '</button>';
-      }
-      h += '</div>';
+  } else if (s.kind === 'open') {
+    if (s.seatPicked < 0) {
+      h += '<div class="hint">테이블에서 좌석을 클릭하세요.</div>';
     } else {
-      h += '<div class="choices">';
-      for (var k = 0; k < s.choices.length; k++) {
-        var cls = 'ch';
-        if (k === s.correct) cls += ' right';
-        else if (k === s.picked) cls += ' wrong';
-        h += '<button class="' + cls + '" disabled>' + s.choices[k] + '</button>';
-      }
-      h += '</div>';
-      if (PHASE === 'target') {
-        h += '<div class="verdict ok"><div class="hd">절차는 맞습니다. 이제 어디에?</div>' +
-          s.target.prompt + '</div>';
-      }
+      h += '<div class="picked">첫 액션 — ' + H.seats[s.seatPicked].name + ' 지목 완료</div>';
+      h += '<div class="q" style="margin-top:8px">' + s.bet.q + '</div>' +
+           (s.bet.sub ? '<div class="qsub">' + s.bet.sub + '</div>' : '');
+      h += s.bet.input === 'amount'
+        ? amtHTML(s.bet, PHASE === 'openbet', s.typed)
+        : choiceHTML(s.bet.choices, PHASE === 'openbet', s.bet.correct, s.picked);
+    }
+  } else if (s.kind === 'amount') {
+    h += amtHTML(s, PHASE === 'ask', s.typed);
+  } else if (s.kind === 'incident') {
+    h += choiceHTML(s.choices, PHASE === 'ask', s.correct, s.picked);
+    if (PHASE === 'target') {
+      h += '<div class="verdict ok"><div class="hd">절차는 맞습니다. 이제 어디에?</div>' +
+        s.target.prompt + '</div>';
     }
   }
 
@@ -2001,6 +2304,28 @@ function panelHTML() {
   }
   h += '</div>';
   return h;
+}
+
+/* 선택지는 살아 있을 때만 누를 수 있고, 채점 뒤에는 정답·오답이 그대로 남는다. */
+function choiceHTML(list, live, correct, picked) {
+  var h = '<div class="choices">', i;
+  for (i = 0; i < list.length; i++) {
+    if (live) { h += '<button class="ch" data-ch="' + i + '">' + list[i] + '</button>'; continue; }
+    var cls = 'ch' + (i === correct ? ' right' : (i === picked ? ' wrong' : ''));
+    h += '<button class="' + cls + '" disabled>' + list[i] + '</button>';
+  }
+  return h + '</div>';
+}
+
+function amtHTML(q, live, typed) {
+  if (live) {
+    return '<div class="amt">' +
+      '<input id="amtin" type="text" inputmode="numeric" placeholder="0" autocomplete="off">' +
+      '<button class="go" id="amtgo">확인</button></div>' +
+      '<div class="calc">팟벳 = <b>콜 금액</b> + <b>콜한 뒤 팟에 있는 금액</b></div>';
+  }
+  return '<div class="calc">낸 금액 <b>' + (typed == null ? '—' : won(typed)) +
+    '</b> · 정답 <b>' + won(q.amount) + '</b></div>';
 }
 
 function logHTML() {
@@ -2031,10 +2356,12 @@ function tl(a, b) { return '<div class="tline"><span>' + a + '</span><span class
 // 이벤트 배선 ─────────────────────────────────────
 function wire() {
   var go = $('#go'); if (go) go.onclick = function () { G.started = true; G.mode = 'room'; startHand(); };
-  var ps = $('#pstud'); if (ps) ps.onclick = function () { startPractice('stud7'); };
-  var pt = $('#ptd'); if (pt) pt.onclick = function () { startPractice('td27'); };
-  var pz = $('#prazz'); if (pz) pz.onclick = function () { startPractice('razz'); };
-  var p8 = $('#ps8'); if (p8) p8.onclick = function () { startPractice('stud8'); };
+  var pracs = document.querySelectorAll('[data-prac]');
+  for (var pi = 0; pi < pracs.length; pi++) {
+    (function (el) {
+      el.onclick = function () { startPractice(el.getAttribute('data-prac')); };
+    })(pracs[pi]);
+  }
   var pa = $('#pagain'); if (pa) pa.onclick = function () { startPractice(P.specId); };
   var po = $('#pother'); if (po) po.onclick = function () {
     var k = ROTATION.indexOf(P.specId);
@@ -2065,6 +2392,13 @@ function wire() {
   for (i = 0; i < piles.length; i++) {
     (function (el) { el.onclick = function () { onPile(el.getAttribute('data-pile')); }; })(piles[i]);
   }
+  var ain = $('#amtin');
+  if (ain) {
+    ain.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); submitAmount(); } };
+    ain.focus();
+  }
+  var ago = $('#amtgo'); if (ago) ago.onclick = submitAmount;
+
   var lg = $('#log'); if (lg) lg.scrollTop = lg.scrollHeight;
 }
 
