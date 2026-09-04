@@ -603,7 +603,7 @@ function startHand() {
     spec: spec, seats: seats, deck: deck, di: 0, btn: btn,
     pot: 0, burns: 0, discards: 0, board: [],
     stage: '', stageIdx: -1, log: [], flags: {}, incidents: [],
-    q: [], qi: 0
+    opened: null, q: [], qi: 0
   };
   buildQueue();
   G.hands++;
@@ -862,53 +862,71 @@ function doDrawRound(ix, next) {
 function doBets(ix, next) {
   var st = H.spec.streets[ix];
   var potLimit = H.spec.betting === 'PL';
-  var fin = function () { render(); (next || advance)(); };
+  /* 어느 길로 가든 라운드 끝에 수거한다 — 체크로 넘어간 라운드도 마찬가지다.
+     전에는 체크 갈래가 수거를 건너뛰어 앞선 벳이 다음 스트릿까지 남았다. */
+  var fin = function () { render(); sweepChips(next || advance); };
 
-  /* 팟리밋에서 매 라운드 전원이 콜하면 팟이 지수적으로 부푼다 —
-     실제로는 체크로 넘어가는 라운드가 흔하다. 프리플랍만 반드시 액션이 돈다. */
-  if (H.spec.betting !== 'FL' && ix > 0 && Math.random() < .45) {
+  /* 이 라운드를 연 판단의 답. 있으면 그 금액이 그대로 나간다. */
+  var op = (H.opened && H.opened.ix === ix) ? H.opened : null;
+  H.opened = null;
+
+  /* 스터드 3번째 카드는 스몰벳으로 열지 않는다 — 브링인이고, 누군가 컴플리트해야
+     그때 스몰벳이 된다. 물은 답과 눈에 보이는 진행이 같아야 한다. */
+  if (H.spec.family === 'stud' && ix === 0) return doBringIn(fin, op);
+
+  /* 라운드가 이미 열려 있으면 전원 체크는 모순이다 — 열지 않은 라운드에서만 체크한다. */
+  if (!(op && op.amt) && H.spec.betting !== 'FL' && ix > 0 && Math.random() < .45) {
     log('베팅 — 전원 체크');
     return fin();
   }
 
-  /* 스터드 3번째 카드는 스몰벳으로 열지 않는다 — 브링인이고, 누군가 컴플리트해야
-     그때 스몰벳이 된다. 물은 답과 눈에 보이는 진행이 같아야 한다. */
-  if (H.spec.family === 'stud' && ix === 0) return doBringIn(fin);
-
-  /* 팟리밋은 정해진 벳 단위가 없다 — 팟에서 나온 금액으로 돈다. */
-  var amt = potLimit
-    ? Math.max(BB, Math.round(potNow_() * 0.4 / CHIPUNIT) * CHIPUNIT)
-    : H.spec.betting === 'NL'
-      ? BB * (2 + rnd(3))
-      : (st.size === 2 ? BIG : SMALL);
-  /* 이미 앞에 나와 있는 벳(블라인드·팟리밋 계산 문제의 벳)보다 작게 받을 수는 없다 */
+  var amt = (op && op.amt) ? op.amt
+    : potLimit
+      ? Math.max(BB, Math.round(potNow_() * 0.4 / CHIPUNIT) * CHIPUNIT)
+      : H.spec.betting === 'NL'
+        ? BB * (2 + rnd(3))
+        : (st.size === 2 ? BIG : SMALL);
+  /* 이미 앞에 나와 있는 벳(블라인드 등)보다 작게 받을 수는 없다 */
   var maxOut = 0, mi;
   for (mi = 0; mi < H.seats.length; mi++) maxOut = Math.max(maxOut, H.seats[mi].bet || 0);
   amt = Math.max(amt, maxOut);
 
-  var list = actives(), parts = [], callers = 0, i;
+  /* 라운드를 연 좌석부터 시계 방향으로 돈다. 연 사람은 폴드하지 않는다. */
+  var list = actives(), parts = [], callers = 0, i, k;
+  if (op) {
+    k = -1;
+    for (i = 0; i < list.length; i++) if (list[i].i === op.seat) k = i;
+    if (k > 0) list = list.slice(k).concat(list.slice(0, k));
+  }
+  /* 벳이 팟에 비해 클수록 콜이 줄어든다. 팟만 한 벳에 전원이 콜하는 테이블은 없다. */
+  var potRef = Math.max(BB, potNow_() - betsOut());
+  var foldP = Math.min(0.72, 0.18 + 0.5 * (amt / potRef));
+
   for (i = 0; i < list.length; i++) {
     var s = list[i];
-    if (actives().length > 2 && Math.random() < .22) { s.folded = true; parts.push(s.name + ' 폴드'); }
-    else {
-      callers++;
-      /* 블라인드처럼 이미 앞에 낸 칩이 있으면 차액만 채운다 — 두 번 내지 않는다. */
-      s.bet = Math.max(s.bet, amt);
-      parts.push(s.name + ' ' + (callers === 1 ? '벳' : '콜'));
+    var opener = op && s.i === op.seat;
+    if (!opener && actives().length > 2 && Math.random() < foldP) {
+      s.folded = true; parts.push(s.name + ' 폴드'); continue;
     }
+    callers++;
+    /* 블라인드처럼 이미 앞에 낸 칩이 있으면 차액만 채운다 — 두 번 내지 않는다. */
+    s.bet = Math.max(s.bet, amt);
+    parts.push(s.name + ' ' + (callers === 1 ? '벳' : '콜'));
   }
   log('베팅 — ' + parts.join(' · ') + ' <b>(' + won(amt) + ')</b>');
   render();
-  sweepChips(fin);
+  fin();
 }
 
 /* 스터드 3번째 카드의 첫 베팅 — 브링인으로 연다.
    브링인 좌석은 브링인 금액만 내고, 뒤에서 누군가 스몰벳까지 컴플리트하면
    그제서야 레벨이 스몰벳이 되고 브링인 좌석이 차액을 채운다.
    칩이 좌석마다 다른 높이로 쌓이는 것이 그 말을 대신한다. */
-function doBringIn(fin) {
+function doBringIn(fin, op) {
   var list = actives(), parts = [], i, s;
-  var bring = actorSeat(list, H.spec.streets[0].firstToAct) || list[0];
+  var bring = (op && H.seats[op.seat] && !H.seats[op.seat].folded)
+    ? H.seats[op.seat]
+    : (actorSeat(list, H.spec.streets[0].firstToAct) || list[0]);
   var wantComplete = Math.random() < .5;
   var completer = null;
 
@@ -933,7 +951,7 @@ function doBringIn(fin) {
   }
   log('3번째 카드 베팅 — ' + parts.join(' · '));
   render();
-  sweepChips(fin);
+  fin();
 }
 
 /* 강제 베팅도 칩으로 나간다 — 좌석 앞에 놓였다가 팟으로 간다.
@@ -1077,12 +1095,51 @@ function mkAskOpen(ix) {
   if (!seatQ) return null;
   /* 스터드의 첫 라운드는 그냥 「여는」 것이 아니라 브링인이다 — 이름을 그대로 부른다. */
   var openKo = (H.spec.family === 'stud' && ix === 0) ? '브링인' : '첫 순서 지목';
+  var bet = mkAskBet(ix, H.seats[seatQ.answer].name);
+  /* 정답 금액. 노리밋은 묻지 않으므로 0 이다. */
+  var amt = !bet ? 0 : (bet.input === 'amount' ? bet.amount : bet.values[bet.correct]);
   return {
     kind: 'open', tone: '', kicker: '판단 · ' + openKo, openKo: openKo,
     q: seatQ.q, sub: seatQ.sub,
     answer: seatQ.answer, why: seatQ.why, cite: seatQ.cite,
-    bet: mkAskBet(ix, H.seats[seatQ.answer].name), seatPicked: -1, typed: null
+    bet: bet, seatPicked: -1, typed: null,
+    /* 판단이 끝나면 그 답이 테이블의 진실이 된다 — 답한 금액이 실제로 나간다.
+       두 모드가 같은 함수를 쓴다: 딜링 룸은 judge 가, 연습은 핸들러가 부른다. */
+    after: function () { openRound(ix, seatQ.answer, amt, openKo); }
   };
+}
+
+/* 라운드가 열린 기록. doBets 가 이것을 읽어 그대로 굴린다 —
+   「팟벳 12,000 선언」 뒤에 「전원 체크」가 뜨던 것이 이 연결이 없어서였다. */
+function openRound(ix, seat, amt, label) {
+  var s = H.seats[seat];
+  var act = amt || 0;
+  var maxed = true;
+
+  /* 팟리밋에서 딜러가 판정하는 것은 <b>최대 얼마까지</b>다. 그 최대를 실제로 다 거는 것은
+     플레이어의 선택이고, 매 스트릿 팟까지 걸고 전원이 콜하면 팟이 스트릿마다 세 배가 된다.
+     브링인·픽스리밋은 반대다 — 금액이 정해져 있으니 답이 곧 진행이다. */
+  if (act && H.spec.betting === 'PL') {
+    /* 앞에 벳이 있으면 최소 레이즈(그 벳 + BB)를 넘겨야 legal 하다.
+       프리플랍 BB 2,000 위에 3,000 을 놓던 것이 그래서 틀린 그림이었다. */
+    var out = 0, oi;
+    for (oi = 0; oi < H.seats.length; oi++) out = Math.max(out, H.seats[oi].bet || 0);
+    var floor = out ? out + BB : BB;
+    act = Math.max(floor, Math.round(act * (0.3 + rnd(4) * 0.1) / CHIPUNIT) * CHIPUNIT);
+    if (act > amt) act = amt;
+    maxed = act === amt;
+  }
+
+  H.opened = { ix: ix, seat: seat, amt: act };
+  if (act) {
+    s.bet = Math.max(s.bet || 0, act);
+    log(s.name + ' ' + (label === '브링인' ? '브링인' : '벳') + ' <b>' + won(act) + '</b>' +
+      (maxed ? '' : ' — 팟까지는 ' + won(amt) + ' 이었다') + ' · 라운드가 열렸다');
+  } else {
+    /* 노리밋은 금액을 묻지 않는다(ADR-003). 순서만 정해진 것이라 체크로 넘어갈 수도 있다. */
+    log(s.name + ' 부터 액션');
+  }
+  render();
 }
 
 /* 팟벳 = 콜 금액 + 콜한 뒤 팟에 있는 금액 (가이드 p2~p4).
@@ -1119,18 +1176,25 @@ function mkPotBet(ix, who) {
 function mkPotRaise(ix) {
   var list = actives();
   if (list.length < 2) return null;
-  var bettor = pick(list);
+  /* 라운드가 이미 열려 있으면 그 벳을 그대로 쓴다 — 방금 답한 팟벳이 앞에 놓여 있다.
+     열려 있지 않으면(딜링 룸에서 askpot 이 먼저 오는 경우) 하나를 놓는다. */
+  var bettor = null, bet = 0, bi;
+  for (bi = 0; bi < list.length; bi++) if ((list[bi].bet || 0) > bet) { bet = list[bi].bet; bettor = list[bi]; }
+  if (!bettor) {
+    bettor = pick(list);
+    bet = Math.max(BB, Math.round(potNow_() * (0.5 + rnd(3) * 0.25) / CHIPUNIT) * CHIPUNIT);
+    bettor.bet = Math.max(bettor.bet || 0, bet);
+    log(bettor.name + ' 벳 <b>' + won(bet) + '</b>');
+  }
   var rest = list.filter(function (x) { return x.i !== bettor.i; });
+  if (!rest.length) return null;
   var hero = pick(rest);
-  var potBefore = potNow_();
-  var outBefore = betsOut();
-  var bet = Math.max(BB, Math.round(potBefore * (0.5 + rnd(3) * 0.25) / CHIPUNIT) * CHIPUNIT);
+  var potBefore = potNow_() - bet;          // 벳을 뺀 나머지가 「벳 전의 팟」
+  var outBefore = betsOut() - bet;
   var potNow = potBefore + bet;
   var ans = potBet(potNow, bet);
 
-  bettor.bet = Math.max(bettor.bet, bet);
   H.flags.hotSeat = hero.i;
-  log(bettor.name + ' 벳 <b>' + won(bet) + '</b>');
   render();
 
   return {
@@ -1142,6 +1206,13 @@ function mkPotRaise(ix) {
     input: 'amount', amount: ans,
     why: '먼저 콜 ' + won(bet) + ' 을 넣는다. 그러면 팟이 ' + won(potBefore) + ' + ' + won(bet) + ' + ' + won(bet) +
          ' = ' + won(potNow + bet) + ' 이 되고, 거기에 콜 금액을 더해 <b>' + won(ans) + '</b> 이다.',
+    /* 답한 금액으로 실제로 레이즈한다 — 라운드는 이 금액에서 이어진다 */
+    after: function () {
+      hero.bet = Math.max(hero.bet || 0, ans);
+      H.opened = { ix: ix, seat: hero.i, amt: ans };
+      log(hero.name + ' 팟까지 레이즈 <b>' + won(ans) + '</b>');
+      render();
+    },
     cite: { src: GUIDE, txt: '팟벳 = 콜 금액 + 콜 한 후에 팟에 있는 금액. 예 — 팟 60,000 에 40,000 벳이면 40,000 + (60,000+40,000) = 140,000.' }
   };
 }
@@ -1161,6 +1232,7 @@ function mkAskBet(ix, who) {
         q: '브링인은 얼마를 냅니까?',
         sub: H.stage,
         choices: ['브링인 ' + won(BRINGIN), '스몰벳 ' + won(SMALL) + ' — 컴플리트', '빅벳 ' + won(BIG)],
+        values: [BRINGIN, SMALL, BIG],
         correct: 0,
         target: null,
         why: '3번째 카드의 첫 벳은 <b>브링인 금액</b>이다. 브링인을 낸 사람이 원하면 스몰벳까지 ' +
@@ -1188,6 +1260,7 @@ function mkAskBet(ix, who) {
     q: '지금 벳은 스몰벳입니까, 빅벳입니까?',
     sub: H.stage,
     choices: ['스몰벳 ' + won(SMALL), '빅벳 ' + won(BIG)],
+    values: [SMALL, BIG],
     correct: isBig ? 1 : 0,
     target: null,
     why: why, cite: cite
@@ -2252,7 +2325,6 @@ var ACTS = [
   { id: 'burn',    ko: '번카드' },
   { id: 'deal',    ko: '카드 딜' },
   { id: 'draw',    ko: '카드 교체' },
-  { id: 'open',    ko: '브링인 / 첫 순서 지목' },
   { id: 'betting', ko: '베팅 진행' },
   { id: 'pot',     ko: '팟 지급' }
 ];
@@ -2266,7 +2338,8 @@ function startPractice(specId) {
       down: [], up: [], folded: false, declared: 0, given: 0, bet: 0 });
   }
   H = { spec: spec, seats: seats, deck: deck, di: 0, btn: btn, pot: 0, burns: 0,
-        discards: 0, board: [], stage: '', stageIdx: -1, log: [], flags: {}, q: [], qi: 0 };
+        discards: 0, board: [], stage: '', stageIdx: -1, log: [], flags: {},
+        opened: null, q: [], qi: 0 };
   P = { steps: pSteps(spec), pi: 0, stuck: 0, msg: '', ask: null, finished: false, specId: specId };
   /* 팟리밋 계산은 베팅이 한 번 돈 뒤에 낸다 — 그래야 콜 금액이 생긴다 */
   P.potAt = -1;
@@ -2368,22 +2441,27 @@ function pRun(step) {
 function pDone() {
   P.pi++;
   P.ask = null;
-  pSkipAuto();
+  if (pAutoRun()) return;          // 자동으로 뜬 판단이 화면을 잡았다
   PHASE = P.pi >= P.steps.length ? 'pdone' : 'practice';
   render();
 }
 
-/* 물을 것이 없는 라운드는 팔레트를 누르게 하지 않는다 —
-   눌러 봐야 「동률이라 묻지 않는다」 한 줄뿐이라 손만 한 번 더 가는 것이다.
-   첫 액션이 자동으로 정해지는 라운드가 여기 해당한다. */
-function pSkipAuto() {
-  for (var guard = 0; guard < 8; guard++) {
-    var st = P.steps[P.pi];
-    if (!st || st.act !== 'open') return;
-    if (mkAskOpen(st.ix)) return;
+/* 「브링인 / 첫 순서 지목」은 팔레트에서 고르는 일이 아니다 — 카드가 나가면 저절로 온다.
+   딜러가 「이제 라운드를 열겠다」고 선언하는 것이 아니라, 카드가 다 나가면 그 순간이 온다.
+   물을 것이 없는 라운드(첫 액션이 저절로 정해지는 경우)는 조용히 넘어간다. */
+function pAutoRun() {
+  var st = P.steps[P.pi];
+  if (!st || st.act !== 'open') return false;
+  var a = mkAskOpen(st.ix);
+  if (!a) {
     log('첫 액션이 저절로 정해진다 — 지목 없이 넘어간다');
     P.pi++;
+    return pAutoRun();
   }
+  P.ask = a; P.msg = '';
+  PHASE = 'popen';
+  render();
+  return true;
 }
 
 /* 쇼다운은 판단이 하나가 아닐 수 있다 (스플릿). 남은 판단을 차례로 낸다. */
@@ -2408,8 +2486,8 @@ function onPSeat(i) {
     if (i !== P.ask.answer) { pMiss('그 좌석이 아니다. '); return; }
     P.msg = '';
     P.ask.seatPicked = i;
-    log(H.seats[i].name + ' 첫 액션');
-    if (!P.ask.bet) { pDone(); return; }
+    /* 벳을 묻지 않는 종목(노리밋)은 여기서 라운드가 열린다 */
+    if (!P.ask.bet) { if (P.ask.after) P.ask.after(); pDone(); return; }
     PHASE = 'popenbet'; render();
     return;
   }
@@ -2442,7 +2520,12 @@ function onPChoice(i) {
 function onPBet(i) {
   if (!P || !P.ask || !P.ask.bet) return;
   var b = P.ask.bet;
-  if (i === b.correct) { log(b.choices[i] + ' 선언'); P.msg = ''; pDone(); return; }
+  if (i === b.correct) {
+    P.msg = '';
+    if (P.ask.after) P.ask.after();
+    pDone();
+    return;
+  }
   P.stuck++;
   P.msg = '그 크기가 아니다. ' + b.why;
   log('벳 크기 오답', 'bad');
@@ -2453,16 +2536,18 @@ function onPAmount(v) {
   if (!P || !P.ask) return;
   var b = P.ask.bet || P.ask;
   if (v === b.amount) {
-    log('팟벳 <b>' + won(v) + '</b> 선언');
     P.msg = '';
     H.flags.hotSeat = null;
+    var ask = P.ask;
     var after = P.afterAsk;
     if (after) {
       /* 판단이 끝났으니 화면부터 판단 상태에서 빼낸다 —
          이어지는 베팅이 render 를 부르는데 P.ask 는 이미 없다. */
       P.afterAsk = null; P.ask = null; PHASE = 'practice';
+      if (ask.after) ask.after();
       return after();
     }
+    if (ask.after) ask.after();
     pDone();
     return;
   }
