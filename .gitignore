@@ -44,3 +44,6 @@ next-env.d.ts
 
 # 3자 규정 자료 원본 (저작권물 — 로컬 대조용). 규칙 사실은 docs/references/ 에 정리해 둔다
 참고문서/
+
+# worktrees
+.claude/worktrees/
