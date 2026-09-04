@@ -393,3 +393,117 @@ button.seat:focus-visible {
   color: #ffffff;
   line-height: 1;
 }
+
+/* ══════════════════════════════════════════════
+ * 축 2 (액션 판정 러시) 전용
+ *
+ * **같은 파일에 둔다.** 두 축의 테이블은 같은 5열 그리드·같은 펠트이고, 스타일을
+ * 복사하면 정본이 둘이 된다 — 한쪽 좌석 여백만 고쳐지는 식으로 갈라진다.
+ * 축 2 는 카드도 팟도 없고, 대신 액션 라벨과 밀어낸 칩이 있다.
+ * ════════════════════════════════════════════ */
+
+/* 질문의 대상. 지문에만 이름이 있으면 매번 지문을 다시 읽게 된다 */
+.hero {
+  border-color: var(--amber);
+  background: rgba(239, 159, 39, 0.22);
+}
+
+/* 순서를 어긴 좌석 — 무엇이 문제인지가 좌석에서 바로 보여야 한다 */
+.offturn {
+  border-color: var(--dm-danger);
+  border-style: dashed;
+}
+
+/* 아직 액션하지 않은, 지금 차례인 좌석 */
+.waiting {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* 좌석 아래 액션 라벨. 두 줄까지 접히게 두되 좌석 폭을 넘기지 않는다 */
+.act {
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--felt-ink);
+  opacity: 0.82;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* 축 2 의 가운데 자리 — 카드도 팟도 없으므로 스트리트만 적는다 */
+.street {
+  grid-column: 2 / 5;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--felt-ink);
+  opacity: 0.55;
+  min-height: 30px;
+}
+
+/* ── 액션 로그 ────────────────────────────────
+ * 최소 레이즈·재개 유형은 이걸 읽어야 풀린다. 테이블 위에 둔다.
+ * 길어져도 테이블을 밀어내지 않도록 스스로 스크롤한다.
+ *
+ * ⚠️ 글자색을 **여기서 직접 정한다.** `--felt-ink` 는 `.root` 에만 정의돼 있고
+ * 로그는 펠트 바깥이라, var() 를 쓰면 값이 없어 상속색(거의 검정)이 나온다 —
+ * 짙은 초록 배경 위 rgb(23,23,23) 이라 실제로 읽을 수 없었다.
+ * 렌더로만 잡히는 결함이고, 실제로 렌더에서 잡았다. */
+
+.log {
+  color: var(--color-dm-teal-50);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 132px;
+  overflow-y: auto;
+  border-radius: 10px;
+  background: var(--color-dm-teal-900);
+  padding: 6px 8px;
+}
+
+.logRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: inherit;
+}
+
+.logWho {
+  flex: none;
+  width: 3.6em;
+  font-weight: 800;
+  opacity: 0.75;
+}
+
+.logAct {
+  flex: 1;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.logAmount {
+  flex: none;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 짧은 올인이 폭을 갱신하지 않는다는 것이 문제의 핵심이라 눈에 띄어야 한다 */
+.logAllIn .logAct,
+.logAllIn .logAmount {
+  color: var(--color-dm-amber-400);
+}
+
+.logOffturn .logAct {
+  color: var(--dm-danger);
+}

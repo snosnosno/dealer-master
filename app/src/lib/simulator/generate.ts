@@ -107,8 +107,14 @@ export function runBettingRound(
   let lastAggressor: number | null = null
 
   let currentBet = Math.max(...s.seats.map((x) => x.bet))
-  // 프리플랍은 빅블라인드가 오픈 벳 역할을 하므로 레이즈 폭의 출발점이 bb 다.
-  let lastRaiseSize = street === 'preflop' ? bb : 0
+  /*
+   * 레이즈 폭은 상태가 들고 간다 (`HandState.lastRaiseSize`).
+   * 여기서 따로 세면 정본이 둘로 갈라져, 화면이 묻는 "최소 레이즈"와
+   * 생성기가 만든 핸드가 어긋난다.
+   *
+   * 상태가 주는 출발점이 옛 지역 변수와 같은지 확인해 둔다 — 프리플랍은
+   * 빅블라인드 포스트가 bb 로 세워두고, 그 이후 스트릿은 deal_board 가 0 으로 지운다.
+   */
   /*
    * "지금 마주한 벳이 이 라운드의 첫 벳인가" (Rule 51-B, rulesets/types.ts).
    * 마주한 쪽의 성질이지 "아직 벳이 없다"가 아니다 — 프리플랍은 빅블라인드가
@@ -119,8 +125,6 @@ export function runBettingRound(
   const openBetTrajectory: boolean[] = []
 
   const acted = new Set<number>()
-  /** 마지막 "풀 레이즈" 이후 이미 액션한 좌석. 이들에게는 레이즈 권리가 없다. */
-  let actedSinceFullRaise = new Set<number>()
 
   let seat = street === 'preflop' ? (s.buttonSeat + 3) % n : (s.buttonSeat + 1) % n
 
@@ -141,17 +145,20 @@ export function runBettingRound(
 
     openBetTrajectory.push(isOpenBet)
     const e = decideAction(s, seat, {
-      rng, bb, currentBet, lastRaiseSize, isOpenBet, street, plan,
-      canRaise: !actedSinceFullRaise.has(seat),
+      rng, bb, currentBet, lastRaiseSize: s.lastRaiseSize, isOpenBet, street, plan,
+      /*
+       * 결론이 아니라 사실만 넘긴다. "레이즈할 수 있는가"는 룰셋의 canReopen 이
+       * 제35조 4항으로 판정한다 — 예전에는 여기서 "마지막 풀 레이즈 이후 액션했나"로
+       * 계산해 넘겼고, 그 단발 판정이 규정(누적)과 어긋나 있었다.
+       */
+      hasActedThisRound: acted.has(seat),
     })
     events.push(e)
     s = applyEvent(s, e)
     acted.add(seat)
-    actedSinceFullRaise.add(seat)
 
     const newBet = s.seats[seat].bet
     if (newBet > currentBet) {
-      const raiseSize = newBet - currentBet
       /*
        * 오픈 벳 자격을 없애는 것은 "벳이 있었다" 위에 얹힌 레이즈뿐이다.
        * 벳이 없던 자리에 깔린 첫 벳은 그 자신이 오픈 벳이므로 참을 유지한다.
@@ -164,15 +171,6 @@ export function runBettingRound(
       currentBet = newBet
       // 풀 레이즈에 못 미치는 올인도 공격이다 — 리오픈 권리와 공개 순서는 다른 규칙이다.
       lastAggressor = seat
-      /*
-       * 풀 레이즈만 베팅을 다시 연다.
-       * 풀 레이즈에 못 미치는 올인은 lastRaiseSize 를 갱신하지도 않는다 —
-       * 갱신해버리면 그 뒤 사람의 최소 레이즈가 규정보다 작아진다.
-       */
-      if (raiseSize >= Math.max(lastRaiseSize, bb)) {
-        lastRaiseSize = raiseSize
-        actedSinceFullRaise = new Set([seat])
-      }
     }
 
     seat = (seat + 1) % n

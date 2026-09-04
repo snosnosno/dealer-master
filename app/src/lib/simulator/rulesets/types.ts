@@ -35,15 +35,15 @@ export type BettingContext = {
   /** 이번 라운드의 첫 벳인지 — 언더콜 처리가 달라진다 (Rule 51-B) */
   isOpenBet: boolean
   /**
-   * 이 좌석에게 레이즈 권리가 있는지.
-   * 이미 액션한 좌석 앞에 "풀 레이즈에 못 미치는 올인"만 있었다면
-   * 콜·폴드만 가능하고 레이즈로 베팅을 다시 열 수 없다.
+   * 이 좌석이 **이번 베팅 라운드에 이미 액션했는지**. 리오픈 판정의 입력이다.
    *
-   * ⚠️ 이 리오픈 규칙에는 조항 번호 근거가 아직 없다 — 계획서·파일럿 문서
-   * 어디에도 인용이 없다. TDA 2024 PDF 원문으로 조항을 확인할 것.
-   * (규칙 내용 자체는 통용되는 노리밋 관행이나, 번호를 지어내지 않는다.)
+   * 여기에 "레이즈할 수 있는가"라는 **결론**을 넣지 않는다는 점이 중요하다.
+   * 예전에는 `canRaise: boolean` 으로 호출자가 결론을 계산해 넣었고, 그 바람에
+   * 리오픈 규칙이 `generate.ts` 와 `bots.ts` 에 각각 살고 룰셋에는 없었다 —
+   * 그리고 그 사본이 규정과 어긋나 있었다(제35조 4항은 누적인데 단발로 구현됐다).
+   * 결론은 룰셋의 `canReopen` 이 낸다.
    */
-  canRaise: boolean
+  hasActedThisRound: boolean
 }
 
 export type ValidationResult =
@@ -70,6 +70,13 @@ export interface Ruleset {
 
   minRaiseTo(ctx: BettingContext): number
   maxRaiseTo(ctx: BettingContext): number
+
+  /**
+   * 이 좌석이 레이즈로 베팅을 다시 열 수 있는지 (제35조 4항).
+   * **판정은 룰셋의 몫이다** — 호출자가 계산해 넘기면 사본이 생기고, 사본은 갈라진다.
+   */
+  canReopen(ctx: BettingContext): boolean
+
   validateAction(ctx: BettingContext, action: PlayerAction): ValidationResult
 
   /**

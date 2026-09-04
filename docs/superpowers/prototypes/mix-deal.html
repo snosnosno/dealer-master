@@ -1,0 +1,1186 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>믹스게임 딜링 (프로토타입)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700;800&display=swap">
+
+<style>
+:root {
+  --ground:      #EFF3F1;
+  --surface:     #FFFFFF;
+  --surface-2:   #E4ECE8;
+  --ink:         #0E1F1A;
+  --ink-2:       #4B5F58;
+  --ink-3:       #7C8E87;
+  --line:        #D2DED8;
+  --line-strong: #B6C7C0;
+
+  --felt:        #0F6E56;
+  --felt-edge:   #085041;
+  --felt-deep:   #04342C;
+  --felt-ink:    #E1F5EE;
+
+  --amber:       #EF9F27;
+  --amber-ink:   #854F0B;
+  --amber-bg:    #FAEEDA;
+
+  --red:         #B23A2E;
+  --red-ink:     #8E2C22;
+  --red-bg:      #FBEBE8;
+
+  --ok:          #0F6E56;
+  --ok-bg:       #E1F5EE;
+
+  --shadow: 0 1px 2px rgba(4,52,44,.06), 0 10px 28px rgba(4,52,44,.08);
+
+  --sans: 'Pretendard Variable', Pretendard, 'Noto Sans KR', -apple-system,
+          BlinkMacSystemFont, 'Malgun Gothic', 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --chip-100:    #B4B2A9;
+  --chip-500:    #378ADD;
+  --chip-1000:   #1D9E75;
+  --chip-5000:   #2C2C2A;
+  --chip-25000:  #7F77DD;
+  --chip-100000: #EF9F27;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:      #0A1310;
+    --surface:     #111E19;
+    --surface-2:   #18291F;
+    --ink:         #E6F0EC;
+    --ink-2:       #9CB2AA;
+    --ink-3:       #6E837C;
+    --line:        #24372F;
+    --line-strong: #354A41;
+    --felt:        #0D6350;
+    --felt-edge:   #073F33;
+    --felt-deep:   #04241E;
+    --amber-bg:    #35270F;
+    --amber-ink:   #F0C078;
+    --red-bg:      #2E1512;
+    --red-ink:     #E8877A;
+    --ok-bg:       #0E2B23;
+    --ok:          #1D9E75;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  -webkit-text-size-adjust: 100%;
+}
+.wrap { max-width: 560px; margin: 0 auto; padding: 14px 14px 40px; }
+
+/* ── 헤더 ─────────────────────────────────────── */
+.top { display: flex; align-items: baseline; gap: 10px; padding: 4px 2px 10px; }
+.top h1 { font-size: 17px; font-weight: 900; margin: 0; letter-spacing: -.02em; }
+.top .sub { font-size: 11px; color: var(--ink-3); font-weight: 700; }
+.top .spacer { flex: 1; }
+.stat { font-family: var(--mono); font-weight: 800; font-size: 15px; }
+.stat.time { color: var(--amber-ink); }
+.stat.time.low { color: var(--red); }
+
+.bar { height: 4px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--felt); transition: width .25s; }
+.bar.warn > i { background: var(--amber); }
+.bar.crit > i { background: var(--red); }
+
+/* ── 카드(패널) ───────────────────────────────── */
+.panel {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 16px; box-shadow: var(--shadow);
+  margin-top: 12px; overflow: hidden;
+}
+.panel .head {
+  padding: 12px 15px 0;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.kind {
+  font-size: 10.5px; font-weight: 900; letter-spacing: .04em;
+  color: var(--felt); background: var(--ok-bg);
+  padding: 3px 8px; border-radius: 99px;
+}
+.count { font-family: var(--mono); font-size: 11px; font-weight: 800; color: var(--ink-3); }
+.q { padding: 8px 15px 13px; font-size: 16.5px; font-weight: 800; line-height: 1.45; letter-spacing: -.01em; }
+.q em { font-style: normal; color: var(--felt); }
+
+/* ── 상황판 ───────────────────────────────────── */
+.board {
+  background: linear-gradient(170deg, var(--felt) 0%, var(--felt-edge) 100%);
+  padding: 13px 14px 14px; color: var(--felt-ink);
+}
+
+/* ── 펠트 · 테이블 ─────────────────────────────── */
+.felt {
+  position: relative;
+  margin: 0 0 11px;
+  border-radius: 30px / 24px;
+  padding: 11px 8px 9px;
+  background:
+    radial-gradient(ellipse at 50% 32%,
+      color-mix(in srgb, var(--felt) 88%, #fff) 0%, var(--felt) 50%, var(--felt-edge) 100%);
+  box-shadow:
+    inset 0 0 30px rgba(0,0,0,.3),
+    0 0 0 3px var(--felt-deep),
+    0 0 0 8px #33241A,
+    0 0 0 9px rgba(0,0,0,.35),
+    0 6px 16px rgba(0,0,0,.3);
+}
+
+/*
+ * 좌석을 절대좌표로 타원에 뿌리지 않는다 — 폭이 좁아지면 서로 겹친다.
+ * 5열 그리드에 앉히면 겹칠 수가 없고, 바깥 좌석을 아래 줄에 두면 테이블을
+ * 둘러싼 모양이 나온다. 액션이 시계방향으로 도는 게 눈으로 읽히는 것이 목적이다.
+ * (러시 프로토타입에서 확립한 방식 — 같은 이유로 같은 구조를 쓴다)
+ */
+.tbl {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px 4px;
+  align-items: start;
+}
+.seat {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 5px 3px 6px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: rgba(0,0,0,.19);
+  color: var(--felt-ink);
+  min-width: 0; min-height: 50px;
+}
+.seat.hero { border-color: var(--amber); background: rgba(239,159,39,.24); }
+.seat.oot  { border-color: var(--red); background: rgba(178,58,46,.28); }
+.seat.waiting { opacity: .55; }
+/* 히어로는 흐려지지 않는다 — 문제가 묻는 대상이라 가장 잘 보여야 한다.
+   아직 액션하지 않았다는 사실은 벳이 '—' 이고 라벨이 '차례' 인 것으로 이미 드러난다. */
+.seat.hero.waiting { opacity: 1; }
+.sname {
+  display: flex; align-items: center; justify-content: center; gap: 3px; flex-wrap: wrap;
+  font-size: 11.5px; font-weight: 800; line-height: 1.1;
+}
+.sbet { font-family: var(--mono); font-size: 12px; font-weight: 800; }
+.sbet.zero { opacity: .38; }
+.sact { font-size: 9.5px; font-weight: 700; opacity: .78; letter-spacing: .01em; }
+.ptag {
+  font-size: 8.5px; font-weight: 900; padding: 1px 4px; border-radius: 99px;
+  background: var(--red); color: #fff; letter-spacing: .02em;
+}
+.pbtn {
+  font-size: 8.5px; font-weight: 900; width: 14px; height: 14px; border-radius: 50%;
+  background: #FBFBF8; color: #33241A;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.seat.arc { margin-top: 11px; }        /* 가운데가 솟은 아크 착시 */
+
+/* 테이블 가운데 — 이 게임은 보드가 없으므로 팟만 앉는다 */
+.tblcenter {
+  grid-column: 2 / 5; grid-row: 2;
+  display: flex; align-items: center; justify-content: center;
+  padding: 2px 0; min-height: 44px;
+}
+
+/* 팟 더미 — 콜 금액과 테이블 위 총액이 눈에 보여야 한다 */
+.potpile {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 6px 14px 7px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.16);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+}
+.potpile .lbl {
+  font-size: 9.5px; font-weight: 800;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--felt-ink); opacity: .7;
+}
+.potpile .amt {
+  font-family: var(--mono); font-size: 18px; font-weight: 800;
+  font-variant-numeric: tabular-nums; color: #FFFFFF; line-height: 1;
+}
+
+/* 딜러 자리 — 덱과 컷카드. 이 화면에서 유일한 "딜러 시점" 요소다 */
+.dealerbox {
+  grid-column: 1 / 6; grid-row: 3;
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; margin-top: 3px; padding-top: 6px;
+  border-top: 1px dashed rgba(255,255,255,.13);
+}
+.dlabel {
+  font-size: 10px; font-weight: 800; letter-spacing: .12em;
+  color: var(--felt-ink); opacity: .6;
+}
+.deck { position: relative; display: inline-block; }
+.pcard {
+  --cw: clamp(24px, 6.4vw, 30px);
+  display: inline-block; vertical-align: top;
+  width: var(--cw); height: calc(var(--cw) * 1.5);
+  border-radius: calc(var(--cw) * .083);
+  flex: none; overflow: hidden;
+}
+/* 에셋 덱에는 뒷면이 없다(Commons 뒷면은 LGPL) — 여기만 CSS 로 그린다 */
+.pcard.back {
+  background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,.15) 0 2px, rgba(255,255,255,0) 2px 5px),
+    repeating-linear-gradient(-45deg, rgba(255,255,255,.15) 0 2px, rgba(255,255,255,0) 2px 5px),
+    linear-gradient(150deg, #B23A2E 0%, #78221B 100%);
+  box-shadow:
+    0 2px 5px rgba(0,0,0,.4), inset 0 0 0 2px #FBFBF8, inset 0 0 0 3px rgba(0,0,0,.18),
+    3px 3px 0 -1px #8E2C22, 5px 5px 0 -2px #78221B;
+}
+.cutcard {
+  position: absolute; left: 5px; top: 4px;
+  width: clamp(24px, 6.4vw, 30px);
+  height: calc(clamp(24px, 6.4vw, 30px) * 1.5);
+  border-radius: 4px;
+  background: linear-gradient(150deg, #F5C349, #DB9C19);
+  box-shadow: 0 2px 5px rgba(0,0,0,.4), inset 0 0 0 1px rgba(0,0,0,.2);
+}
+.blindline {
+  font-family: var(--mono); font-size: 11px; font-weight: 800;
+  opacity: .82; letter-spacing: .02em; margin-bottom: 9px;
+}
+.seq {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 5px;
+  font-size: 11.5px; font-weight: 700; line-height: 1.5;
+  background: rgba(0,0,0,.2); border-radius: 10px; padding: 8px 11px;
+  animation: slide .22s ease-out backwards;
+}
+.seq span { opacity: .9; }
+.seq span b { font-family: var(--mono); font-weight: 800; font-size: 12.5px; }
+.seq span.hi { color: var(--amber); opacity: 1; }
+.seq span.oot { color: #FFB4A8; opacity: 1; }
+.seq i { opacity: .45; font-style: normal; font-size: 10.5px; }
+@keyframes slide { from { opacity: 0; transform: translateX(-6px); } }
+
+/* ── 칩 ───────────────────────────────────────── */
+.chips { display: flex; gap: 7px; flex-wrap: wrap; align-items: flex-end; }
+.stack { display: flex; flex-direction: column; align-items: center; }
+.pile { display: flex; flex-direction: column-reverse; align-items: center; }
+.chip {
+  --cs: 21px;
+  width: var(--cs); height: var(--cs); border-radius: 50%;
+  margin-top: calc(var(--cs) * -.72);
+  border: 1px solid rgba(0,0,0,.4);
+  background-color: var(--c, #999);
+  background-image:
+    radial-gradient(circle at 50% 50%,
+      color-mix(in srgb, var(--c, #999) 74%, #FFFFFF) 0 55%, rgba(0,0,0,0) 56%),
+    repeating-conic-gradient(from 8deg,
+      rgba(255,255,255,.92) 0 10deg, rgba(255,255,255,0) 10deg 45deg);
+  box-shadow: 0 2px 3px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.22),
+              inset 0 -3px 5px rgba(0,0,0,.3), inset 0 2px 3px rgba(255,255,255,.2);
+  flex: none;
+  animation: drop .2s ease-out backwards;
+}
+.pile .chip:last-child { margin-top: 0; }
+.stack .cnt {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 800;
+  color: var(--felt-ink); opacity: .8; margin-top: 4px; white-space: nowrap;
+}
+@keyframes drop { from { opacity: 0; transform: translateY(-9px); } }
+
+/*
+ * 칩은 좌석 안에 그린다. 실제 테이블에서 플레이어가 민 칩은 그 사람 앞에 놓인다 —
+ * 테이블 밖 별도 상자로 빼면 누가 밀었는지가 그림에서 끊긴다.
+ */
+.schips { display: flex; justify-content: center; min-height: 26px; }
+.schips .chip { --cs: 19px; }
+.schips .chips { gap: 6px; }
+.schips .stack .cnt { font-size: 9px; opacity: .95; }
+/* 민 칩은 문제의 주인공이라 크게 — 개수를 세는 것이 곧 정답이다 */
+.seat.pushing .schips .chip { --cs: 24px; }
+.seat.pushing .schips .stack .cnt { font-size: 10px; opacity: 1; }
+
+/* ── 답변 ─────────────────────────────────────── */
+.answers { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+.opt {
+  display: block; width: 100%; text-align: left;
+  font-family: var(--sans); font-size: 14.5px; font-weight: 700; color: var(--ink);
+  background: var(--surface); border: 1.5px solid var(--line-strong);
+  border-radius: 12px; padding: 13px 14px; cursor: pointer;
+  transition: transform .06s, border-color .12s, background .12s;
+}
+.opt:hover:not(:disabled) { border-color: var(--felt); background: var(--ok-bg); }
+.opt:active:not(:disabled) { transform: scale(.99); }
+.opt .note { display: block; font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin-top: 3px; }
+.opt.right { border-color: var(--ok); background: var(--ok-bg); border-width: 2px; }
+.opt.wrong { border-color: var(--red); background: var(--red-bg); border-width: 2px; }
+/* 색만으로 정답을 알리지 않는다 — 색각 이상에서도 읽혀야 하고, 어두운 배경에서 색차가 약하다 */
+.opt.right::before, .opt.wrong::before {
+  float: right; margin-left: 10px; font-size: 17px; font-weight: 900; line-height: 1.1;
+}
+.opt.right::before { content: '✓'; color: var(--ok); }
+.opt.wrong::before { content: '✕'; color: var(--red); }
+.opt:disabled { cursor: default; opacity: .62; }
+.opt.right:disabled, .opt.wrong:disabled { opacity: 1; }
+
+.numrow { display: flex; gap: 8px; align-items: stretch; }
+.numrow input {
+  flex: 1; min-width: 0;
+  font-family: var(--mono); font-size: 21px; font-weight: 800; text-align: right;
+  color: var(--ink); background: var(--surface);
+  border: 1.5px solid var(--line-strong); border-radius: 12px; padding: 11px 13px;
+}
+.numrow input:focus { outline: none; border-color: var(--felt); }
+.go {
+  font-family: var(--sans); font-size: 15px; font-weight: 900; color: #fff;
+  background: var(--felt); border: none; border-radius: 12px;
+  padding: 0 22px; cursor: pointer;
+}
+.go:active { transform: scale(.98); }
+.hint { font-size: 11.5px; color: var(--ink-3); font-weight: 600; padding: 0 1px; }
+
+/* ── 결과 ─────────────────────────────────────── */
+.verdict { padding: 13px 15px 14px; border-top: 1px solid var(--line); }
+.verdict.ok { background: var(--ok-bg); }
+.verdict.no { background: var(--red-bg); }
+.verdict .head2 { font-size: 15px; font-weight: 900; margin-bottom: 5px; }
+.verdict.ok .head2 { color: var(--ok); }
+.verdict.no .head2 { color: var(--red-ink); }
+.verdict .why { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); font-weight: 600; }
+.verdict .why b { color: var(--ink); font-weight: 800; }
+.cite {
+  margin-top: 9px; padding: 9px 11px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+}
+.cite .art { font-size: 11px; font-weight: 900; color: var(--felt); letter-spacing: .02em; }
+.cite .txt { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); margin-top: 3px; font-weight: 600; }
+
+.next {
+  display: block; width: 100%; margin-top: 11px;
+  font-family: var(--sans); font-size: 15.5px; font-weight: 900; color: #fff;
+  background: var(--felt); border: none; border-radius: 12px; padding: 14px; cursor: pointer;
+}
+.next:active { transform: scale(.995); }
+
+/* ── 종료 화면 ────────────────────────────────── */
+.done { padding: 26px 18px 22px; text-align: center; }
+.done .big { font-family: var(--mono); font-size: 46px; font-weight: 800; letter-spacing: -.03em; }
+.done .lbl { font-size: 12px; font-weight: 800; color: var(--ink-3); margin-top: 2px; }
+.done .best { font-size: 12.5px; font-weight: 800; color: var(--amber-ink); margin-top: 8px; }
+.tally { margin-top: 16px; display: flex; flex-direction: column; gap: 5px; text-align: left; }
+.tline {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 12.5px; font-weight: 700; color: var(--ink-2);
+  padding: 7px 11px; background: var(--surface-2); border-radius: 9px;
+}
+.tline .n { flex: 1; }
+.tline .s { font-family: var(--mono); font-weight: 800; }
+.tline.miss { color: var(--red-ink); background: var(--red-bg); }
+
+.foot { text-align: center; font-size: 11px; color: var(--ink-3); margin-top: 14px; font-weight: 600; }
+
+/* ── 믹스게임 전용 ─────────────────────────────── */
+
+/*
+ * 지금 무슨 게임인지가 이 축의 전부다. 문제마다 종목이 바뀌므로 제목보다 크게,
+ * 문제 지문보다 먼저 읽히는 자리에 둔다 — 종목을 놓치면 나머지가 전부 틀린다.
+ */
+.game {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 12px 15px 0;
+}
+.game .ko { font-size: 19px; font-weight: 900; letter-spacing: -.02em; }
+.game .en { font-size: 11px; font-weight: 800; color: var(--ink-3); letter-spacing: .02em; }
+.game .tags { display: flex; gap: 4px; margin-left: auto; }
+.game .tag {
+  font-size: 9.5px; font-weight: 900; letter-spacing: .02em;
+  padding: 3px 7px; border-radius: 99px;
+  background: var(--surface-2); color: var(--ink-2);
+}
+.game .tag.fam { background: var(--ok-bg); color: var(--felt); }
+
+/* 스트릿 진행 — 지금 어느 스트릿인지 */
+.streets {
+  display: flex; gap: 4px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 800;
+  margin-bottom: 10px;
+}
+.streets span { padding: 2px 7px; border-radius: 99px; background: rgba(0,0,0,.22); opacity: .6; }
+.streets span.now { background: var(--amber); color: #33241A; opacity: 1; }
+.streets span.past { opacity: .38; }
+
+/* 앞면 카드. 에셋 스프라이트를 쓰지 않는다 — 프로토타입은 랭크와 무늬만 읽히면 된다 */
+.pcard.face {
+  background: #FBFBF8;
+  display: inline-flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 0;
+  color: #16211D; font-weight: 900; line-height: 1;
+  box-shadow: 0 2px 5px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.15);
+}
+.pcard.face.red { color: #B23A2E; }
+.pcard.face .r { font-size: calc(var(--cw) * .46); font-family: var(--mono); }
+.pcard.face .s { font-size: calc(var(--cw) * .40); }
+.hand { display: flex; gap: 2px; justify-content: center; align-items: center; flex-wrap: nowrap; max-width: 100%; }
+.hand .pcard { --cw: clamp(15px, 4vw, 22px); }
+/* 접은 다운카드의 장수. 카드 옆에 붙어 "이만큼 더 있다"만 말한다 */
+.cnt2 {
+  font-family: var(--mono); font-size: 10px; font-weight: 800;
+  color: var(--felt-ink); opacity: .85; margin-left: 1px;
+}
+/* 컷카드는 덱 **뒤**에 깔린다. 앞에 두면 덱을 통째로 덮는다 */
+.deck .cutcard { z-index: 0; }
+.deck .pcard { position: relative; z-index: 1; }
+.seat.pickable { cursor: pointer; }
+.seat.pickable:hover { border-color: var(--amber); }
+.seat.right2 { border-color: var(--ok); background: rgba(15,110,86,.42); }
+.seat.wrong2 { border-color: var(--red); background: rgba(178,58,46,.34); }
+.note2 {
+  font-size: 11.5px; font-weight: 700; color: var(--felt-ink); opacity: .85;
+  margin-top: 9px; line-height: 1.5;
+}
+</style>
+
+<style>
+/* ── 딜링 시뮬 전용 ───────────────────────────── */
+.hud { display: flex; align-items: baseline; gap: 10px; padding: 4px 2px 10px; }
+.hud h1 { font-size: 17px; font-weight: 900; margin: 0; letter-spacing: -.02em; }
+.hud .sub { font-size: 11px; color: var(--ink-3); font-weight: 700; }
+.hud .spacer { flex: 1; }
+.hud .miss { color: var(--red); }
+
+/* 진행 단계 — 지금 핸드의 어디쯤인지 */
+.progress { height: 4px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+.progress > i { display: block; height: 100%; background: var(--felt); transition: width .3s; }
+
+.stage {
+  font-size: 10.5px; font-weight: 900; letter-spacing: .04em;
+  color: var(--felt); background: var(--ok-bg);
+  padding: 3px 8px; border-radius: 99px;
+}
+.ask { padding: 9px 15px 12px; font-size: 16.5px; font-weight: 800; line-height: 1.45; letter-spacing: -.01em; }
+.ask em { font-style: normal; color: var(--felt); }
+
+/* 딜러 앞 — 스텁·번·팟 */
+.dealerrow {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 10px; font-family: var(--mono); font-size: 11px; font-weight: 800;
+  color: var(--felt-ink); opacity: .9;
+}
+.dealerrow .burn { color: var(--amber); }
+.potbox {
+  font-family: var(--mono); font-weight: 800; font-size: 13px;
+  background: rgba(0,0,0,.28); color: var(--felt-ink);
+  padding: 4px 10px; border-radius: 99px;
+}
+
+/* 진행 로그 — 딜러가 지금까지 한 일 */
+.dlog {
+  margin-top: 11px; max-height: 116px; overflow-y: auto;
+  background: var(--surface-2); border-radius: 10px; padding: 8px 11px;
+  font-size: 11.5px; line-height: 1.6; font-weight: 600; color: var(--ink-2);
+}
+.dlog b { color: var(--ink); font-weight: 800; }
+.dlog .bad { color: var(--red-ink); font-weight: 800; }
+.dlog .row { display: flex; gap: 6px; }
+.dlog .row .n { font-family: var(--mono); font-size: 10px; opacity: .5; flex: none; width: 16px; text-align: right; }
+
+.seat.act { border-color: var(--amber); background: rgba(239,159,39,.26); }
+.seat.dead { opacity: .38; }
+.sbet2 { font-family: var(--mono); font-size: 11px; font-weight: 800; }
+.sbet2.zero { opacity: .35; }
+
+.incident {
+  margin: 10px 0 0; padding: 9px 11px; border-radius: 10px;
+  background: rgba(178,58,46,.34); border: 1px solid rgba(255,180,168,.45);
+  color: #FFE2DC; font-size: 12.5px; font-weight: 700; line-height: 1.5;
+}
+.incident b { color: #fff; }
+</style>
+
+<div class="wrap">
+  <div class="hud">
+    <h1>믹스게임 딜링</h1>
+    <span class="sub">프로토타입 · 한 핸드</span>
+    <span class="spacer"></span>
+    <span class="stat" id="clock">0:00</span>
+    <span class="stat miss" id="miss">실수 0</span>
+  </div>
+  <div class="progress" id="prog"><i style="width:0%"></i></div>
+  <div id="app"></div>
+  <p class="foot">Mix Game Guide v1 · Mixed Games Rules(2026-01) 기준 · 카드는 매번 새로 섞인다</p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /*
+   * 딜러가 되어 한 핸드를 처음부터 끝까지 진행한다.
+   *
+   * 축 1·2 의 러시와 다른 물건이다. 러시는 "이게 얼마인가 / 합법인가"를 묻고 끝나지만
+   * 여기서는 **테이블이 실제로 진행된다** — 앤티가 들어오고, 카드가 나가고, 팟이 자라고,
+   * 업카드가 쌓인다. 각 스텝의 선택이 다음 화면을 바꾼다.
+   *
+   * ADR-002 가 홀덤 진행 모드를 버린 이유는 "순서만 알면 무조건 맞는 클릭"이 많아서였다.
+   * 스터드·드로우는 그 순서 자체를 아무도 모른다는 점이 다르다. 그래도 같은 함정을 피하려고
+   * 베팅 라운드 자체는 자동으로 흘려보내고, **딜러가 실제로 판단하는 지점만** 묻는다.
+   *
+   * 진행 순서는 손으로 적지 않는다. `SPECS` 를 읽어 스텝을 만든다 — 게임을 추가하면
+   * 스펙 하나로 딜링 절차가 따라온다는 것이 축 3 의 설계 가설이고, 여기서 검증한다.
+   */
+
+  // 유틸 ─────────────────────────────────────────
+  function rnd(n) { return Math.floor(Math.random() * n); }
+  function pick(a) { return a[rnd(a.length)]; }
+  function fmt(n) { return n.toLocaleString('ko-KR'); }
+  function $(s) { return document.querySelector(s); }
+  function shuffle(a) {
+    var out = a.slice();
+    for (var i = out.length - 1; i > 0; i--) { var j = rnd(i + 1), t = out[i]; out[i] = out[j]; out[j] = t; }
+    return out;
+  }
+  /** 받침에 맞는 조사만 돌려준다. 스트릿 이름이 스펙 데이터라 나중에 받침이 바뀐다. */
+  function part(word, withFinal, withoutFinal) {
+    var last = word.charCodeAt(word.length - 1);
+    var hasFinal = last >= 0xAC00 && last <= 0xD7A3 && (last - 0xAC00) % 28 !== 0;
+    return hasFinal ? withFinal : withoutFinal;
+  }
+
+  // 게임 스펙 ────────────────────────────────────
+  /* mix-rush.html 과 같은 모양이다. 스펙 하나로 문제도, 딜링 절차도 나온다. */
+  var SPECS = {
+    stud7: {
+      id: 'stud7', ko: '7카드 스터드', en: '7-Card Stud',
+      family: 'stud', familyKo: '스터드',
+      holeCardCount: 7,
+      forced: 'ante+bringin',
+      bettingKo: '픽스 리밋', raiseCap: 5,
+      streets: [
+        { id: '3rd', ko: '3번째 카드', short: '3번째', deal: { down: 2, up: 1 }, burn: false, firstToAct: 'lowest-upcard', size: 1 },
+        { id: '4th', ko: '4번째 카드', short: '4번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'highest-upcard', size: 1 },
+        { id: '5th', ko: '5번째 카드', short: '5번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'highest-upcard', size: 2 },
+        { id: '6th', ko: '6번째 카드', short: '6번째', deal: { down: 0, up: 1 }, burn: true, firstToAct: 'highest-upcard', size: 2 },
+        { id: '7th', ko: '7번째 카드', short: '7번째', deal: { down: 1, up: 0 }, burn: true, firstToAct: 'highest-upcard', size: 2 }
+      ]
+    },
+    td27: {
+      id: 'td27', ko: '2-7 트리플 드로우', en: '2-7 Triple Draw',
+      family: 'draw', familyKo: '드로우',
+      holeCardCount: 5,
+      forced: 'blinds',
+      bettingKo: '픽스 리밋', raiseCap: 5,
+      draw: { rounds: 3, maxDiscard: 5 },
+      streets: [
+        { id: 'predraw', ko: '베팅 라운드', short: '첫 베팅', deal: { down: 5, up: 0 }, burn: false, firstToAct: 'left-of-bb', size: 1 },
+        { id: 'draw1', ko: '첫 번째 드로우', short: '드로우 1', draw: true, burn: true, firstToAct: 'left-of-button', size: 1 },
+        { id: 'draw2', ko: '두 번째 드로우', short: '드로우 2', draw: true, burn: true, firstToAct: 'left-of-button', size: 2 },
+        { id: 'draw3', ko: '세 번째 드로우', short: '드로우 3', draw: true, burn: true, firstToAct: 'left-of-button', size: 2 }
+      ]
+    }
+  };
+
+  var GUIDE = 'Mix Game Guide v1';
+  var PROTO = 'Mixed Games Rules & Protocols (2026-01)';
+
+  // 카드 ─────────────────────────────────────────
+  var RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
+  var SUITS = [
+    { s: '♠', red: false }, { s: '♥', red: true },
+    { s: '♦', red: true }, { s: '♣', red: false }
+  ];
+  function newDeck() {
+    var d = [], i, k;
+    for (i = 0; i < RANKS.length; i++) for (k = 0; k < SUITS.length; k++) d.push({ r: RANKS[i], su: SUITS[k] });
+    return shuffle(d);
+  }
+  function cardFace(c) {
+    return '<span class="pcard face' + (c.su.red ? ' red' : '') + '">' +
+      '<b class="r">' + c.r + '</b><b class="s">' + c.su.s + '</b></span>';
+  }
+  function downPile(n) {
+    if (n <= 0) return '';
+    return '<span class="pcard back"></span>' + (n > 1 ? '<b class="cnt2">×' + n + '</b>' : '');
+  }
+
+  var NAMES = ['정하늘', '박서준', '한다은', '이민아', '윤소라'];
+  var POS = ['BTN', 'SB', 'BB', 'UTG', 'CO'];
+  var SEAT_N = 5;
+
+  // 테이블 상태 ──────────────────────────────────
+  function newTable(spec) {
+    var deck = newDeck();
+    var seats = [], i;
+    var btn = rnd(SEAT_N);
+    for (i = 0; i < SEAT_N; i++) {
+      seats.push({
+        name: spec.family === 'draw' ? POS[(i - btn + SEAT_N) % SEAT_N] : NAMES[i],
+        pos: (i - btn + SEAT_N) % SEAT_N,   // 0=BTN 1=SB 2=BB 3=UTG 4=CO
+        down: [], up: [], bet: 0, folded: false, draws: 0
+      });
+    }
+    var small = pick([2000, 4000, 10000]);
+    return {
+      spec: spec, seats: seats, deck: deck, di: 0, pot: 0, burns: 0,
+      small: small, big: small * 2, ante: Math.round(small / 8 / 100) * 100 || 100,
+      bringin: Math.round(small / 2 / 100) * 100,
+      log: [], stepAt: 0
+    };
+  }
+  function draw(st) { return st.deck[st.di++]; }
+  function alive(st) { return st.seats.filter(function (s) { return !s.folded; }); }
+  function log(st, html) { st.log.push(html); }
+
+  /** 업카드 랭크 비교용. 스터드 액션 순서의 근거다. */
+  function topUp(seat) {
+    var best = -1;
+    for (var i = 0; i < seat.up.length; i++) best = Math.max(best, RANKS.indexOf(seat.up[i].r));
+    return best;
+  }
+  function seatIndexBy(st, mode) {
+    var live = st.seats.map(function (s, i) { return { s: s, i: i }; })
+      .filter(function (x) { return !x.s.folded; });
+    var best = null, i;
+    if (mode === 'lowest-upcard' || mode === 'highest-upcard') {
+      for (i = 0; i < live.length; i++) {
+        if (best === null) { best = live[i]; continue; }
+        var a = topUp(live[i].s), b = topUp(best.s);
+        if (mode === 'lowest-upcard' ? a < b : a > b) best = live[i];
+      }
+      return best.i;
+    }
+    var wantPos = mode === 'left-of-bb' ? 3 : 1;   // UTG : SB
+    for (i = 0; i < live.length; i++) if (live[i].s.pos === wantPos) return live[i].i;
+    return live[0].i;
+  }
+
+  // 보기 만들기 ──────────────────────────────────
+  function opts(right, wrongs) {
+    var all = [{ label: right, ok: true }];
+    for (var i = 0; i < wrongs.length; i++) all.push({ label: wrongs[i], ok: false });
+    return shuffle(all);
+  }
+
+  // 스텝 ─────────────────────────────────────────
+  /*
+   * 스텝 하나 = 딜러의 판단 하나. `apply` 가 테이블을 실제로 바꾼다.
+   * 스텝 목록은 스펙에서 만든다 (buildSteps) — 절차를 손으로 적지 않는다.
+   */
+
+  function stepForced(spec) {
+    var ante = spec.forced === 'ante+bringin';
+    return {
+      stage: '핸드 시작',
+      ask: '핸드를 시작한다. <em>먼저 할 일</em>은?',
+      opts: function () {
+        return opts(ante ? '전원에게 앤티를 받는다' : 'SB · BB 를 받는다',
+          ante ? ['SB · BB 를 받는다', '브링인부터 받는다', '카드부터 딜한다']
+            : ['전원에게 앤티를 받는다', '브링인을 받는다', '카드부터 딜한다']);
+      },
+      why: ante
+        ? '스터드에는 <b>SB · BB 가 없다.</b> 전원이 앤티를 내고 시작한다. 브링인은 카드가 나간 뒤 3번째 카드에서 정해진다.'
+        : '버튼 왼쪽이 SB, 그 왼쪽이 BB 다. 강제 베팅을 받고 카드를 딜한다.',
+      cite: { src: GUIDE, txt: ante
+        ? '스터드에는 SB와 BB가 없습니다. 대신 각 플레이어는 카드가 나눠지기 전에 Ante를 지불합니다.'
+        : '버튼 바로 왼쪽에 앉은 플레이어가 스몰 블라인드를 포스트하고, 스몰 블라인드 왼쪽에 앉은 플레이어가 빅 블라인드를 포스트하고 진행합니다.' },
+      apply: function (st) {
+        var i;
+        if (ante) {
+          for (i = 0; i < st.seats.length; i++) st.pot += st.ante;
+          log(st, '전원 앤티 <b>' + fmt(st.ante) + '</b> · 팟 ' + fmt(st.pot));
+        } else {
+          for (i = 0; i < st.seats.length; i++) {
+            if (st.seats[i].pos === 1) st.seats[i].bet = st.small / 2;
+            if (st.seats[i].pos === 2) st.seats[i].bet = st.small;
+          }
+          log(st, 'SB <b>' + fmt(st.small / 2) + '</b> · BB <b>' + fmt(st.small) + '</b>');
+        }
+      }
+    };
+  }
+
+  function stepDeal(spec, at) {
+    var street = spec.streets[at];
+    var d = street.deal;
+    var label = d.down > 0 && d.up > 0 ? '다운 ' + d.down + '장 + 업 ' + d.up + '장'
+      : d.up > 0 ? '업 ' + d.up + '장' : '다운 ' + d.down + '장';
+    var wrongs = ['다운 2장 + 업 1장', '업 1장', '다운 1장', '다운 5장', '업 2장']
+      .filter(function (x) { return x !== label; }).slice(0, 3);
+    return {
+      stage: at === 0 ? '첫 딜' : street.ko,
+      ask: at === 0 ? '카드를 딜한다. 한 사람에게 <em>어떻게</em> 주나?'
+        : '<em>' + street.ko + '</em> 차례다. <em>어떻게</em> 딜하나?',
+      opts: function () { return opts(label, wrongs); },
+      why: street.id === '3rd'
+        ? '첫 카드는 <b>다운 2장과 업 1장</b>이다. 업으로 나간 것이 도어카드이고, 브링인을 정하는 것도 이 카드다.'
+        : street.id === '7th'
+          ? '7번째 카드는 <b>다운</b>으로 딜한다. 업으로 나가면 안 된다.'
+          : '이번에는 <b>' + label + '</b>이다.',
+      cite: { src: GUIDE, txt: street.id === '3rd'
+        ? '처음 두 장은 페이스다운으로, 마지막 한 장은 페이스업으로 나눠줍니다. 이때 페이스업된 카드를 도어카드라고 부릅니다.'
+        : street.id === '7th'
+          ? '7번째 카드는 페이스 다운으로 나눠줍니다.'
+          : '배팅라운드가 끝나고 카드를 나눠주기 전에 항상 버닝카드를 내립니다.' },
+      apply: function (st) {
+        var i, k;
+        for (i = 0; i < st.seats.length; i++) {
+          if (st.seats[i].folded) continue;
+          for (k = 0; k < d.down; k++) st.seats[i].down.push(draw(st));
+          for (k = 0; k < d.up; k++) st.seats[i].up.push(draw(st));
+        }
+        log(st, street.ko + ' — ' + label + ' 딜');
+      }
+    };
+  }
+
+  function stepBurn(spec, at) {
+    var street = spec.streets[at];
+    return {
+      stage: street.ko,
+      ask: street.draw
+        ? '교체 장수를 다 확인했다. <em>다음에 할 일</em>은?'
+        : '베팅이 끝났다. <em>다음에 할 일</em>은?',
+      opts: function () {
+        return opts('번카드를 한 장 내린다',
+          [street.draw ? '바로 교체 카드를 딜한다' : '바로 ' + street.ko + '를 딜한다',
+            '팟을 먼저 정리한다', '덱을 다시 섞는다']);
+      },
+      why: '베팅 라운드가 끝나고 카드를 딜하기 전에는 <b>항상</b> 번카드를 한 장 내린다.',
+      cite: { src: GUIDE, txt: street.draw
+        ? '마지막 버튼 플레이어까지 확인이 끝나면 버닝카드를 한 장 내린 후, SB플레이어부터 바꾸는 카드를 회수한 후, 회수한 만큼의 카드 수를 스텁에서 나눠줍니다.'
+        : '배팅라운드가 끝나고 카드를 나눠주기 전에 항상 버닝카드를 내립니다.' },
+      apply: function (st) {
+        draw(st); st.burns++;
+        log(st, '번카드 <b>1장</b> (누적 ' + st.burns + ')');
+      }
+    };
+  }
+
+  function stepBringIn(spec) {
+    return {
+      stage: '3번째 카드',
+      ask: '카드를 다 딜했다. <em>브링인</em>은 누구인가?',
+      seat: function (st) { return seatIndexBy(st, 'lowest-upcard'); },
+      why: '<b>가장 낮은 업카드</b>가 브링인을 낸다. 브링인은 정해진 금액을 내거나 컴플리트로 올릴 수 있고, <b>컴플리트가 곧 첫 벳</b>이다.',
+      cite: { src: GUIDE, txt: '공개된 카드 중 가장 낮은 랭크를 가진 플레이어가 브링인(Bring-In) 배팅을 시작합니다.' },
+      apply: function (st, i) {
+        st.seats[i].bet = st.bringin;
+        log(st, '<b>' + st.seats[i].name + '</b> 브링인 ' + fmt(st.bringin));
+      }
+    };
+  }
+
+  function stepFirstAct(spec, at) {
+    var street = spec.streets[at];
+    var mode = street.firstToAct;
+    return {
+      stage: street.ko,
+      ask: mode === 'left-of-bb' ? '카드를 다 딜했다. <em>첫 액션</em>은 누구인가?'
+        : street.draw ? '<em>' + street.ko + '</em>' + part(street.ko, '이', '가') + ' 끝났다. <em>첫 액션</em>은 누구인가?'
+          : '<em>' + street.ko + '</em>까지 딜했다. <em>첫 액션</em>은 누구인가?',
+      seat: function (st) { return seatIndexBy(st, mode); },
+      why: mode === 'highest-upcard'
+        ? '4번째 카드부터는 <b>가장 높은 업카드</b>가 액션을 시작한다 — 브링인을 정하던 3번째 카드와 반대다.'
+        : mode === 'left-of-bb'
+          ? '첫 베팅 라운드는 <b>BB 왼쪽(UTG)</b> 부터다.'
+          : '드로우가 끝난 뒤의 라운드는 <b>버튼 왼쪽(SB)</b> 부터다 — 블라인드가 다시 앞에 선다.',
+      cite: { src: GUIDE, txt: mode === 'highest-upcard'
+        ? '4번째 카드를 받은 후 가장 높은 랭크의 공개 카드를 가진 플레이어가 액션을 시작합니다.'
+        : mode === 'left-of-bb'
+          ? '각 플레이어들에게 순서대로 카드를 5장 나눠준 후 빅 블라인드 왼쪽에 앉은 플레이어부터 액션을 시작합니다.'
+          : '모든 플레이어의 액션이 끝나면 버튼 왼쪽에 있는 플레이어부터 몇 장의 카드를 버리고 다시 드로우 할 것인지 순서대로 확인합니다.' },
+      apply: function (st, i) {
+        st.actor = i;
+        log(st, '액션 시작 — <b>' + st.seats[i].name + '</b>');
+      }
+    };
+  }
+
+  function stepBet(spec, at) {
+    var street = spec.streets[at];
+    var big = street.size === 2;
+    return {
+      stage: street.ko,
+      askFn: function (st) {
+        return '베팅을 진행한다. 이 라운드 <em>벳 사이즈</em>는? (' +
+          fmt(st.small) + ' / ' + fmt(st.big) + ' 리밋)';
+      },
+      opts: function (st) {
+        return opts(big ? '빅벳 ' + fmt(st.big) : '스몰벳 ' + fmt(st.small),
+          [big ? '스몰벳 ' + fmt(st.small) : '빅벳 ' + fmt(st.big),
+            '앤티만큼 ' + fmt(st.ante), '제한 없음']);
+      },
+      why: big
+        ? (spec.family === 'stud'
+          ? '스터드는 <b>5번째 카드부터</b> 빅벳이다.'
+          : '드로우는 두 번의 드로우가 끝난 <b>세 번째 베팅 라운드부터</b> 빅벳이다.')
+        : '아직 <b>스몰벳</b> 구간이다. 레이즈도 같은 단위로만 올라간다.',
+      cite: { src: GUIDE, txt: spec.family === 'stud'
+        ? '(5번째 카드 이후) 모든 베팅은 빅 배팅(Big Bet) 크기로 진행됩니다.'
+        : '2번의 드로우가 끝나고 세번째 배팅라운드부터 배팅금액은 두배가 됩니다.' },
+      apply: function (st) {
+        /* 베팅 자체는 자동으로 흘려보낸다 — 여기서 훈련하는 것은 딜러의 절차이지 플레이가 아니다 */
+        var unit = big ? st.big : st.small;
+        var line = [], i;
+        for (i = 0; i < st.seats.length; i++) {
+          var s = st.seats[i];
+          if (s.folded) continue;
+          var folds = alive(st).length > 2 && rnd(10) < 3;
+          if (folds) {
+            s.folded = true; st.pot += s.bet; s.bet = 0;
+            s.down = []; s.up = [];       // 딜러가 먹으로 가져간다
+            line.push(s.name + ' 폴드'); continue;
+          }
+          st.pot += s.bet + unit; s.bet = 0;
+          line.push(s.name + ' 콜');
+        }
+        log(st, line.join(' · ') + ' — 팟 <b>' + fmt(st.pot) + '</b>');
+      }
+    };
+  }
+
+  function stepDrawOrder(spec, at) {
+    var street = spec.streets[at];
+    return {
+      stage: street.ko,
+      ask: '교체 장수를 확인할 차례다. <em>누구부터</em> 묻나?',
+      seat: function (st) { return seatIndexBy(st, 'left-of-button'); },
+      why: '<b>버튼 왼쪽(SB)</b> 부터 시계 방향으로 몇 장 바꿀지 확인한다. 구두로 말한 장수는 <b>구속력이 있다</b> — 선언한 뒤에는 장수를 바꿀 수 없다.',
+      cite: { src: PROTO, txt: '교체 장수의 구두 선언은 구속력이 있다. 순서를 어긴 선언이어도 장수는 바꿀 수 없다. 다만 새 카드를 받기 전이라면 버릴 카드 자체는 바꿀 수 있다.' },
+      apply: function (st, i) {
+        log(st, '교체 확인 시작 — <b>' + st.seats[i].name + '</b>');
+      }
+    };
+  }
+
+  function stepDrawExec(spec, at) {
+    var street = spec.streets[at];
+    return {
+      stage: street.ko,
+      ask: '번카드를 내렸다. <em>교체 카드</em>를 어떻게 주나?',
+      opts: function () {
+        return opts('SB 부터 순서대로, 회수한 만큼 딜한다',
+          ['전원의 버린 카드를 먼저 먹에 넣는다', '버튼부터 순서대로 딜한다', '한 번에 모아서 딜한다']);
+      },
+      why: 'SB 부터 <b>버린 카드를 회수한 뒤 그만큼 딜한다.</b> 회수한 카드는 이 드로우 라운드가 끝날 때까지 <b>먹과 섞지 않는다</b> — 스텁이 모자라면 다시 써야 하기 때문이다.',
+      cite: { src: GUIDE, txt: '회수한 카드는 드로우 라운드가 끝나기 전까지 먹 존의 카드와 섞이지 않게 구별해 놓습니다.' },
+      apply: function (st) {
+        var line = [], i, k;
+        for (i = 0; i < st.seats.length; i++) {
+          var s = st.seats[i];
+          if (s.folded) continue;
+          var take = rnd(3);            // 0~2장 교체
+          for (k = 0; k < take; k++) { s.down.pop(); s.down.push(draw(st)); }
+          s.draws += take;
+          line.push(s.name + ' ' + (take === 0 ? '팻' : take + '장'));
+        }
+        log(st, '교체 — ' + line.join(' · '));
+      }
+    };
+  }
+
+  function stepShowdown(spec) {
+    return {
+      stage: '쇼다운',
+      ask: '마지막 베팅이 끝났다. <em>다음</em>은?',
+      opts: function () {
+        return opts('쇼다운을 연다',
+          ['한 장 더 딜한다', '번카드를 내린다', '팟을 먼저 나눈다']);
+      },
+      why: '마지막 베팅 라운드가 끝나면 쇼다운이다. <b>승자 판정과 팟 지급은 이 프로토타입의 범위 밖</b>이다 — 로우 평가기가 붙는 다음 단계에서 다룬다.',
+      cite: { src: GUIDE, txt: '네번째의 배팅라운드가 끝나면 쇼 다운하여 승패를 가립니다.' },
+      apply: function (st) { log(st, '쇼다운 — 팟 <b>' + fmt(st.pot) + '</b>'); }
+    };
+  }
+
+  // 사고 ─────────────────────────────────────────
+  /*
+   * 절차만 반복하면 세 판이면 외워진다 (ADR-002). 그래서 한 핸드에 사고를 하나 끼운다 —
+   * 프로토콜 문서가 가장 두껍게 다루는 부분이고, 실제로 딜러가 플로어를 부르는 지점이다.
+   */
+  function incidentsFor(spec) {
+    if (spec.family === 'stud') {
+      return [{
+        after: 'deal:3rd',
+        alert: '<b>사고.</b> 첫 딜에서 한 사람의 <b>다운카드 한 장이 뒤집혀</b> 나갔다.',
+        ask: '어떻게 처리하나?',
+        opts: function () {
+          return opts('그 카드를 그 사람의 업카드로 삼는다',
+            ['미스딜을 선언한다', '그 카드를 번카드로 내리고 새로 준다', '덱에 섞고 다시 준다']);
+        },
+        why: '초기 딜에서 노출된 카드는 <b>그 사람의 업카드가 된다.</b> 다운카드가 <b>두 장</b> 노출되면 그때는 미스딜이다.',
+        cite: { src: PROTO, txt: '스터드 게임 초기 딜: 노출된 카드는 그 플레이어의 업카드가 된다. 다운카드 두 장이 노출되면 미스딜을 선언한다.' }
+      }, {
+        after: 'deal:7th',
+        alert: '<b>사고.</b> 7번째 카드를 딜하는데 <b>스텁이 모자란다.</b>',
+        ask: '어떻게 처리하나?',
+        opts: function () {
+          return opts('테이블 가운데에 커뮤니티 카드 한 장을 오픈한다',
+            ['핸드를 무효로 한다', '먹을 그대로 다시 쓴다', '남은 사람끼리 나눠 갖는다']);
+        },
+        why: '7번째 카드에 스텁이 모자라면 <b>가운데에 한 장을 오픈해 전원이 공용으로</b> 쓴다. 단 <b>스터드 하이로우 레귤러는 예외</b>로, 커뮤니티 카드를 쓰지 않고 스텁·먹·번을 합쳐 다시 딜한다.',
+        cite: { src: GUIDE, txt: '스텁이 부족한 경우 개별 카드 대신 테이블 중앙에 1장의 카드를 오픈하여 모든 플레이어가 공용으로 사용합니다.' }
+      }];
+    }
+    return [{
+      after: 'drawexec:draw1',
+      alert: '<b>사고.</b> 교체 카드를 주다가 <b>한 장이 노출</b>됐다.',
+      ask: '어떻게 처리하나?',
+      opts: function () {
+        return opts('이번 라운드의 디스카드로 취급하고, 전원 교체가 끝난 뒤 대신 준다',
+          ['그대로 그 사람에게 준다', '미스딜을 선언한다', '덱에 섞고 다시 뽑는다']);
+      },
+      why: '드로우 라운드에서 노출된 카드는 <b>그 라운드의 디스카드</b>로 본다. 전원이 교체를 받은 뒤에 대신 줄 카드를 딜한다.',
+      cite: { src: PROTO, txt: '드로우 라운드: 노출된 모든 카드는 그 라운드의 디스카드로 간주된다. 첫 노출 카드는 모든 플레이어가 원래의 교체 카드를 받은 뒤에 교체된다.' }
+    }, {
+      after: 'drawexec:draw2',
+      alert: '<b>사고.</b> 교체를 다 주기에 <b>스텁이 모자란다.</b>',
+      ask: '무엇부터 섞나?',
+      opts: function () {
+        return opts('남은 스텁에 번카드를 섞는다',
+          ['이번 라운드에 버린 카드까지 섞는다', '먹을 통째로 섞는다', '새 덱을 가져온다']);
+      },
+      why: '스텁 + <b>번카드</b>를 먼저 섞는다. 그래도 모자라면 <b>이전 라운드의</b> 먹을 섞는다. <b>이번 라운드에 버린 카드는 넣지 않는다</b> — 첫 드로우를 마칠 수 없을 때만 예외다.',
+      cite: { src: PROTO, txt: '스텁이 부족하지만 스텁과 이전 번카드로 충분하면, 남은 스텁을 번카드와 함께 다시 섞은 뒤 드로우를 딜한다. 현재 라운드의 디스카드는 첫 드로우를 완료할 수 없는 경우가 아니면 절대 포함하지 않는다.' }
+    }];
+  }
+
+  // 스텝 목록을 스펙에서 만든다 ──────────────────
+  function buildSteps(spec) {
+    var steps = [], at;
+    steps.push(stepForced(spec));
+
+    for (at = 0; at < spec.streets.length; at++) {
+      var street = spec.streets[at];
+
+      if (street.burn) steps.push(tag(stepBurn(spec, at), 'burn:' + street.id));
+
+      if (street.draw) {
+        steps.push(tag(stepDrawExec(spec, at), 'drawexec:' + street.id));
+      } else {
+        steps.push(tag(stepDeal(spec, at), 'deal:' + street.id));
+      }
+
+      if (at === 0 && spec.forced === 'ante+bringin') steps.push(stepBringIn(spec));
+      else steps.push(stepFirstAct(spec, at));
+
+      steps.push(stepBet(spec, at));
+
+      /* 드로우 게임은 베팅이 끝나면 다음 드로우의 교체 확인이 먼저다 */
+      if (street.draw === undefined && spec.draw && at + 1 < spec.streets.length) {
+        steps.push(stepDrawOrder(spec, at + 1));
+      } else if (street.draw && at + 1 < spec.streets.length) {
+        steps.push(stepDrawOrder(spec, at + 1));
+      }
+    }
+    steps.push(stepShowdown(spec));
+    return steps;
+  }
+  function tag(step, id) { step.id = id; return step; }
+
+  /** 사고 하나를 뽑아 해당 스텝 뒤에 끼운다. */
+  function injectIncident(spec, steps) {
+    var pool = incidentsFor(spec);
+    var inc = pick(pool);
+    for (var i = 0; i < steps.length; i++) {
+      if (steps[i].id !== inc.after) continue;
+      var step = {
+        stage: '사고 처리', alert: inc.alert, ask: inc.ask,
+        opts: inc.opts, why: inc.why, cite: inc.cite,
+        apply: function (st) { log(st, '<span class="bad">사고 처리</span> 완료'); }
+      };
+      steps.splice(i + 1, 0, step);
+      return steps;
+    }
+    return steps;
+  }
+
+  // 진행 ─────────────────────────────────────────
+  var spec, st, steps, at, misses, startedAt, clockTimer, answered;
+
+  function startHand(which) {
+    spec = SPECS[which || pick(['stud7', 'td27'])];
+    st = newTable(spec);
+    steps = injectIncident(spec, buildSteps(spec));
+    at = 0; misses = 0; answered = false;
+    startedAt = Date.now();
+    $('#miss').textContent = '실수 0';
+    clearInterval(clockTimer);
+    clockTimer = setInterval(tickClock, 1000);
+    render();
+  }
+
+  function tickClock() {
+    var s = Math.floor((Date.now() - startedAt) / 1000);
+    $('#clock').textContent = Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+  }
+
+  function tableHtml() {
+    var h = '<div class="felt">';
+    h += '<div class="streets">';
+    for (var k = 0; k < spec.streets.length; k++) {
+      var cur = steps[Math.min(at, steps.length - 1)];
+      var isNow = cur && cur.stage === spec.streets[k].ko;
+      h += '<span class="' + (isNow ? 'now' : '') + '">' + spec.streets[k].short + '</span>';
+    }
+    h += '</div><div class="tbl">';
+    for (var i = 0; i < st.seats.length; i++) {
+      var s = st.seats[i];
+      var pickable = steps[at] && steps[at].seat !== undefined && !answered && !s.folded;
+      var tag2 = pickable ? 'button type="button"' : 'div';
+      var close = pickable ? 'button' : 'div';
+      var hand = downPile(s.down.length);
+      for (var c = 0; c < s.up.length; c++) hand += cardFace(s.up[c]);
+      h += '<' + tag2 + ' class="seat' + (pickable ? ' pickable' : '') + (s.folded ? ' dead' : '') +
+        (i >= 3 ? ' arc' : '') + '" data-seat="' + i + '">' +
+        '<span class="sname">' + s.name + (s.pos === 0 && spec.family === 'draw' ? '<span class="pbtn">D</span>' : '') + '</span>' +
+        (hand ? '<span class="hand">' + hand + '</span>' : '') +
+        '<span class="sbet2' + (s.bet ? '' : ' zero') + '">' + (s.bet ? fmt(s.bet) : '—') + '</span>' +
+        '</' + close + '>';
+    }
+    h += '</div>';
+    h += '<div class="dealerrow"><span class="potbox">팟 ' + fmt(st.pot) + '</span>' +
+      '<span>스텁 ' + (st.deck.length - st.di) + '장</span>' +
+      '<span class="burn">번 ' + st.burns + '장</span></div>';
+    return h + '</div>';
+  }
+
+  function logHtml() {
+    if (st.log.length === 0) return '';
+    var h = '<div class="dlog">';
+    for (var i = 0; i < st.log.length; i++) {
+      h += '<div class="row"><span class="n">' + (i + 1) + '</span><span>' + st.log[i] + '</span></div>';
+    }
+    return h + '</div>';
+  }
+
+  function render() {
+    if (at >= steps.length) return renderDone();
+    var step = steps[at];
+    answered = false;
+    step.choices = step.opts ? step.opts(st) : null;
+
+    $('#prog').firstChild.style.width = (at / steps.length * 100) + '%';
+
+    var h = '<div class="panel">';
+    h += '<div class="game"><span class="ko">' + spec.ko + '</span>' +
+      '<span class="en">' + spec.en + '</span>' +
+      '<span class="tags"><span class="tag fam">' + spec.familyKo + '</span>' +
+      '<span class="tag">' + spec.bettingKo + '</span></span></div>';
+    h += '<div class="head"><span class="stage">' + step.stage + '</span>' +
+      '<span class="count">' + (at + 1) + ' / ' + steps.length + '</span></div>';
+    h += '<div class="ask">' + (step.askFn ? step.askFn(st) : step.ask) + '</div>';
+    h += '<div class="board">' + tableHtml() +
+      (step.alert ? '<div class="incident">' + step.alert + '</div>' : '') + logHtml() + '</div>';
+
+    if (step.choices) {
+      h += '<div class="answers">';
+      for (var i = 0; i < step.choices.length; i++) {
+        h += '<button type="button" class="opt" data-opt="' + i + '">' + step.choices[i].label + '</button>';
+      }
+      h += '</div>';
+    } else {
+      h += '<p class="hint" style="padding:10px 15px 14px">테이블에서 좌석을 누르세요.</p>';
+    }
+    h += '</div>';
+    $('#app').innerHTML = h;
+
+    var os = document.querySelectorAll('.opt');
+    for (var k = 0; k < os.length; k++) {
+      os[k].addEventListener('click', function () {
+        judge(step.choices[parseInt(this.getAttribute('data-opt'), 10)].ok, this);
+      });
+    }
+    var seats = document.querySelectorAll('.seat.pickable');
+    for (var m = 0; m < seats.length; m++) {
+      seats[m].addEventListener('click', function () {
+        var i = parseInt(this.getAttribute('data-seat'), 10);
+        judge(i === step.seat(st), this, i);
+      });
+    }
+  }
+
+  function judge(ok, el, seatIdx) {
+    if (answered) return;
+    answered = true;
+    var step = steps[at];
+    if (!ok) { misses++; $('#miss').textContent = '실수 ' + misses; }
+
+    var i;
+    if (step.choices) {
+      var os = document.querySelectorAll('.opt');
+      for (i = 0; i < os.length; i++) {
+        os[i].disabled = true;
+        if (step.choices[i].ok) os[i].className = 'opt right';
+        else if (os[i] === el) os[i].className = 'opt wrong';
+      }
+    } else {
+      var want = step.seat(st);
+      var seats = document.querySelectorAll('.seat.pickable');
+      for (i = 0; i < seats.length; i++) {
+        var idx = parseInt(seats[i].getAttribute('data-seat'), 10);
+        seats[i].className = 'seat pickable' + (idx >= 3 ? ' arc' : '') +
+          (idx === want ? ' right2' : (seats[i] === el ? ' wrong2' : ''));
+      }
+      seatIdx = want;
+    }
+
+    /* 틀려도 진행은 **정답대로** 간다 — 절차는 순서가 틀어지면 뒤가 전부 무너진다 */
+    step.apply(st, step.seat ? step.seat(st) : undefined);
+    if (!ok) log(st, '<span class="bad">여기서 틀렸다</span> — ' + strip(step.why));
+
+    var v = '<div class="verdict ' + (ok ? 'ok' : 'no') + '">';
+    v += '<div class="head2">' + (ok ? '맞다' : '아니다') + '</div>';
+    v += '<div class="why">' + step.why + '</div>';
+    v += '<div class="cite"><div class="art">' + step.cite.src + '</div><div class="txt">' + step.cite.txt + '</div></div>';
+    v += '</div>';
+    v += '<button type="button" class="next" id="next">' +
+      (at + 1 >= steps.length ? '핸드 마치기' : '계속 진행') + '</button>';
+    $('.panel').insertAdjacentHTML('beforeend', v);
+    $('#next').addEventListener('click', function () { at++; render(); });
+    $('#next').focus();
+  }
+
+  function strip(html) { return html.replace(/<[^>]+>/g, ''); }
+
+  var BEST_KEY = 'mixdeal.best';
+  function readBest() { try { return parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) { return 0; } }
+  function saveBest(sec) {
+    try {
+      var prev = readBest();
+      if (prev === 0 || sec < prev) localStorage.setItem(BEST_KEY, String(sec));
+    } catch (e) { /* 저장 불가 환경 */ }
+  }
+
+  function renderDone() {
+    clearInterval(clockTimer);
+    var sec = Math.floor((Date.now() - startedAt) / 1000);
+    var clean = misses === 0;
+    var prev = readBest();
+    if (clean) saveBest(sec);
+
+    var h = '<div class="panel"><div class="done">';
+    h += '<div class="big">' + Math.floor(sec / 60) + ':' + ('0' + (sec % 60)).slice(-2) + '</div>';
+    h += '<div class="lbl">' + spec.ko + ' 한 핸드 · 실수 ' + misses + '회</div>';
+    h += '<div class="best">' + (clean
+      ? (prev === 0 || sec < prev ? '무실수 최단 기록' : '무실수 완주 · 최고 기록 ' + prev + '초')
+      : '무실수로 마치면 기록이 남는다') + '</div>';
+    h += '<div class="tally">';
+    if (misses === 0) {
+      h += '<div class="tline"><span class="n">' + steps.length + '스텝을 한 번도 안 틀리고 진행했다</span></div>';
+    } else {
+      /* 결과에는 **틀린 자리만** 남긴다. 로그를 통째로 옮기면 40줄이 넘어 아무도 안 읽는다 */
+      for (var i = 0; i < st.log.length; i++) {
+        if (st.log[i].indexOf('여기서 틀렸다') < 0) continue;
+        h += '<div class="tline miss"><span class="n">' + st.log[i].replace('<span class="bad">여기서 틀렸다</span> — ', '') + '</span></div>';
+      }
+    }
+    h += '</div></div>';
+    h += '<button type="button" class="next" id="again">다른 게임으로 한 판 더</button></div>';
+    $('#app').innerHTML = h;
+    $('#prog').firstChild.style.width = '100%';
+    $('#again').addEventListener('click', function () {
+      startHand(spec.id === 'stud7' ? 'td27' : 'stud7');
+    });
+  }
+
+  startHand();
+})();
+</script>

@@ -11,7 +11,11 @@
  */
 import { useSyncExternalStore } from 'react'
 
-const BEST_KEY = 'potrush.best'
+/**
+ * 음소거는 **축을 가로질러 공유한다.** 소리를 끄는 사람은 한 사람이고, 축마다 따로
+ * 꺼야 한다면 그게 결함이다. 최고점은 반대로 축마다 달라야 한다 — 두 축은 문제 성격이
+ * 달라 점수대가 다르고, 키를 공유하면 한쪽 최고점이 다른 쪽을 영원히 덮는다.
+ */
 const MUTED_KEY = 'potrush.muted'
 
 /*
@@ -36,32 +40,55 @@ function emit(): void {
   for (const listener of listeners) listener()
 }
 
-export function readBest(): number {
-  try {
-    const raw = window.localStorage.getItem(BEST_KEY)
-    const n = Number.parseInt(raw ?? '0', 10)
-    return Number.isFinite(n) && n > 0 ? n : 0
-  } catch {
-    return 0
-  }
+export type BestRecord = {
+  readBest(): number
+  /** 새 기록이면 저장하고 true 를 돌려준다. */
+  saveBest(score: number): boolean
+  /** 최고 기록. 서버 렌더에서는 0 이다 (localStorage 가 없다). */
+  useBest(): number
 }
 
-/** 새 기록이면 저장하고 true 를 돌려준다. */
-export function saveBest(score: number): boolean {
-  if (score <= readBest()) return false
-  try {
-    window.localStorage.setItem(BEST_KEY, String(score))
-  } catch {
-    // 저장이 안 되는 환경이어도 이번 판의 점수는 화면에 그대로 남는다
+/**
+ * 축 하나의 최고점 저장소를 만든다.
+ *
+ * **키를 지어내지 마라.** 각 축의 프로토타입이 이미 쓴 키를 그대로 이어받아야
+ * 프로토타입에서 세운 기록이 앱으로 넘어온다 (`potrush.best` · `actionrush.best`).
+ */
+export function createBestRecord(key: string): BestRecord {
+  function readBest(): number {
+    try {
+      const raw = window.localStorage.getItem(key)
+      const n = Number.parseInt(raw ?? '0', 10)
+      return Number.isFinite(n) && n > 0 ? n : 0
+    } catch {
+      return 0
+    }
   }
-  emit()
-  return true
+
+  function saveBest(score: number): boolean {
+    if (score <= readBest()) return false
+    try {
+      window.localStorage.setItem(key, String(score))
+    } catch {
+      // 저장이 안 되는 환경이어도 이번 판의 점수는 화면에 그대로 남는다
+    }
+    emit()
+    return true
+  }
+
+  function useBest(): number {
+    return useSyncExternalStore(subscribe, readBest, () => 0)
+  }
+
+  return { readBest, saveBest, useBest }
 }
 
-/** 최고 기록. 서버 렌더에서는 0 이다 (localStorage 가 없다). */
-export function useBest(): number {
-  return useSyncExternalStore(subscribe, readBest, () => 0)
-}
+/**
+ * 축별 최고 기록. **키는 여기서만 정한다** — 페이지가 각자 `createBestRecord` 를 부르면
+ * 키가 흩어지고, 흩어진 키는 오타 하나로 기록을 통째로 잃는다.
+ */
+export const potRushRecord = createBestRecord('potrush.best')
+export const actionRushRecord = createBestRecord('actionrush.best')
 
 /**
  * 음소거. `prefers-reduced-motion` 과 **별개**다 —

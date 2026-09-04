@@ -154,7 +154,7 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
         seatBet: 0,
         seatStack: Number.MAX_SAFE_INTEGER,
         isOpenBet: false,
-        canRaise: true,
+        hasActedThisRound: false,
       })
       /*
        * 화면에 쓰는 "폭"은 raiseSize 가 아니라 정답에서 되짚은 값이다.
