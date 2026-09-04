@@ -166,6 +166,7 @@ body {
 }
 .pot .lb { font-size: 10px; font-weight: 800; opacity: .8; }
 .pot .n { font-family: var(--mono); font-size: 19px; font-weight: 800; }
+.pot .out { font-family: var(--mono); font-size: 10.5px; font-weight: 800; color: var(--amber); }
 .pot.drop { border-color: var(--amber); background: rgba(239,159,39,.20); }
 .pot.drop.over { background: rgba(239,159,39,.42); }
 
@@ -618,6 +619,16 @@ function draw1() {
 }
 function actives() { return H.seats.filter(function (s) { return !s.folded; }); }
 
+/* 좌석 앞에 놓여 아직 수거되지 않은 칩. 라운드가 끝나야 팟으로 들어간다. */
+function betsOut() {
+  var t = 0, i;
+  for (i = 0; i < H.seats.length; i++) t += H.seats[i].bet || 0;
+  return t;
+}
+/* 규칙이 말하는 「팟」은 가운데 쌓인 것 + 앞에 놓인 것이다.
+   딜러가 팟리밋을 계산할 때 둘을 다 세야 하는 것이 이 게임의 교육 지점이다. */
+function potNow_() { return H.pot + betsOut(); }
+
 function log(txt, cls) {
   H.log.push({ t: txt, c: cls || '' });
   if (H.log.length > 60) H.log.shift();
@@ -866,7 +877,7 @@ function doBets(ix, next) {
 
   /* 팟리밋은 정해진 벳 단위가 없다 — 팟에서 나온 금액으로 돈다. */
   var amt = potLimit
-    ? Math.max(BB, Math.round(H.pot * 0.4 / CHIPUNIT) * CHIPUNIT)
+    ? Math.max(BB, Math.round(potNow_() * 0.4 / CHIPUNIT) * CHIPUNIT)
     : H.spec.betting === 'NL'
       ? BB * (2 + rnd(3))
       : (st.size === 2 ? BIG : SMALL);
@@ -874,11 +885,16 @@ function doBets(ix, next) {
   for (i = 0; i < list.length; i++) {
     var s = list[i];
     if (actives().length > 2 && Math.random() < .22) { s.folded = true; parts.push(s.name + ' 폴드'); }
-    else { callers++; s.bet = amt; parts.push(s.name + ' ' + (callers === 1 ? '벳' : '콜')); }
+    else {
+      callers++;
+      /* 블라인드처럼 이미 앞에 낸 칩이 있으면 차액만 채운다 — 두 번 내지 않는다. */
+      s.bet = Math.max(s.bet, amt);
+      parts.push(s.name + ' ' + (callers === 1 ? '벳' : '콜'));
+    }
   }
   log('베팅 — ' + parts.join(' · ') + ' <b>(' + won(amt) + ')</b>');
   render();
-  flyChips(fin);
+  sweepChips(fin);
 }
 
 /* 스터드 3번째 카드의 첫 베팅 — 브링인으로 연다.
@@ -912,7 +928,7 @@ function doBringIn(fin) {
   }
   log('3번째 카드 베팅 — ' + parts.join(' · '));
   render();
-  flyChips(fin);
+  sweepChips(fin);
 }
 
 /* 강제 베팅도 칩으로 나간다 — 좌석 앞에 놓였다가 팟으로 간다.
@@ -920,15 +936,18 @@ function doBringIn(fin) {
 function doForced(done) {
   var i, s;
   if (H.spec.forced === 'ante+bringin') {
+    /* 앤티는 베팅이 아니다 — 카드가 나가기 전에 딜러가 걷어 팟에 넣는다. */
     for (i = 0; i < H.seats.length; i++) H.seats[i].bet = ANTE;
     log('앤티 <b>' + won(ANTE) + '</b> ×' + SEAT_N + ' 수거');
-  } else {
-    s = seatByPos(1); if (s) s.bet = SB;
-    s = seatByPos(2); if (s) s.bet = BB;
-    log('SB <b>' + won(SB) + '</b> · BB <b>' + won(BB) + '</b>');
+    render();
+    return flyChips(done);
   }
+  /* 블라인드는 첫 베팅 라운드의 벳이다. 라운드가 끝날 때까지 좌석 앞에 남는다. */
+  s = seatByPos(1); if (s) s.bet = SB;
+  s = seatByPos(2); if (s) s.bet = BB;
+  log('SB <b>' + won(SB) + '</b> · BB <b>' + won(BB) + '</b> — 앞에 놓인다');
   render();
-  flyChips(done);
+  done();
 }
 
 function doEndHand() {
@@ -1052,7 +1071,8 @@ function potBet(potNow, callAmt) { return callAmt * 2 + potNow; }
 /* 팟리밋에서는 벳 크기가 선택이 아니라 계산이다. 그래서 숫자를 직접 받는다. */
 function mkPotBet(ix, who) {
   var callAmt = ix === 0 ? BB : 0;
-  var potNow = H.pot;
+  var potNow = potNow_();
+  var out = betsOut();
   var ans = potBet(potNow, callAmt);
   var why = callAmt
     ? '팟벳은 <b>콜 금액 + 콜한 뒤 팟에 있는 금액</b>이다. 콜 ' + won(callAmt) + ' 을 넣으면 팟이 ' +
@@ -1062,7 +1082,9 @@ function mkPotBet(ix, who) {
       '공식은 같다 — 콜 0 + 콜한 뒤 팟 ' + won(potNow) + '.';
   return {
     q: (who || '이 좌석') + '이 <b>팟벳</b>을 하면 얼마입니까?',
-    sub: '팟 <b>' + won(potNow) + '</b>' + (callAmt ? ' · 콜 금액 <b>' + won(callAmt) + '</b>' : ' · 앞에 벳 없음'),
+    sub: '팟 <b>' + won(potNow) + '</b>' +
+      (out ? ' (가운데 ' + won(H.pot) + ' + 앞에 놓인 칩 ' + won(out) + ')' : '') +
+      (callAmt ? ' · 콜 금액 <b>' + won(callAmt) + '</b>' : ' · 앞에 벳 없음'),
     input: 'amount', amount: ans,
     why: why,
     cite: { src: GUIDE, txt: '팟벳 = 마지막 배팅을 콜 하는 데 필요한 금액 + 콜 한 후에 팟에 있는 금액. 앤티는 프리플랍 팟 계산에서 제외하는 것이 보편적이다 (대회사마다 다를 수 있음).' }
@@ -1077,7 +1099,7 @@ function mkPotRaise(ix) {
   var bettor = pick(list);
   var rest = list.filter(function (x) { return x.i !== bettor.i; });
   var hero = pick(rest);
-  var potBefore = H.pot;
+  var potBefore = potNow_();
   var bet = Math.max(BB, Math.round(potBefore * (0.5 + rnd(3) * 0.25) / CHIPUNIT) * CHIPUNIT);
   var potNow = potBefore + bet;
   var ans = potBet(potNow, bet);
@@ -1820,7 +1842,8 @@ var OBJ = {
       correct: 0,
       target: null,
       why: '팟리밋에서는 딜러가 팟 금액을 알려줄 수 있고, 팟을 미리 카운트해 두는 것도 허용된다. ' +
-           '벳 상한이 팟에서 나오는 구조라 팟 금액이 공개 정보인 것이다. 지금 팟은 <b>' + won(H.pot) + '</b> 이다.',
+           '벳 상한이 팟에서 나오는 구조라 팟 금액이 공개 정보인 것이다. 지금 팟은 <b>' + won(potNow_()) + '</b> 이다' +
+           (betsOut() ? ' (가운데 ' + won(H.pot) + ' + 앞에 놓인 칩 ' + won(betsOut()) + ').' : '.'),
       cite: { src: GUIDE, txt: 'PLO — 딜러는 팟 금액을 알려줄 수 있고, 팟을 카운트해 두는 것도 허용된다.' }
     };
   },
@@ -1950,6 +1973,11 @@ var OBJ = {
 // 애니메이션 — 카드가 실제로 날아간다
 // ═══════════════════════════════════════════════════
 var FLIGHT = null;
+var SWEEP = false;        // 라운드가 끝나 칩을 쓸어담기 직전의 뜸
+
+function busyLabel() {
+  return SWEEP ? '라운드 종료 — 칩 수거' : ((FLIGHT && FLIGHT.label) || '딜링 중');
+}
 
 function flyDeal(plan, done) {
   runFlight(plan.map(function (p) {
@@ -1973,6 +2001,19 @@ function chipItem(s, denom, first, last, amt) {
     commit: function () { if (first) s.bet = 0; if (last) H.pot += amt; }
   };
 }
+/* 칩은 라운드가 끝나야 수거한다. 놓인 것을 볼 시간을 주고 쓸어담는다. */
+function sweepChips(done) {
+  if (!betsOut()) return done();
+  PHASE = 'anim';
+  SWEEP = true;
+  render();
+  setTimeout(function () {
+    SWEEP = false;
+    log('라운드 종료 — 앞에 놓인 <b>' + won(betsOut()) + '</b> 을 팟으로 수거');
+    flyChips(done);
+  }, 640);
+}
+
 function flyChips(done) {
   var list = H.seats.filter(function (s) { return s.bet > 0; });
   if (!list.length) { done(); return; }
@@ -2377,7 +2418,7 @@ function practiceTopHTML() {
 function practicePanelHTML() {
   var h = '';
   if (PHASE === 'anim') {
-    return '<div class="panel"><div class="kicker">' + ((FLIGHT && FLIGHT.label) || '딜링 중') + '</div><div class="q">' + H.stage +
+    return '<div class="panel"><div class="kicker">' + busyLabel() + '</div><div class="q">' + H.stage +
       '</div><div class="hint">화면을 클릭하면 건너뜁니다</div></div>';
   }
   if (PHASE === 'pdone') {
@@ -2543,7 +2584,9 @@ function boardHTML() {
     (H.spec.family === 'stud' ? pileHTML('center', '중앙', '—', pilePick) : '') +
     (H.spec.family === 'flop' ? commuHTML() : '') +
     '<div class="pot">' +
-    '<div class="lb">팟</div><div class="n">' + won(H.pot) + '</div></div>' +
+    '<div class="lb">팟</div><div class="n">' + won(H.pot) + '</div>' +
+    (betsOut() ? '<div class="out">앞에 ' + won(betsOut()) + '</div>' : '') +
+    '</div>' +
     '</div>';
 
   // 아래쪽 3좌석
@@ -2602,7 +2645,7 @@ function pileHTML(id, label, n, pick) {
 
 function panelHTML() {
   if (PHASE === 'anim') {
-    return '<div class="panel"><div class="kicker">딜링 중</div>' +
+    return '<div class="panel"><div class="kicker">' + busyLabel() + '</div>' +
       '<div class="q">' + H.stage + '</div>' +
       '<div class="hint">화면을 클릭하면 건너뜁니다</div></div>';
   }
