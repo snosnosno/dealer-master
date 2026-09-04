@@ -73,3 +73,16 @@ export type HandState = {
 }
 
 export type SeatInit = { name: string; stack: number }
+
+/**
+ * 테이블을 그리는 데 필요한 것만. `HandState` 는 이것을 구조적으로 만족한다.
+ *
+ * `PokerTable` 이 `HandState` 를 요구하면 노리밋 홀덤 시뮬레이터를 돌리지 않는
+ * 드릴(진행절차)이 테이블을 못 쓴다. 좁은 계약 하나면 양쪽이 같은 테이블을 쓴다.
+ */
+export type TableView = {
+  seats: SeatState[]
+  buttonSeat: number
+  board: Card[]
+  pot: number
+}

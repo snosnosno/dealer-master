@@ -24,7 +24,7 @@ export { omahaCombos, bestOmahaHi, bestOmahaLow } from './omaha'
 // 러시 생성기가 "짧은 올인을 만들었는지"를 스스로 판단하지 않고 여기 묻는다.
 export { initialState, applyEvent, stateAt, isFullRaise } from './reduce'
 export type {
-  HandEvent, HandState, SeatState, SeatInit, PlayerAction, Street,
+  HandEvent, HandState, SeatState, SeatInit, PlayerAction, Street, TableView,
 } from './types'
 export { buildPots, awardPots, ODD_CHIP_UNIT, type Pot, type PotAward } from './pots'
 export { nlh } from './rulesets/nlh'
