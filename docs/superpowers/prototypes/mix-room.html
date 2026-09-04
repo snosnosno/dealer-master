@@ -655,6 +655,7 @@ function buildQueue() {
   if (spec.betting === 'PL' && pool.length) {
     shuffle(pool);
     askPotAt[pool[0]] = true;
+    H.potAt = pool[0];   /* 그 라운드는 반드시 벳으로 열려야 문제가 성립한다 */
   }
 
   // 사고 배치 — 0~2건
@@ -874,8 +875,18 @@ function doBets(ix, next) {
      그때 스몰벳이 된다. 물은 답과 눈에 보이는 진행이 같아야 한다. */
   if (H.spec.family === 'stud' && ix === 0) return doBringIn(fin, op);
 
-  /* 라운드가 이미 열려 있으면 전원 체크는 모순이다 — 열지 않은 라운드에서만 체크한다. */
-  if (!(op && op.amt) && H.spec.betting !== 'FL' && ix > 0 && Math.random() < .45) {
+  /* 첫 액션이 체크였다면 두 갈래다 — 전원이 체크하고 넘어가거나, 뒤에서 벳이 나온다. */
+  var startSeat = op ? op.seat : null;
+  var lateBet = false;
+  if (op && op.checked) {
+    if (Math.random() < .5) {
+      log('베팅 — 전원 체크');
+      return fin();
+    }
+    lateBet = true;
+    op = null;
+  } else if (!(op && op.amt) && H.spec.betting !== 'FL' && ix > 0 && Math.random() < .45) {
+    /* 아무 판단도 없던 라운드(딜링 룸에서 묻지 않은 스트릿)는 그냥 체크로 넘어갈 수 있다 */
     log('베팅 — 전원 체크');
     return fin();
   }
@@ -891,12 +902,14 @@ function doBets(ix, next) {
   for (mi = 0; mi < H.seats.length; mi++) maxOut = Math.max(maxOut, H.seats[mi].bet || 0);
   amt = Math.max(amt, maxOut);
 
-  /* 라운드를 연 좌석부터 시계 방향으로 돈다. 연 사람은 폴드하지 않는다. */
+  /* 라운드를 연 좌석부터 시계 방향으로 돈다. 연 사람은 폴드하지 않는다.
+     첫 액션이 체크였으면 그 다음 좌석이 벳하고, 체크한 사람은 맨 뒤에서 받는다. */
   var list = actives(), parts = [], callers = 0, i, k;
-  if (op) {
+  if (startSeat !== null) {
     k = -1;
-    for (i = 0; i < list.length; i++) if (list[i].i === op.seat) k = i;
+    for (i = 0; i < list.length; i++) if (list[i].i === startSeat) k = i;
     if (k > 0) list = list.slice(k).concat(list.slice(0, k));
+    if (lateBet && list.length > 1) list = list.slice(1).concat(list.slice(0, 1));
   }
   /* 벳이 팟에 비해 클수록 콜이 줄어든다. 팟만 한 벳에 전원이 콜하는 테이블은 없다. */
   var potRef = Math.max(BB, potNow_() - betsOut());
@@ -913,7 +926,7 @@ function doBets(ix, next) {
     s.bet = Math.max(s.bet, amt);
     parts.push(s.name + ' ' + (callers === 1 ? '벳' : '콜'));
   }
-  log('베팅 — ' + parts.join(' · ') + ' <b>(' + won(amt) + ')</b>');
+  log((lateBet ? '체크 뒤 베팅 — ' : '베팅 — ') + parts.join(' · ') + ' <b>(' + won(amt) + ')</b>');
   render();
   fin();
 }
@@ -1095,8 +1108,12 @@ function mkAskOpen(ix) {
   if (!seatQ) return null;
   /* 스터드의 첫 라운드는 그냥 「여는」 것이 아니라 브링인이다 — 이름을 그대로 부른다. */
   var openKo = (H.spec.family === 'stud' && ix === 0) ? '브링인' : '첫 순서 지목';
-  var bet = mkAskBet(ix, H.seats[seatQ.answer].name);
-  /* 정답 금액. 노리밋은 묻지 않으므로 0 이다. */
+  /* 첫 액션이 늘 벳이면 마주치는 상황이 하나뿐이다 — 체크로 열리는 라운드도 있어야 한다.
+     강제 베팅이 걸린 첫 라운드(브링인·블라인드)는 체크가 없고,
+     팟리밋 계산 문제가 배정된 라운드도 벳으로 열어야 문제가 성립한다. */
+  var checks = ix !== 0 && ix !== H.potAt && Math.random() < .45;
+  var bet = checks ? null : mkAskBet(ix, H.seats[seatQ.answer].name);
+  /* 정답 금액. 노리밋과 체크로 여는 라운드는 묻지 않으므로 0 이다. */
   var amt = !bet ? 0 : (bet.input === 'amount' ? bet.amount : bet.values[bet.correct]);
   return {
     kind: 'open', tone: '', kicker: '판단 · ' + openKo, openKo: openKo,
@@ -1105,14 +1122,20 @@ function mkAskOpen(ix) {
     bet: bet, seatPicked: -1, typed: null,
     /* 판단이 끝나면 그 답이 테이블의 진실이 된다 — 답한 금액이 실제로 나간다.
        두 모드가 같은 함수를 쓴다: 딜링 룸은 judge 가, 연습은 핸들러가 부른다. */
-    after: function () { openRound(ix, seatQ.answer, amt, openKo); }
+    after: function () { openRound(ix, seatQ.answer, amt, openKo, checks); }
   };
 }
 
 /* 라운드가 열린 기록. doBets 가 이것을 읽어 그대로 굴린다 —
    「팟벳 12,000 선언」 뒤에 「전원 체크」가 뜨던 것이 이 연결이 없어서였다. */
-function openRound(ix, seat, amt, label) {
+function openRound(ix, seat, amt, label, checked) {
   var s = H.seats[seat];
+  if (checked) {
+    H.opened = { ix: ix, seat: seat, amt: 0, checked: true };
+    log(s.name + ' <b>체크</b> — 첫 액션은 체크다');
+    render();
+    return;
+  }
   var act = amt || 0;
   var maxed = true;
 
@@ -2344,6 +2367,7 @@ function startPractice(specId) {
   /* 팟리밋 계산은 베팅이 한 번 돈 뒤에 낸다 — 그래야 콜 금액이 생긴다 */
   P.potAt = -1;
   if (spec.betting === 'PL' && spec.streets.length > 1) P.potAt = 1 + rnd(spec.streets.length - 1);
+  H.potAt = P.potAt;   /* 그 라운드는 반드시 벳으로 열려야 문제가 성립한다 */
   G.mode = 'practice';
   G.started = true;
   PHASE = 'practice';
