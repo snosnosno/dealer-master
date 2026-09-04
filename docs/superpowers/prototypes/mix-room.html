@@ -911,8 +911,9 @@ function doBets(ix, next) {
     if (k > 0) list = list.slice(k).concat(list.slice(0, k));
     if (lateBet && list.length > 1) list = list.slice(1).concat(list.slice(0, 1));
   }
-  /* 벳이 팟에 비해 클수록 콜이 줄어든다. 팟만 한 벳에 전원이 콜하는 테이블은 없다. */
-  var potRef = Math.max(BB, potNow_() - betsOut());
+  /* 벳이 팟에 비해 클수록 콜이 줄어든다. 팟만 한 벳에 전원이 콜하는 테이블은 없다.
+     기준은 「이 벳이 나가기 전의 팟」이라 블라인드처럼 이미 앞에 놓인 칩도 포함한다. */
+  var potRef = Math.max(BB, potNow_() - ((op && op.amt) ? op.amt : 0));
   var foldP = Math.min(0.72, 0.18 + 0.5 * (amt / potRef));
 
   for (i = 0; i < list.length; i++) {
@@ -1053,8 +1054,8 @@ function mkAskSeat(ix) {
     var utg = firstLiveFrom(3);
     if (!utg) return null;
     ans = utg.i;
-    why = 'BB 왼쪽이 첫 액션이다. 버튼이 ' + seatByPos(0).name + ', BB 가 ' + seatByPos(2).name + ' 이므로 ' + seatByPos(3).name +
-      (utg.pos !== 3 ? ' 인데 폴드했으니 그 다음 살아 있는 ' + utg.name + ' 이다.' : '.');
+    why = 'BB 왼쪽이 첫 액션이다. 버튼이 ' + seatByPos(0).name + ', BB가 ' + seatByPos(2).name + '이므로 ' + seatByPos(3).name +
+      (utg.pos !== 3 ? '인데 폴드했으니 그 다음 살아 있는 ' + utg.name + '이다.' : '.');
     cite = H.spec.id === 'nlh'
       ? { src: '사용자 확인 (2026-09-04)', txt: '노리밋 홀덤 프리플랍의 첫 액션은 BB 왼쪽(UTG).' }
       : H.spec.family === 'flop'
@@ -1069,7 +1070,7 @@ function mkAskSeat(ix) {
     why = (H.spec.family === 'flop'
       ? '보드가 깔린 뒤부터는 버튼 왼쪽(SB)부터다. <b>프리플랍만 BB 왼쪽</b>이었고, 플랍에서 기준이 한 칸 앞으로 옮겨진다.'
       : '드로우 라운드부터는 버튼 왼쪽(SB)부터다. 교체 장수 확인도 SB 부터 시작한다.') +
-      (sb.pos !== 1 ? ' 지금은 ' + seatByPos(1).name + ' 이 폴드해서 그 다음 살아 있는 <b>' + sb.name + '</b> 이 먼저다.' : '');
+      (sb.pos !== 1 ? ' 지금은 ' + seatByPos(1).name + '이 폴드해서 그 다음 살아 있는 <b>' + sb.name + '</b>이 먼저다.' : '');
     cite = H.spec.id === 'nlh'
       ? { src: '사용자 확인 (2026-09-04)', txt: '노리밋 홀덤은 플랍 이후 버튼 왼쪽(SB)부터 액션한다.' }
       : H.spec.family === 'flop'
@@ -1160,7 +1161,7 @@ function openRound(ix, seat, amt, label, checked) {
       (maxed ? '' : ' — 팟까지는 ' + won(amt) + ' 이었다') + ' · 라운드가 열렸다');
   } else {
     /* 노리밋은 금액을 묻지 않는다(ADR-003). 순서만 정해진 것이라 체크로 넘어갈 수도 있다. */
-    log(s.name + ' 부터 액션');
+    log(s.name + '부터 액션');
   }
   render();
 }
@@ -1223,7 +1224,7 @@ function mkPotRaise(ix) {
   return {
     kind: 'amount', tone: '', kicker: '판단 · 팟리밋 계산',
     q: hero.name + '이 <b>팟까지 레이즈</b>하면 얼마를 냅니까?',
-    sub: '화면의 칩을 세십시오 — 팟 <b>' + won(potBefore) + '</b>' +
+    sub: '화면에 놓인 칩을 세어 보세요 — 팟 <b>' + won(potBefore) + '</b>' +
       (outBefore ? ' (가운데 ' + won(H.pot) + ' + 앞에 놓인 칩 ' + won(outBefore) + ')' : '') +
       ' · ' + bettor.name + '의 벳 <b>' + won(bet) + '</b>',
     input: 'amount', amount: ans,
@@ -2136,7 +2137,8 @@ function sweepChips(done) {
   render();
   setTimeout(function () {
     SWEEP = false;
-    log('라운드 종료 — 앞에 놓인 <b>' + won(betsOut()) + '</b> 을 팟으로 수거');
+    var swept = won(betsOut());
+    log('라운드 종료 — 앞에 놓인 <b>' + swept + '</b>' + eulReul(swept) + ' 팟으로 수거');
     flyChips(done);
   }, 640);
 }
