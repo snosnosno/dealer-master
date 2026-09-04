@@ -114,6 +114,20 @@ body {
 }
 .seat .cards { display: flex; gap: 3px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
 .seat .st { margin-top: 5px; font-family: var(--mono); font-size: 10px; opacity: .72; }
+/* 베팅 중인 칩 — 좌석 앞에 쌓였다가 팟으로 날아간다. 드래그는 없다(§9). */
+.seat .bet { display: flex; align-items: center; gap: 5px; margin-top: 6px; min-height: 16px; }
+.seat .bet .amt { font-family: var(--mono); font-size: 10.5px; font-weight: 800; color: var(--amber); }
+.chip {
+  width: 14px; height: 14px; border-radius: 50%; flex: none;
+  border: 1.5px dashed rgba(255,255,255,.62);
+  box-shadow: 0 1px 2px rgba(0,0,0,.38); margin-left: -5px;
+}
+.chip + .chip { margin-left: -5px; }
+.seat .bet .chip:first-child { margin-left: 0; }
+.chip.c500   { background: #D9DEDB; }
+.chip.c1000  { background: #2E6E52; }
+.chip.c5000  { background: #B23A2E; }
+.chip.c25000 { background: #2C4A7A; }
 
 .pcard {
   display: inline-flex; align-items: center; justify-content: center;
@@ -543,6 +557,24 @@ function cardHTML(c, cls) {
 }
 function backHTML(cls) { return '<span class="pcard back' + (cls ? ' ' + cls : '') + '"></span>'; }
 
+/* 칩 ─ 금액을 실제 칩 더미로 쪼갠다. 딜러가 눈으로 세는 단위 그대로다. */
+var CHIPS = [25000, 5000, 1000, 500];
+function chipBreak(amt) {
+  var out = [], i, k, c;
+  for (i = 0; i < CHIPS.length; i++) {
+    c = Math.floor(amt / CHIPS[i]);
+    amt -= c * CHIPS[i];
+    for (k = 0; k < c && out.length < 14; k++) out.push(CHIPS[i]);
+  }
+  return out;
+}
+function chipsHTML(amt) {
+  if (!amt) return '';
+  var cs = chipBreak(amt), h = '', i;
+  for (i = 0; i < cs.length; i++) h += '<span class="chip c' + cs[i] + '"></span>';
+  return h + '<span class="amt">' + won(amt) + '</span>';
+}
+
 // 전역 상태 ───────────────────────────────────────
 var G = { lives: 3, hands: 0, incidents: 0, right: 0, wrong: 0, over: false, showEnd: false, started: false, mode: null };
 var H = null;
@@ -563,7 +595,7 @@ function startHand() {
   for (i = 0; i < SEAT_N; i++) {
     seats.push({
       i: i, name: (i + 1) + '번', pos: (i - btn + SEAT_N) % SEAT_N,
-      down: [], up: [], folded: false, declared: 0, given: 0
+      down: [], up: [], folded: false, declared: 0, given: 0, bet: 0
     });
   }
   H = {
@@ -597,11 +629,7 @@ function buildQueue() {
   var spec = H.spec, q = [];
 
   // 강제 베팅
-  if (spec.forced === 'ante+bringin') {
-    q.push({ t: 'money', txt: '앤티 <b>' + won(ANTE) + '</b> ×6 수거', add: ANTE * SEAT_N });
-  } else {
-    q.push({ t: 'money', txt: 'SB <b>' + won(SB) + '</b> · BB <b>' + won(BB) + '</b>', add: SB + BB });
-  }
+  q.push({ t: 'forced' });
 
   /* 어느 스트릿에서 무엇을 물을지 미리 뽑는다 (매번 다르게).
      「누가 먼저」와 「얼마」는 한 라운드를 여는 동작 하나라 한 판단으로 묶여 있다. */
@@ -655,9 +683,7 @@ function advance() {
   if (H.qi >= H.q.length) { startHand(); return; }
   var s = H.q[H.qi++];
 
-  if (s.t === 'money') {
-    H.pot += s.add; log(s.txt); render(); return advance();
-  }
+  if (s.t === 'forced') return doForced(advance);
   if (s.t === 'stage') {
     H.stageIdx = s.ix; H.stage = H.spec.streets[s.ix].ko;
     log('— ' + H.stage + ' —', 'hi'); render(); return advance();
@@ -825,14 +851,18 @@ function doDrawRound(ix, next) {
 function doBets(ix, next) {
   var st = H.spec.streets[ix];
   var potLimit = H.spec.betting === 'PL';
+  var fin = function () { render(); (next || advance)(); };
 
   /* 팟리밋에서 매 라운드 전원이 콜하면 팟이 지수적으로 부푼다 —
      실제로는 체크로 넘어가는 라운드가 흔하다. 프리플랍만 반드시 액션이 돈다. */
   if (H.spec.betting !== 'FL' && ix > 0 && Math.random() < .45) {
     log('베팅 — 전원 체크');
-    render();
-    return (next || advance)();
+    return fin();
   }
+
+  /* 스터드 3번째 카드는 스몰벳으로 열지 않는다 — 브링인이고, 누군가 컴플리트해야
+     그때 스몰벳이 된다. 물은 답과 눈에 보이는 진행이 같아야 한다. */
+  if (H.spec.family === 'stud' && ix === 0) return doBringIn(fin);
 
   /* 팟리밋은 정해진 벳 단위가 없다 — 팟에서 나온 금액으로 돈다. */
   var amt = potLimit
@@ -843,14 +873,62 @@ function doBets(ix, next) {
   var list = actives(), parts = [], callers = 0, i;
   for (i = 0; i < list.length; i++) {
     var s = list[i];
-    var canFold = actives().filter(function (x) { return !x.folded; }).length > 2;
-    if (canFold && Math.random() < .22) { s.folded = true; parts.push(s.name + ' 폴드'); }
-    else { callers++; parts.push(s.name + ' ' + (callers === 1 ? '벳' : '콜')); }
+    if (actives().length > 2 && Math.random() < .22) { s.folded = true; parts.push(s.name + ' 폴드'); }
+    else { callers++; s.bet = amt; parts.push(s.name + ' ' + (callers === 1 ? '벳' : '콜')); }
   }
-  H.pot += amt * callers;
   log('베팅 — ' + parts.join(' · ') + ' <b>(' + won(amt) + ')</b>');
   render();
-  (next || advance)();
+  flyChips(fin);
+}
+
+/* 스터드 3번째 카드의 첫 베팅 — 브링인으로 연다.
+   브링인 좌석은 브링인 금액만 내고, 뒤에서 누군가 스몰벳까지 컴플리트하면
+   그제서야 레벨이 스몰벳이 되고 브링인 좌석이 차액을 채운다.
+   칩이 좌석마다 다른 높이로 쌓이는 것이 그 말을 대신한다. */
+function doBringIn(fin) {
+  var list = actives(), parts = [], i, s;
+  var bring = actorSeat(list, H.spec.streets[0].firstToAct) || list[0];
+  var wantComplete = Math.random() < .5;
+  var completer = null;
+
+  bring.bet = BRINGIN;
+  parts.push(bring.name + ' 브링인 <b>' + won(BRINGIN) + '</b>');
+
+  var rest = list.filter(function (x) { return x.i !== bring.i; });
+  for (i = 0; i < rest.length; i++) {
+    s = rest[i];
+    if (actives().length > 2 && Math.random() < .22) { s.folded = true; parts.push(s.name + ' 폴드'); continue; }
+    if (wantComplete && !completer) {
+      completer = s; s.bet = SMALL;
+      parts.push(s.name + ' 컴플리트 <b>' + won(SMALL) + '</b>');
+      continue;
+    }
+    s.bet = completer ? SMALL : BRINGIN;
+    parts.push(s.name + ' 콜 ' + won(s.bet));
+  }
+  if (completer) {
+    bring.bet = SMALL;
+    parts.push(bring.name + ' 차액 ' + won(SMALL - BRINGIN) + ' 채움');
+  }
+  log('3번째 카드 베팅 — ' + parts.join(' · '));
+  render();
+  flyChips(fin);
+}
+
+/* 강제 베팅도 칩으로 나간다 — 좌석 앞에 놓였다가 팟으로 간다.
+   팟이 숫자로만 커지면 그 돈이 어디서 왔는지 화면에 남지 않는다. */
+function doForced(done) {
+  var i, s;
+  if (H.spec.forced === 'ante+bringin') {
+    for (i = 0; i < H.seats.length; i++) H.seats[i].bet = ANTE;
+    log('앤티 <b>' + won(ANTE) + '</b> ×' + SEAT_N + ' 수거');
+  } else {
+    s = seatByPos(1); if (s) s.bet = SB;
+    s = seatByPos(2); if (s) s.bet = BB;
+    log('SB <b>' + won(SB) + '</b> · BB <b>' + won(BB) + '</b>');
+  }
+  render();
+  flyChips(done);
 }
 
 function doEndHand() {
@@ -941,7 +1019,7 @@ function mkAskSeat(ix) {
 
   return {
     kind: 'seat', tone: '', kicker: '판단 · 액션 순서',
-    q: st.firstToAct === 'lowest-upcard' ? '브링인은 누구입니까?' : '이번 베팅 라운드, 누가 먼저 액션합니까?',
+    q: (H.spec.family === 'stud' && ix === 0) ? '브링인은 누구입니까?' : '이번 베팅 라운드, 누가 먼저 액션합니까?',
     sub: H.stage + ' · 좌석을 직접 지목하세요.',
     answer: ans, why: why, cite: cite
   };
@@ -957,8 +1035,10 @@ function seatByPos(p) { return H.seats.filter(function (s) { return s.pos === p;
 function mkAskOpen(ix) {
   var seatQ = mkAskSeat(ix);
   if (!seatQ) return null;
+  /* 스터드의 첫 라운드는 그냥 「여는」 것이 아니라 브링인이다 — 이름을 그대로 부른다. */
+  var openKo = (H.spec.family === 'stud' && ix === 0) ? '브링인' : '첫 순서 지목';
   return {
-    kind: 'open', tone: '', kicker: '판단 · 라운드 열기',
+    kind: 'open', tone: '', kicker: '판단 · ' + openKo, openKo: openKo,
     q: seatQ.q, sub: seatQ.sub,
     answer: seatQ.answer, why: seatQ.why, cite: seatQ.cite,
     bet: mkAskBet(ix, H.seats[seatQ.answer].name), seatPicked: -1, typed: null
@@ -1883,15 +1963,39 @@ function flyDeal(plan, done) {
   }), done);
 }
 
+/* 좌석 앞에 쌓인 칩을 팟으로 옮긴다.
+   첫 칩이 뜰 때 좌석이 비고, 마지막 칩이 닿을 때 팟이 커진다 —
+   공중의 칩이 어느 쪽에도 두 번 세어지지 않게 하려는 것이다. */
+function chipItem(s, denom, first, last, amt) {
+  return {
+    from: '[data-seat="' + s.i + '"]', to: '.pot',
+    cls: 'chip c' + denom + ' flier', w: 14, h: 14,
+    commit: function () { if (first) s.bet = 0; if (last) H.pot += amt; }
+  };
+}
+function flyChips(done) {
+  var list = H.seats.filter(function (s) { return s.bet > 0; });
+  if (!list.length) { done(); return; }
+  var items = [], i, k, cs, amt;
+  for (i = 0; i < list.length; i++) {
+    amt = list[i].bet;
+    cs = chipBreak(amt);
+    for (k = 0; k < cs.length; k++) {
+      items.push(chipItem(list[i], cs[k], k === 0, k === cs.length - 1, amt));
+    }
+  }
+  runFlight(items, done, '칩을 팟으로 모으는 중');
+}
+
 function flyTo(pileId, n, done) {
   var arr = [], i;
   for (i = 0; i < n; i++) arr.push({ to: '[data-pile="' + pileId + '"]', commit: function () { H.di++; } });
   runFlight(arr, done);
 }
 
-function runFlight(items, done) {
+function runFlight(items, done, label) {
   if (!items.length) { done(); return; }
-  var f = { items: items, idx: 0, landed: 0, dead: false, done: done };
+  var f = { items: items, idx: 0, landed: 0, dead: false, done: done, label: label || '딜링 중' };
   FLIGHT = f;
   PHASE = 'anim';
   render();
@@ -1905,14 +2009,15 @@ function runFlight(items, done) {
 }
 
 function launch(f, it) {
-  var deck = document.querySelector('[data-pile="stub"]');
+  var src = document.querySelector(it.from || '[data-pile="stub"]');
   var dst = document.querySelector(it.to);
-  if (!deck || !dst) { it.commit(); afterLand(f); return; }
-  var a = deck.getBoundingClientRect(), b = dst.getBoundingClientRect();
+  if (!src || !dst) { it.commit(); afterLand(f); return; }
+  var a = src.getBoundingClientRect(), b = dst.getBoundingClientRect();
   var el = document.createElement('span');
-  el.className = 'pcard back flier';
-  el.style.left = (a.left + a.width / 2 - 11) + 'px';
-  el.style.top = (a.top + a.height / 2 - 15) + 'px';
+  el.className = it.cls || 'pcard back flier';
+  var w = it.w || 22, hh = it.h || 30;
+  el.style.left = (a.left + a.width / 2 - w / 2) + 'px';
+  el.style.top = (a.top + a.height / 2 - hh / 2) + 'px';
   el.style.transform = 'translate(0,0)';
   $('#fly').appendChild(el);
   var dx = (b.left + b.width / 2) - (a.left + a.width / 2);
@@ -1992,7 +2097,7 @@ function onChoice(i) {
   if (PHASE === 'pchoice') { onPChoice(i); return; }
   var s = STEP;
   if (!s) return;
-  /* 라운드 열기의 2단계 — 좌석은 이미 맞혔고 금액만 남았다 */
+  /* 2단계 — 좌석은 이미 맞혔고 금액만 남았다 */
   if (PHASE === 'openbet') {
     s.picked = i;
     judge(i === s.bet.correct, s);
@@ -2075,7 +2180,7 @@ var ACTS = [
   { id: 'burn',    ko: '번카드' },
   { id: 'deal',    ko: '카드 딜' },
   { id: 'draw',    ko: '카드 교체' },
-  { id: 'open',    ko: '라운드 열기' },
+  { id: 'open',    ko: '브링인 / 첫 순서 지목' },
   { id: 'betting', ko: '베팅 진행' },
   { id: 'pot',     ko: '팟 지급' }
 ];
@@ -2086,7 +2191,7 @@ function startPractice(specId) {
   var btn = rnd(SEAT_N);
   for (i = 0; i < SEAT_N; i++) {
     seats.push({ i: i, name: (i + 1) + '번', pos: (i - btn + SEAT_N) % SEAT_N,
-      down: [], up: [], folded: false, declared: 0, given: 0 });
+      down: [], up: [], folded: false, declared: 0, given: 0, bet: 0 });
   }
   H = { spec: spec, seats: seats, deck: deck, di: 0, btn: btn, pot: 0, burns: 0,
         discards: 0, board: [], stage: '', stageIdx: -1, log: [], flags: {}, q: [], qi: 0 };
@@ -2123,7 +2228,9 @@ function pDeny(exp) {
   if (exp.act === 'burn') return spec.streets[exp.ix].ko + ' 전에 번카드를 내린다.';
   if (exp.act === 'deal') return spec.streets[exp.ix].ko + '를 아직 딜하지 않았다.';
   if (exp.act === 'draw') return spec.streets[exp.ix].ko + ' 교체가 아직이다.';
-  if (exp.act === 'open') return '이번 라운드를 아직 열지 않았다 — 누가 먼저 액션하는지와 벳 크기를 정한다.';
+  if (exp.act === 'open') return (spec.family === 'stud' && exp.ix === 0)
+    ? '아직 브링인을 지목하지 않았다 — 누가 브링인이고 얼마를 내는지 정한다.'
+    : '이번 라운드의 첫 순서를 아직 지목하지 않았다 — 누가 먼저 액션하는지와 벳 크기를 정한다.';
   if (exp.act === 'betting') return '베팅을 아직 진행하지 않았다.';
   return '마지막은 팟 지급이다.';
 }
@@ -2146,8 +2253,7 @@ function pRun(step) {
   var spec = H.spec, ix = step.ix;
   if (ix >= 0) { H.stageIdx = ix; H.stage = spec.streets[ix].ko; }
 
-  if (step.act === 'ante') { H.pot += ANTE * SEAT_N; log('앤티 <b>' + won(ANTE) + '</b> ×6 수거'); return pDone(); }
-  if (step.act === 'blinds') { H.pot += SB + BB; log('SB <b>' + won(SB) + '</b> · BB <b>' + won(BB) + '</b>'); return pDone(); }
+  if (step.act === 'ante' || step.act === 'blinds') return doForced(pDone);
   if (step.act === 'burn') {
     return flyTo('burn', 1, function () {
       H.burns++; log('번카드 <b>1장</b> (누적 ' + H.burns + '장)'); pDone();
@@ -2156,12 +2262,13 @@ function pRun(step) {
   if (step.act === 'deal') return doDeal(ix, pDone);
   if (step.act === 'draw') return doDrawRound(ix, pDone);
   if (step.act === 'betting') {
-    doBets(ix, function () {});
-    if (ix === P.potAt) {
-      var pr = mkPotRaise(ix);
-      if (pr) { P.ask = pr; P.msg = ''; PHASE = 'pamount'; render(); return; }
-    }
-    return pDone();
+    return doBets(ix, function () {
+      if (ix === P.potAt) {
+        var pr = mkPotRaise(ix);
+        if (pr) { P.ask = pr; P.msg = ''; PHASE = 'pamount'; render(); return; }
+      }
+      pDone();
+    });
   }
   if (step.act === 'pot') {
     H.showdown = true;
@@ -2270,7 +2377,7 @@ function practiceTopHTML() {
 function practicePanelHTML() {
   var h = '';
   if (PHASE === 'anim') {
-    return '<div class="panel"><div class="kicker">딜링 중</div><div class="q">' + H.stage +
+    return '<div class="panel"><div class="kicker">' + ((FLIGHT && FLIGHT.label) || '딜링 중') + '</div><div class="q">' + H.stage +
       '</div><div class="hint">화면을 클릭하면 건너뜁니다</div></div>';
   }
   if (PHASE === 'pdone') {
@@ -2295,7 +2402,7 @@ function practicePanelHTML() {
       '</div>';
   }
   if (PHASE === 'popen' || PHASE === 'pwin') {
-    h = '<div class="panel"><div class="kicker">' + (PHASE === 'pwin' ? P.ask.kicker : '라운드 열기 · 1단계') + '</div>' +
+    h = '<div class="panel"><div class="kicker">' + (PHASE === 'pwin' ? P.ask.kicker : (P.ask.openKo || '첫 순서 지목') + ' · 1단계') + '</div>' +
       '<div class="q">' + P.ask.q + '</div>' +
       '<div class="qsub">' + (PHASE === 'pwin' ? '쇼다운' : H.stage) + ' · 테이블에서 좌석을 클릭하세요.</div>';
     if (P.msg) h += '<div class="verdict no"><div class="hd">아직 아니다</div>' + P.msg + '</div>';
@@ -2330,7 +2437,7 @@ function practicePanelHTML() {
   }
   if (PHASE === 'popenbet') {
     var b = P.ask.bet;
-    h = '<div class="panel"><div class="kicker">라운드 열기 · 2단계</div>' +
+    h = '<div class="panel"><div class="kicker">' + (P.ask.openKo || '첫 순서 지목') + ' · 2단계</div>' +
       '<div class="picked" style="margin-top:0;padding-top:0;border-top:none">첫 액션 — ' +
       H.seats[P.ask.seatPicked].name + ' 지목 완료</div>' +
       '<div class="q" style="margin-top:8px">' + b.q + '</div>' +
@@ -2483,6 +2590,7 @@ function seatHTML(s, pick) {
   return '<div class="' + cls + '" data-seat="' + s.i + '">' +
     '<div class="nm">' + s.name + (tag ? '<span class="tag">' + tag + '</span>' : '') + '</div>' +
     '<div class="cards">' + (cards || '<span class="st">—</span>') + '</div>' +
+    '<div class="bet">' + chipsHTML(s.bet || 0) + '</div>' +
     (s.folded ? '<div class="st">폴드</div>' : '') +
     '</div>';
 }
