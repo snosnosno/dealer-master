@@ -9,7 +9,7 @@
  * 여기가 판정하는 것이 곧 사용자에게 가르치는 규칙이다. 틀리면 딜러 훈련생이
  * 틀린 규칙을 정답으로 배운다.
  */
-import type { PlayerAction, Street } from '../types'
+import type { PlayerAction } from '../types'
 
 export type RulesetId = 'nlh'
 
@@ -63,10 +63,8 @@ export type DeclaredIntent = 'none' | 'raise' | 'allin'
 
 export interface Ruleset {
   id: RulesetId
-  family: 'flop' | 'stud' | 'draw'
-  bettingStructure: 'no-limit' | 'pot-limit' | 'fixed-limit'
-  holeCardCount: number
-  streets: Street[]
+  // family · bettingStructure · holeCardCount · streets 는 GameSpec 으로 옮겼다.
+  // 게임 데이터의 정본은 lib/games/ 하나여야 한다 — 둘이면 반드시 갈라진다 (ADR-003).
 
   minRaiseTo(ctx: BettingContext): number
   maxRaiseTo(ctx: BettingContext): number

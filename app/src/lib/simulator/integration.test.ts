@@ -4,6 +4,7 @@ import {
   buildPots, cardToString, initialState, stateAt, nlh, ODD_CHIP_UNIT,
 } from './index'
 import type { BettingContext, Hand } from './index'
+import { GAMES } from '@/lib/games'
 
 describe('엔진 통합 — 핸드 100개', () => {
   const seeds = Array.from({ length: 100 }, (_, i) => `int-${i}`)
@@ -105,7 +106,7 @@ describe('엔진 통합 — 핸드 100개', () => {
       const final = stateAt(init, hand.events, hand.events.length)
       expect(final.seats.length).toBe(hand.seats.length)
       final.seats.forEach((s, i) => {
-        expect(s.hole.length, `${seed} 좌석 ${i}`).toBe(nlh.holeCardCount)
+        expect(s.hole.length, `${seed} 좌석 ${i}`).toBe(GAMES.nlh.holeCardCount)
       })
     })
   })

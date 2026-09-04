@@ -34,10 +34,6 @@ const REOPEN_CLOSED =
 
 export const nlh: Ruleset = {
   id: 'nlh',
-  family: 'flop',
-  bettingStructure: 'no-limit',
-  holeCardCount: 2,
-  streets: ['preflop', 'flop', 'turn', 'river'],
 
   /**
    * Rule 43-A. 레이즈는 "이번 라운드에 나온 가장 큰 벳 또는 레이즈 폭" 이상이어야 한다.
