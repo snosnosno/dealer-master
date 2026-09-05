@@ -71,12 +71,19 @@ describe('dealHand(plo8)', () => {
     }
   })
 
-  it('한 라운드 안에서 좌석의 누적 금액은 줄지 않는다', () => {
+  it('한 라운드 안에서 좌석은 한 번만 액션하고, 누적 금액은 줄지 않는다', () => {
     for (const seed of seeds) {
       const script = dealHand(GAMES.plo8, seed)
       for (const [streetId, actions] of Object.entries(script.betting)) {
+        const seen = new Set<number>()
         const paid = new Map<number, number>()
         for (const a of actions) {
+          // 지금 생성기는 좌석마다 한 라운드에 액션을 하나만 만든다 — 재레이즈가 없다.
+          // 이 사실이 없으면 아래 monotonicity 검사는 첫 액션의 `?? 0` 기본값과만
+          // 비교하게 되어 무엇을 대입해도 참이 되는 공허한 검사가 된다.
+          expect(seen.has(a.seat), `${seed}/${streetId}/좌석 ${a.seat} 이 한 라운드에 두 번 나옴`).toBe(false)
+          seen.add(a.seat)
+
           const before = paid.get(a.seat) ?? 0
           expect(a.to, `${seed}/${streetId}/좌석 ${a.seat}`).toBeGreaterThanOrEqual(before)
           paid.set(a.seat, a.to)
