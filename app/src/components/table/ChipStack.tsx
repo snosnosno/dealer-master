@@ -36,7 +36,17 @@ export function ChipStack({ amount }: { amount: number }) {
           </div>
         ))}
       </div>
-      <span className="text-[10px] font-bold text-white">
+      {/*
+        * 금액에 어두운 반투명 알약을 깐다. 흰 글자만 두면 **펠트 밖에서 사라진다** —
+        * 좌석 칼럼이 위에서 아래로 자라므로 하단 좌석(1번·6번)의 벳 칩은 펠트 아래
+        * 테두리 밖 흰 페이지 배경에 놓이고, 거기서 흰 글자는 대비 1:1 이다. 실제로
+        * 1번의 「1,000」은 테두리에 걸쳐 반쯤 지워졌고 6번의 「500」은 통째로 사라졌다.
+        *
+        * 좌석 이름·스택이 흰 알약으로 푼 문제와 같은 것인데, 그쪽은 배경을 흰색으로
+        * 확정했고 여기는 반대로 어둡게 확정한다 — 칩 금액은 펠트 위에 있을 때가 더
+        * 많고, 흰 알약을 깔면 펠트 위에서 눈에 너무 튄다.
+        */}
+      <span className="rounded-full bg-black/60 px-1.5 text-[10px] font-bold text-white">
         {amount.toLocaleString('ko-KR')}
         {remainder > 0 ? ` (+${remainder})` : ''}
       </span>

@@ -21,7 +21,55 @@ import { randomSeed } from '@/lib/rush/seed'
 const ANIM_MS = 520
 
 export function ProcedureScreen({ spec }: { spec: GameSpec }) {
-  const [state, setState] = useState(() => startProcedure(spec, randomSeed()))
+  /*
+   * **첫 렌더에서 판을 만들지 않는다.** `useState(() => startProcedure(spec, randomSeed()))`
+   * 로 시작하면 초기화 함수가 서버에서 한 번, 클라이언트 하이드레이션에서 또 한 번 돌아
+   * **서로 다른 핸드**가 나온다. 실제로 이 화면은 매 로드마다 하이드레이션 불일치를
+   * 던지고 있었다 — 포지션 태그가 서버와 클라이언트에서 다른 좌석에 붙었다.
+   *
+   * 증상보다 규율이 먼저다: 화면에 이미 놓인 카드가 다른 카드로 바뀌는 것이 프로토타입의
+   * 결정적 결함이었고 6–8단계가 그것을 막으려고 있다. 시드는 마운트 뒤에 만들고, 그
+   * 전에는 서버와 클라이언트가 똑같은 자리표시자를 그린다 (전역 제약 「시드 결정론」).
+   */
+  const [seed, setSeed] = useState<string | null>(null)
+  useEffect(() => {
+    setSeed((s) => s ?? randomSeed())
+  }, [])
+
+  const again = useCallback(() => setSeed(randomSeed()), [])
+
+  return (
+    <main className="mx-auto w-full max-w-[560px] px-4 py-5 font-sans">
+      <div className="mb-3 flex items-center justify-between">
+        <Link href={`/games/${spec.id}`} className="text-sm text-zinc-500">
+          ← 돌아가기
+        </Link>
+        <span className="text-[11px] font-bold uppercase tracking-wide text-dm-accent">
+          {spec.labels.ko} · 진행절차
+        </span>
+      </div>
+
+      {seed === null ? (
+        <p className="py-20 text-center text-sm text-zinc-500">핸드를 준비하는 중…</p>
+      ) : (
+        // key 로 판을 통째로 갈아 끼운다 — 「한 핸드 더」가 새 시드로 새 핸드를 연다
+        <ProcedureRun key={seed} spec={spec} seed={seed} onAgain={again} />
+      )}
+    </main>
+  )
+}
+
+/** 한 핸드. **마운트되는 순간 시드가 정해져 있다** — 여기서 무작위를 만들지 않는다. */
+function ProcedureRun({
+  spec,
+  seed,
+  onAgain,
+}: {
+  spec: GameSpec
+  seed: string
+  onAgain(): void
+}) {
+  const [state, setState] = useState(() => startProcedure(spec, seed))
 
   // 애니메이션이 끝나면 스스로 다음 입력을 기다린다. 사용자가 누를 것이 없는 구간이다
   useEffect(() => {
@@ -38,19 +86,8 @@ export function ProcedureScreen({ spec }: { spec: GameSpec }) {
     setState((s) => reduce(s, { type: 'seat', seat }))
   }, [])
 
-  const again = useCallback(() => setState(startProcedure(spec, randomSeed())), [spec])
-
   return (
-    <main className="mx-auto w-full max-w-[560px] px-4 py-5 font-sans">
-      <div className="mb-3 flex items-center justify-between">
-        <Link href={`/games/${spec.id}`} className="text-sm text-zinc-500">
-          ← 돌아가기
-        </Link>
-        <span className="text-[11px] font-bold uppercase tracking-wide text-dm-accent">
-          {spec.labels.ko} · 진행절차
-        </span>
-      </div>
-
+    <>
       <div className="mb-2 flex items-center gap-3 text-xs text-zinc-500">
         <span>
           단계 <b className="text-zinc-800 dark:text-zinc-100">{Math.min(state.at + 1, state.steps.length)}</b>
@@ -83,7 +120,7 @@ export function ProcedureScreen({ spec }: { spec: GameSpec }) {
           </p>
           <button
             type="button"
-            onClick={again}
+            onClick={onAgain}
             className="mt-4 w-full rounded-xl bg-dm-teal-600 py-3 text-sm font-bold text-white"
           >
             한 핸드 더
@@ -128,6 +165,6 @@ export function ProcedureScreen({ spec }: { spec: GameSpec }) {
           <li key={i}>{line}</li>
         ))}
       </ol>
-    </main>
+    </>
   )
 }
