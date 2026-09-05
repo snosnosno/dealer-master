@@ -16,7 +16,7 @@ import { Card } from './Card'
 import { ChipStack } from './ChipStack'
 import { Seat } from './Seat'
 import { seatOffset } from './geometry'
-import type { HandState } from '@/lib/simulator'
+import type { TableView } from '@/lib/simulator'
 
 /** 디자인 박스. 폭은 **좌석 상자의 바깥쪽 끝까지** 포함한 값이다. */
 const LAYOUT_W = 360
@@ -64,8 +64,14 @@ export function PokerTable({
   state,
   burnCount,
 }: {
-  state: HandState
-  /** 지금까지 번된 카드 수. HandState 에 없으므로(번은 상태를 바꾸지 않는다) 밖에서 센다. */
+  /**
+   * **`HandState` 가 아니라 `TableView` 다.** 이 컴포넌트가 실제로 읽는 것은
+   * 좌석·버튼·보드·팟 넷뿐인데, `HandState` 를 요구하면 노리밋 홀덤 시뮬레이터를
+   * 돌리지 않는 드릴(진행절차)이 이 테이블을 못 쓴다. `HandState` 는 구조적으로
+   * `TableView` 를 만족하므로 기존 호출부는 그대로다.
+   */
+  state: TableView
+  /** 지금까지 번된 카드 수. 번은 상태를 바꾸지 않으므로 밖에서 센다. */
   burnCount: number
 }) {
   const n = state.seats.length
