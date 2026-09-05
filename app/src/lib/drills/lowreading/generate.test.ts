@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bestOmahaLow } from '@/lib/simulator'
+import { bestOmahaLow, compareLow } from '@/lib/simulator'
 import { generateLowRun } from './generate'
 import { LOW_QUESTION_COUNT } from './types'
 
@@ -40,7 +40,12 @@ describe('generateLowRun', () => {
         expect(actual.length).toBeGreaterThan(0)
       }
       if (q.kind === 'lo-best') {
-        expect(lows[q.answerSeat]).not.toBeNull()
+        const answerLow = lows[q.answerSeat]
+        expect(answerLow).not.toBeNull()
+        lows.forEach((low, i) => {
+          if (i === q.answerSeat || low === null) return
+          expect(compareLow(low, answerLow!)).toBeGreaterThan(0)
+        })
       }
     }
   })
