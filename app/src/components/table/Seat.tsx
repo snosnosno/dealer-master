@@ -25,9 +25,15 @@ export function Seat({
     <div
       className={`flex w-full flex-col items-center gap-0.5 ${seat.folded ? 'opacity-40' : ''}`}
     >
+      {/*
+        * 홀카드는 `xs` 다. 종목이 몇 장을 주는지는 스펙이 정하므로 이 줄은 넉 장까지
+        * 견뎌야 한다 — `sm` 이면 오마하 4장에서 줄이 좌석 상자보다 넓어져 바깥
+        * 카드가 펠트를 벗어난다(360px 에서 14.5px 초과). 카드 크기는 고정 px 이고
+        * 좌표만 퍼센트라 화면이 좁아질수록 이 초과가 커진다.
+        */}
       <div className="flex gap-0.5">
         {seat.hole.map((card, i) => (
-          <Card key={i} card={card} faceUp={seat.revealed} size="sm" />
+          <Card key={i} card={card} faceUp={seat.revealed} size="xs" />
         ))}
       </div>
 

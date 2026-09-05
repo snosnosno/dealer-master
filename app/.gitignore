@@ -42,3 +42,7 @@ next-env.d.ts
 
 # keep the env template tracked
 !.env.local.example
+
+# playwright
+/e2e/shots/
+/test-results/
