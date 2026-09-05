@@ -39,7 +39,7 @@ function denyHint(state: ProcedureState, step: Step): string {
     case 'ante':
       return '아직 앤티를 걷지 않았습니다. 스터드는 앤티와 브링인으로 시작합니다.'
     case 'blinds':
-      return '아직 블라인드를 걷지 않았습니다. 플랍게임은 SB·BB 로 시작합니다.'
+      return '아직 블라인드를 걷지 않았습니다. 플랍게임은 SB·BB로 시작합니다.'
     case 'burn':
       return `${street?.labels.ko} 전에 번카드를 내립니다.`
     case 'deal':

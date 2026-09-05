@@ -41,7 +41,7 @@ describe('dealHand(plo8)', () => {
     }
   })
 
-  it('블라인드가 SB·BB 로 잡혀 있다', () => {
+  it('블라인드가 SB·BB로 잡혀 있다', () => {
     const script = dealHand(GAMES.plo8, 'seed-1')
     expect(script.blinds).toEqual({ sb: SMALL_BLIND, bb: BIG_BLIND })
   })
