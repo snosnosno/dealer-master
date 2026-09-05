@@ -5,26 +5,25 @@
  * "PLO 의 팟리밋을 연습하고 싶다"를 표현할 자리가 없었다 (PRD §6).
  *
  * `n/m` 은 손으로 적지 않는다 — `drillsFor` 와 `drillHref` 가 낸다.
+ * 패밀리 목록도 마찬가지다 — `FAMILY_ORDER` 가 레코드에서 나오므로 빠뜨릴 수 없고,
+ * 이름은 각 종목의 `labels.familyKo` 에서 온다.
  */
 import Link from 'next/link'
-import { DRILL_LABEL, drillHref, drillsFor, GAME_ORDER, GAMES } from '@/lib/games'
-
-const FAMILY_ORDER = [
-  { id: 'flop', ko: '플랍' },
-  { id: 'stud', ko: '스터드' },
-  { id: 'draw', ko: '드로우' },
-] as const
+import { DRILL_LABEL, drillHref, drillsFor, FAMILY_ORDER, GAME_ORDER, GAMES } from '@/lib/games'
 
 export function GameList() {
   return (
     <div className="mt-8 space-y-6">
       {FAMILY_ORDER.map((family) => {
-        const games = GAME_ORDER.filter((id) => GAMES[id].family === family.id)
+        const games = GAME_ORDER.filter((id) => GAMES[id].family === family)
         if (games.length === 0) return null
+        // 패밀리 이름은 종목이 들고 있는 것을 쓴다 — 홈의 제목과 종목 허브의 부제가
+        // 같은 곳에서 나와야 서로 어긋나지 않는다
+        const familyKo = GAMES[games[0]].labels.familyKo
 
         return (
-          <section key={family.id}>
-            <h2 className="text-xs font-bold text-zinc-400">{family.ko}</h2>
+          <section key={family}>
+            <h2 className="text-xs font-bold text-zinc-400">{familyKo}</h2>
             <div className="mt-2 space-y-2">
               {games.map((id) => {
                 const spec = GAMES[id]

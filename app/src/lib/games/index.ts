@@ -17,5 +17,6 @@ export function isGameId(value: string): value is GameId {
 }
 
 export { drillsFor, DRILL_LABEL, type DrillId } from './drills'
+export { FAMILY_ORDER, type Family } from './families'
 export { drillHref } from './routes'
 export type { GameId, GameSpec, Street, EvalSpec, FirstToAct } from './types'
