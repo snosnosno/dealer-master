@@ -2,7 +2,7 @@
  * 종목 허브 — 격자의 한 행을 펼친 것.
  *
  * **목록은 `drillsFor` 가 낸다.** 이 종목에 해당 없는 드릴(노리밋 홀덤의 팟리밋 계산,
- * 하이 게임의 로우 판독)은 아예 나오지 않는다 — 잠긴 것과 해당 없는 것은 다르다.
+ * 팟리밋 오마하의 액션 판정)은 아예 나오지 않는다 — 잠긴 것과 해당 없는 것은 다르다.
  */
 import Link from 'next/link'
 import { DRILL_LABEL, drillHref, drillsFor, type GameId, GAMES } from '@/lib/games'
