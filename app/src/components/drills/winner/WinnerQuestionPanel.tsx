@@ -63,6 +63,7 @@ export function WinnerQuestionPanel({
 
   const seatButton = (seat: number, list: number[], onPick: (seat: number) => void) => (
     <button
+      key={seat}
       type="button"
       disabled={!solving}
       aria-pressed={list.includes(seat)}
