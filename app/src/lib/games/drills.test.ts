@@ -3,22 +3,23 @@ import { drillsFor } from './drills'
 import { GAMES } from './index'
 
 describe('drillsFor', () => {
-  it('PLO8 은 드릴 일곱이 전부 해당된다', () => {
+  it('PLO8은 드릴 여섯이 전부 해당된다', () => {
     expect(drillsFor(GAMES.plo8)).toEqual([
-      'procedure', 'boardreading', 'potlimit', 'potaward', 'lowreading', 'incident', 'action',
+      'procedure', 'winner', 'potlimit', 'potaward', 'incident', 'action',
     ])
   })
 
-  it('노리밋 홀덤은 팟리밋과 로우 판독이 해당 없다', () => {
+  it('노리밋 홀덤은 팟리밋만 해당 없다', () => {
     const drills = drillsFor(GAMES.nlh)
     expect(drills).not.toContain('potlimit')
-    expect(drills).not.toContain('lowreading')
     expect(drills).toHaveLength(5)
   })
 
-  it('로우 판독은 eval.lo 가 있을 때만 생긴다', () => {
-    expect(GAMES.plo8.eval.lo).not.toBeNull()
+  // 로우 유무는 이제 칸을 지우지 않는다. 승자 판독이 무엇을 묻는지를 가른다 (설계 §2)
+  it('승자 판독은 로우가 없는 종목에도 있다', () => {
     expect(GAMES.nlh.eval.lo).toBeNull()
+    expect(drillsFor(GAMES.nlh)).toContain('winner')
+    expect(drillsFor(GAMES.plo8)).toContain('winner')
   })
 
   it('팟리밋은 betting 코드값으로만 갈린다', () => {
