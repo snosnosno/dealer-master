@@ -69,7 +69,16 @@ export function PotAwardQuestionPanel({
 
       <p className="mt-3 text-sm font-bold">{question.prompt}</p>
       <p className="text-xs text-zinc-500">
-        {question.potIndex === 0 ? '메인팟' : `사이드팟 ${question.potIndex}`}{' '}
+        {/*
+         * 팟 이름을 알약으로 **감싼다**. 사이드팟은 이름이 숫자로 끝나서
+         * 「사이드팟 2 4,800」이 「24,800」 한 덩어리로 읽혔다 — 트레이니가 묻지 않은
+         * 금액을 보고 답한다. 구분 문자로는 못 고친다: 이 줄은 자격 목록에서 이미
+         * `·` 를 쓰고, `—` 는 범위로, `:` 는 비로 읽힐 자리다. 경계 자체를 그린다.
+         * 팟 러시(`RushTable`)도 팟 이름과 금액을 따로 놓는다 — 같은 손이다.
+         */}
+        <span className="rounded bg-zinc-200 px-1 font-bold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+          {question.potIndex === 0 ? '메인팟' : `사이드팟 ${question.potIndex}`}
+        </span>{' '}
         <b>{won(asked.amount)}</b> · 자격{' '}
         {asked.eligibleSeats.map((s) => question.seats[s].name).join(' · ')}
       </p>
