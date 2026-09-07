@@ -79,7 +79,7 @@ describe('generateWinnerRun', () => {
   })
 
   it('아직 만들지 않은 갈래는 조용히 넘어가지 않고 던진다', () => {
-    // 노리밋 홀덤은 mustUse 가 null 이다 — 아무 다섯 장 갈래는 그 종목이 붙을 때 만든다
-    expect(() => generateWinnerRun(GAMES.nlh, 'x')).toThrow()
+    // 노리밋 홀덤은 로우가 없다 — 출제 배분이 로우 성립 문제를 요구하므로 아직 낼 수 없다
+    expect(() => generateWinnerRun(GAMES.nlh, 'x')).toThrow(/로우가 없는 종목/)
   })
 })

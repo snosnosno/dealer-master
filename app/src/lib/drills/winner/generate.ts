@@ -113,6 +113,8 @@ export function generateWinnerRun(spec: GameSpec, seed: string): WinnerQuestion[
 
   // 이 드릴 고유의 제약이다 — 평가기가 아니라 문제 모양의 문제다
   if (!asks.hi) throw new Error('로우 전용 종목은 아직 없다 — 라즈가 붙을 때 만든다')
+  // loTargets 가 로우 성립 문제를 요구한다 — 로우가 없는 종목은 아직 낼 수 없다
+  if (!asks.lo) throw new Error('로우가 없는 종목은 아직 없다 — loTargets 가 로우 성립 문제를 요구한다')
 
   // 아직 만들지 않은 평가 갈래는 여기서 던진다 (lib/games/evaluator.ts)
   const ev = evaluatorFor(spec)
