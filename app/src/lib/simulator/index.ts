@@ -15,7 +15,7 @@ export {
   type Card, type Rank, type Suit,
 } from './cards'
 export {
-  evaluateHand, compareHands, CATEGORY_LABEL,
+  evaluateHand, compareHands, CATEGORY_LABEL, ANY_FIVE_EVALUATOR,
   type HandRank, type HandCategory, type HandEvaluator,
 } from './evaluate'
 export { evaluateLowA5, compareLow, type LowRank } from './lowball'

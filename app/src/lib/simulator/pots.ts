@@ -6,10 +6,11 @@
  * 팟의 "금액"뿐 아니라 "개수"와 "자격자 집합"까지 규칙 그대로여야 한다.
  */
 import type { Card } from './cards'
-import { compareHands, evaluateHand } from './evaluate'
+import { compareHands, type HandEvaluator } from './evaluate'
+import { compareLow } from './lowball'
 
 export type Pot = { amount: number; eligibleSeats: number[] }
-export type PotAward = { potIndex: number; seat: number; amount: number }
+export type PotAward = { potIndex: number; seat: number; amount: number; half: 'hi' | 'lo' }
 
 /**
  * 투입액을 층(layer)으로 잘라 메인팟과 사이드팟을 만든다.
@@ -99,6 +100,7 @@ export function awardPots(
   hole: Card[][],
   board: Card[],
   buttonSeat: number,
+  evaluator: HandEvaluator,
 ): PotAward[] {
   const awards: PotAward[] = []
   const seatCount = hole.length
@@ -118,40 +120,98 @@ export function awardPots(
   pots.forEach((pot, potIndex) => {
     if (pot.eligibleSeats.length === 0) return
 
-    // 자격자가 한 명이면 쇼다운이 없다. 보드가 5장이 아닌 채로 끝난 핸드
-    // (전원 폴드) 에서 evaluateHand 를 부르면 카드가 모자라 던진다.
-    let winners: number[]
+    /*
+     * 자격자가 한 명이면 쇼다운이 없다. 보드가 5장이 아닌 채로 끝난 핸드
+     * (전원 폴드) 에서 평가기를 부르면 카드가 모자라 던진다.
+     * 반으로 가르지도 않는다 — 나눌 상대가 없다.
+     */
     if (pot.eligibleSeats.length === 1) {
-      winners = [...pot.eligibleSeats]
-    } else {
-      const ranked = pot.eligibleSeats.map((seat) => ({
-        seat,
-        rank: evaluateHand([...hole[seat], ...board]),
-      }))
-      let best = ranked[0].rank
-      for (const r of ranked) if (compareHands(r.rank, best) > 0) best = r.rank
-      winners = ranked.filter((r) => compareHands(r.rank, best) === 0).map((r) => r.seat)
+      awards.push({ potIndex, seat: pot.eligibleSeats[0], amount: pot.amount, half: 'hi' })
+      return
     }
 
-    /*
-     * 홀칩은 "가장 작은 칩" 단위로 남고, 버튼 왼쪽 첫 자격자부터 한 칩씩 간다.
-     * 낮은 좌석 인덱스부터 주면 좌석 번호가 규칙인 것처럼 가르치게 된다 —
-     * 실제 기준은 버튼이다. 그리고 8,100 을 둘로 나눠 4,050 씩 주는 것은
-     * 테이블에 50 칩이 없으므로 현장에서 불가능하다. 4,100 / 4,000 이 정답이다.
-     * TDA 2024 규정집 원문 대조 완료 — "20: Awarding Odd Chips". A) 보드 게임에서 하이/로우
-     * 핸드가 둘 이상이면 나머지 칩은 버튼 왼쪽 첫 좌석부터. 위 서술과 일치한다.
-     */
-    const ordered = orderFromButton(winners, buttonSeat, seatCount)
-    const units = Math.floor(pot.amount / ODD_CHIP_UNIT)
-    const base = Math.floor(units / ordered.length) * ODD_CHIP_UNIT
-    let remainder = pot.amount - base * ordered.length
+    // **팟마다 다시 구한다** — 팟마다 자격자가 다르므로 임자도 다르다
+    const hiSet = hiSeats(pot.eligibleSeats, hole, board, evaluator)
+    const loSet = loSeats(pot.eligibleSeats, hole, board, evaluator)
 
-    ordered.forEach((seat) => {
-      const extra = Math.min(remainder, ODD_CHIP_UNIT)
-      remainder -= extra
-      awards.push({ potIndex, seat, amount: base + extra })
-    })
+    // 로우 성립자가 없으면 하이가 전부 가져간다 (가이드 p5)
+    if (loSet.length === 0) {
+      pushShare(awards, potIndex, 'hi', pot.amount, hiSet, buttonSeat, seatCount)
+      return
+    }
+
+    const half = splitHalf(pot.amount)
+    pushShare(awards, potIndex, 'hi', half.hi, hiSet, buttonSeat, seatCount)
+    pushShare(awards, potIndex, 'lo', half.lo, loSet, buttonSeat, seatCount)
   })
 
   return awards
+}
+
+/** 이 팟 자격자 중 하이 최고 동률 좌석들. **동점이면 여럿이다** — 걸러내지 않는다 */
+function hiSeats(
+  eligible: number[], hole: Card[][], board: Card[], ev: HandEvaluator,
+): number[] {
+  const ranked = eligible.map((seat) => ({ seat, rank: ev.rankHi(hole[seat], board) }))
+  let best = ranked[0].rank
+  for (const r of ranked) if (compareHands(r.rank, best) > 0) best = r.rank
+  return ranked.filter((r) => compareHands(r.rank, best) === 0).map((r) => r.seat)
+}
+
+/** 자격을 통과한 것 중 최저 동률 좌석들. 자격자가 없으면 빈 배열이고 그것이 「로우 없음」이다 */
+function loSeats(
+  eligible: number[], hole: Card[][], board: Card[], ev: HandEvaluator,
+): number[] {
+  const rankLo = ev.rankLo
+  if (rankLo === null) return []
+  const ranked = eligible.flatMap((seat) => {
+    const low = rankLo(hole[seat], board)
+    return low === null ? [] : [{ seat, low }]
+  })
+  if (ranked.length === 0) return []
+  let best = ranked[0].low
+  for (const r of ranked) if (compareLow(r.low, best) < 0) best = r.low
+  return ranked.filter((r) => compareLow(r.low, best) === 0).map((r) => r.seat)
+}
+
+/**
+ * 팟을 하이/로우 절반으로 가른다 — **홀칩 1차.**
+ *
+ * 칩 단위로 못 가르는 나머지는 **하이 쪽**이다. 8,100 은 4,050 씩이 아니라
+ * 4,100 / 4,000 이다 — 테이블에 50 칩이 없다.
+ * 출처: docs/references/mixgame-facts.md 「홀칩은 Hi 승자에게」(가이드 p5).
+ */
+function splitHalf(amount: number): { hi: number; lo: number } {
+  const units = Math.floor(amount / ODD_CHIP_UNIT)
+  const lo = Math.floor(units / 2) * ODD_CHIP_UNIT
+  return { hi: amount - lo, lo }
+}
+
+/**
+ * 한 절반을 그 집합 안에서 나눈다 — **홀칩 2차.**
+ *
+ * 남는 칩은 버튼 왼쪽 첫 자격자부터 한 칩씩. 낮은 좌석 인덱스부터 주면 좌석 번호가
+ * 규칙인 것처럼 가르치게 된다 — 실제 기준은 버튼이다.
+ * TDA 2024 「20: Awarding Odd Chips」 대조 완료.
+ */
+function pushShare(
+  awards: PotAward[],
+  potIndex: number,
+  half: 'hi' | 'lo',
+  amount: number,
+  winners: number[],
+  buttonSeat: number,
+  seatCount: number,
+): void {
+  if (amount === 0 || winners.length === 0) return
+  const ordered = orderFromButton(winners, buttonSeat, seatCount)
+  const units = Math.floor(amount / ODD_CHIP_UNIT)
+  const base = Math.floor(units / ordered.length) * ODD_CHIP_UNIT
+  let remainder = amount - base * ordered.length
+
+  ordered.forEach((seat) => {
+    const extra = Math.min(remainder, ODD_CHIP_UNIT)
+    remainder -= extra
+    awards.push({ potIndex, seat, amount: base + extra, half })
+  })
 }

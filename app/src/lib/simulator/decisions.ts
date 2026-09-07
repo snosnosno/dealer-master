@@ -14,7 +14,7 @@ import { initialState, stateAt } from './reduce'
 import { createRng, type Rng } from './rng'
 import { nlh } from './rulesets/nlh'
 import type { DecisionKind, Hand } from './generate'
-import { CATEGORY_LABEL, evaluateHand } from './evaluate'
+import { ANY_FIVE_EVALUATOR, CATEGORY_LABEL, evaluateHand } from './evaluate'
 
 export type DecisionInput =
   | { type: 'choice'; choices: string[]; correctIndex: number }
@@ -248,7 +248,7 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
   const mainPot = pots[0]
   if (mainPot && mainPot.eligibleSeats.length >= 2 && finalState.board.length === 5) {
     const hole = finalState.seats.map((s) => s.hole)
-    const awards = awardPots(pots, hole, finalState.board, hand.buttonSeat)
+    const awards = awardPots(pots, hole, finalState.board, hand.buttonSeat, ANY_FIVE_EVALUATOR)
     // 팟은 갈릴 수 있다. 승자를 한 명으로 접으면 공동 승자를 지목한 유저가
     // 오답 처리된다 — 보드 플레이나 킥커 카운터피트로 실제로 나오는 상황이다.
     const winners = awards

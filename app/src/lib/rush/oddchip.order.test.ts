@@ -9,9 +9,13 @@
  * 그래서 동점 자체를 먼저 확인한다.
  */
 import { describe, expect, it } from 'vitest'
+import { GAMES, evaluatorFor } from '@/lib/games'
 import { ODD_CHIP_UNIT, awardPots, compareHands, evaluateHand } from '@/lib/simulator'
 import { allTieFixture } from './deal'
 import { oddChipSeat } from './oracle'
+
+/** 홀칩 순서는 종목과 무관하다 — 노리밋 홀덤 평가기로 전 좌석 동점을 만든다 */
+const EV = evaluatorFor(GAMES.nlh)
 
 const MIN = 2
 const MAX = 9
@@ -54,7 +58,7 @@ describe('홀칩 순서 — 전수 대조', () => {
         const base = Math.floor(units / eligible.length) * ODD_CHIP_UNIT
 
         for (let button = 0; button < seatCount; button++) {
-          const awards = awardPots([{ amount, eligibleSeats: eligible }], hole, board, button)
+          const awards = awardPots([{ amount, eligibleSeats: eligible }], hole, board, button, EV)
 
           // 자격자 전원이 받고, 합이 팟과 같다
           expect(awards.map((a) => a.seat).sort((x, y) => x - y)).toEqual(eligible)

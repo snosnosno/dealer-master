@@ -6,6 +6,7 @@
  * 오라클(`potsByUnit`)과 엔진의 다른 진입점(`awardPots`)으로 다시 구한다.
  */
 import { describe, expect, it } from 'vitest'
+import { GAMES, evaluatorFor } from '@/lib/games'
 import { ODD_CHIP_UNIT, awardPots, buildPots, createRng, type Card } from '@/lib/simulator'
 import { generateRun } from './generate'
 import { oddChipSeat, potsByUnit } from './oracle'
@@ -15,6 +16,9 @@ import { makeSidePots } from './questions/sidepots'
 import { makeSplit } from './questions/split'
 import { makeWinner } from './questions/winner'
 import { KIND_QUOTA, QUESTION_COUNT, type RushKind, type RushQuestion } from './types'
+
+/** 팟 러시는 노리밋 홀덤이다 — 아무 다섯 장, 로우 없음 */
+const EV = evaluatorFor(GAMES.nlh)
 
 const ROUNDS = 1000
 
@@ -46,7 +50,7 @@ function winnersByAwardPots(q: RushQuestion, potIndex = 0): number[] {
     q.seats.map(() => false),
   )
   const hole = q.seats.map((s) => s.hole ?? [])
-  const awards = awardPots(pots, hole, q.board, q.buttonSeat)
+  const awards = awardPots(pots, hole, q.board, q.buttonSeat, EV)
   return awards.filter((a) => a.potIndex === potIndex).map((a) => a.seat).sort((a, b) => a - b)
 }
 

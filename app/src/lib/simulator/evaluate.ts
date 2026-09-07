@@ -148,3 +148,16 @@ export type HandEvaluator = {
   /** `null` 이면 이 종목에 로우가 없다. 있어도 성립하지 않으면 호출이 `null` 을 낸다 */
   rankLo: null | ((hole: Card[], board: Card[]) => LowRank | null)
 }
+
+/**
+ * 홀·보드를 통틀어 아무 다섯 장을 고르는 평가기 — 로우는 없다.
+ *
+ * 종목 이름이 아니라 **방식**으로 이름지었다. 엔진은 「홀덤」을 몰라도 되고,
+ * 이 모양을 쓰는 종목이 늘어도 여기는 그대로다.
+ * 이 상수가 정본이다 — `lib/games/evaluator.ts` 의 `mustUse === null` 갈래도
+ * 같은 식을 다시 쓰지 않고 이것을 돌려준다 (판정 사본 금지).
+ */
+export const ANY_FIVE_EVALUATOR: HandEvaluator = {
+  rankHi: (hole, board) => evaluateHand([...hole, ...board]),
+  rankLo: null,
+}

@@ -10,9 +10,13 @@
  *
  * TDA 2024 규정집 "20: Awarding Odd Chips" 원문 대조 기록은 엔진 `pots.ts` 주석에 있다.
  */
+import { GAMES, evaluatorFor } from '@/lib/games'
 import { ODD_CHIP_UNIT, awardPots, type Rng } from '@/lib/simulator'
 import { allTieFixture, pickNames, shuffled } from '../deal'
 import { LIMIT_SEC, KIND_LABEL, type RushQuestion, type RushSeat } from '../types'
+
+/** 팟 러시는 노리밋 홀덤이다 — 아무 다섯 장, 로우 없음 */
+const EV = evaluatorFor(GAMES.nlh)
 
 const fmt = (n: number) => n.toLocaleString('ko-KR')
 
@@ -41,7 +45,9 @@ export function makeOddChip(rng: Rng): RushQuestion | null {
   const share = Math.floor(units / winnerCount) * ODD_CHIP_UNIT
 
   const { hole, board } = allTieFixture(seatCount)
-  const awards = awardPots([{ amount: pot, eligibleSeats: winners }], hole, board, buttonSeat)
+  const awards = awardPots(
+    [{ amount: pot, eligibleSeats: winners }], hole, board, buttonSeat, EV,
+  )
   const odd = awards.filter((a) => a.amount === share + ODD_CHIP_UNIT)
   // 엔진이 홀칩을 정확히 한 좌석에 몰아주지 않았다면 우리가 팟을 잘못 잡은 것이다.
   if (odd.length !== 1) return null

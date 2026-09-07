@@ -8,7 +8,7 @@
  * 정답으로 배운다 — 승자 판독 설계 §6 이 세운 규율을 그대로 잇는다.
  */
 import {
-  bestOmahaHi, bestOmahaLow, evaluateHand,
+  ANY_FIVE_EVALUATOR, bestOmahaHi, bestOmahaLow,
   type HandEvaluator,
 } from '@/lib/simulator'
 import type { GameSpec } from './types'
@@ -27,10 +27,7 @@ export function evaluatorFor(spec: GameSpec): HandEvaluator {
     if (lo !== null) {
       throw new Error('강제 조합 없는 하이로우는 아직 없다 — 스터드/8 이 붙을 때 만든다')
     }
-    return {
-      rankHi: (hole, board) => evaluateHand([...hole, ...board]),
-      rankLo: null,
-    }
+    return ANY_FIVE_EVALUATOR
   }
 
   // 오마하 강제 조합 (홀 2 + 보드 3)

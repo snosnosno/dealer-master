@@ -7,6 +7,7 @@
  */
 import { makeDeck, shuffle, type Card } from './cards'
 import { createRng, type Rng } from './rng'
+import { ANY_FIVE_EVALUATOR } from './evaluate'
 import { decideAction, pickStacks, type StackPlan } from './bots'
 import { initialState, applyEvent } from './reduce'
 import { awardPots, buildPots } from './pots'
@@ -330,7 +331,9 @@ export function generateHand(opts: GenerateOptions): Hand {
   // 팟 지급까지 해야 핸드가 끝난다. 여기까지 와야 최종 상태의 pot 이 0 이 되고,
   // 칩 보존 테스트가 "팟에 남아 있는 칩"으로 눈감아 주지 않는다.
   const pots = buildPots(state.contributed, state.seats.map((s) => s.folded))
-  const awards = awardPots(pots, state.seats.map((s) => s.hole), state.board, buttonSeat)
+  const awards = awardPots(
+    pots, state.seats.map((s) => s.hole), state.board, buttonSeat, ANY_FIVE_EVALUATOR,
+  )
   for (const a of awards) {
     const e: HandEvent = { type: 'award_pot', potIndex: a.potIndex, seat: a.seat, amount: a.amount }
     events.push(e)

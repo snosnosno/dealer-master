@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { ANY_FIVE_EVALUATOR } from './evaluate'
 import { buildPots, awardPots } from './pots'
 import { parseCard } from './cards'
 
@@ -79,7 +80,7 @@ describe('awardPots — 목업 핸드의 핵심', () => {
   const BUTTON = 2
 
   it('메인팟은 최우진(좌석 3)이 가져간다', () => {
-    const awards = awardPots(pots, holeArr, board, BUTTON)
+    const awards = awardPots(pots, holeArr, board, BUTTON, ANY_FIVE_EVALUATOR)
     const main = awards.filter((a) => a.potIndex === 0)
     expect(main).toHaveLength(1)
     expect(main[0].seat).toBe(3)
@@ -87,7 +88,7 @@ describe('awardPots — 목업 핸드의 핵심', () => {
   })
 
   it('사이드팟은 이민아(좌석 2)가 가져간다 — 승자가 서로 다르다', () => {
-    const awards = awardPots(pots, holeArr, board, BUTTON)
+    const awards = awardPots(pots, holeArr, board, BUTTON, ANY_FIVE_EVALUATOR)
     const side = awards.filter((a) => a.potIndex === 1)
     expect(side).toHaveLength(1)
     expect(side[0].seat).toBe(2)
@@ -97,8 +98,8 @@ describe('awardPots — 목업 핸드의 핵심', () => {
   it('자격자가 한 명뿐이면 보드가 5장이 아니어도 지급된다', () => {
     // 전원 폴드로 끝난 핸드. 쇼다운이 없으므로 족보를 평가하면 안 된다.
     const onePot = buildPots([1000, 500], [false, true])
-    const awards = awardPots(onePot, [[], []], [], 0)
-    expect(awards).toEqual([{ potIndex: 0, seat: 0, amount: 1500 }])
+    const awards = awardPots(onePot, [[], []], [], 0, ANY_FIVE_EVALUATOR)
+    expect(awards).toEqual([{ potIndex: 0, seat: 0, amount: 1500, half: 'hi' }])
   })
 })
 
@@ -113,7 +114,7 @@ describe('awardPots — 동점 분배와 홀칩', () => {
 
   it('동점이면 나눠 갖는다', () => {
     const pots = buildPots([1000, 1000], [false, false])
-    const awards = awardPots(pots, tie, board, 0)
+    const awards = awardPots(pots, tie, board, 0, ANY_FIVE_EVALUATOR)
     expect(awards).toHaveLength(2)
     expect(awards.map((a) => a.amount)).toEqual([1000, 1000])
   })
@@ -122,7 +123,7 @@ describe('awardPots — 동점 분배와 홀칩', () => {
     // 팟 2,100 을 둘이 나눈다. 50 칩은 존재하지 않으므로 1,100 / 1,000 이 정답이다.
     // 버튼이 좌석 0 이면 버튼 왼쪽 첫 자격자는 좌석 1 이다.
     const pots = buildPots([1050, 1050], [false, false])
-    const awards = awardPots(pots, tie, board, 0)
+    const awards = awardPots(pots, tie, board, 0, ANY_FIVE_EVALUATOR)
     const bySeat = new Map(awards.map((a) => [a.seat, a.amount]))
     expect(bySeat.get(1)).toBe(1100)
     expect(bySeat.get(0)).toBe(1000)
@@ -130,7 +131,7 @@ describe('awardPots — 동점 분배와 홀칩', () => {
 
   it('버튼이 옮겨가면 홀칩 수령자도 바뀐다', () => {
     const pots = buildPots([1050, 1050], [false, false])
-    const awards = awardPots(pots, tie, board, 1)
+    const awards = awardPots(pots, tie, board, 1, ANY_FIVE_EVALUATOR)
     const bySeat = new Map(awards.map((a) => [a.seat, a.amount]))
     expect(bySeat.get(0)).toBe(1100)
     expect(bySeat.get(1)).toBe(1000)
@@ -138,7 +139,7 @@ describe('awardPots — 동점 분배와 홀칩', () => {
 
   it('분배 총액은 팟과 정확히 같다', () => {
     const pots = buildPots([1050, 1050], [false, false])
-    const awards = awardPots(pots, tie, board, 0)
+    const awards = awardPots(pots, tie, board, 0, ANY_FIVE_EVALUATOR)
     expect(awards.reduce((a, x) => a + x.amount, 0)).toBe(2100)
   })
 
@@ -152,7 +153,7 @@ describe('awardPots — 동점 분배와 홀칩', () => {
     expect(pots[0].amount).toBe(2200)
 
     // 버튼이 좌석 0 이면 배분 순서는 1 → 2 → 3 → 0 이다. 첫 자격자는 좌석 1.
-    const awards = awardPots(pots, tie4, board, 0)
+    const awards = awardPots(pots, tie4, board, 0, ANY_FIVE_EVALUATOR)
     const bySeat = new Map(awards.map((a) => [a.seat, a.amount]))
     expect(bySeat.get(1)).toBe(800)
     expect(bySeat.get(2)).toBe(700)
@@ -169,7 +170,7 @@ describe('awardPots — 동점 분배와 홀칩', () => {
 
     // 버튼이 좌석 1 이면 배분 순서는 2 → 3 → 4 → 0 → 1 이다.
     // 자격자는 0~3 이므로 홀칩 두 개는 좌석 2 와 3 이 받는다 — 좌석 번호 순이 아니다.
-    const awards = awardPots(pots, tie5, board, 1)
+    const awards = awardPots(pots, tie5, board, 1, ANY_FIVE_EVALUATOR)
     const bySeat = new Map(awards.map((a) => [a.seat, a.amount]))
     expect(bySeat.get(2)).toBe(700)
     expect(bySeat.get(3)).toBe(700)
@@ -182,6 +183,6 @@ describe('awardPots — 동점 분배와 홀칩', () => {
     // 4인 테이블에서 만든 팟에 2인분 hole 만 넘긴 경우.
     // 이대로 두면 seatCount 가 2 라 홀칩 순서가 조용히 틀어진다.
     const pots = [{ amount: 1000, eligibleSeats: [0, 3] }]
-    expect(() => awardPots(pots, tie, board, 0)).toThrow(/좌석 수 불일치/)
+    expect(() => awardPots(pots, tie, board, 0, ANY_FIVE_EVALUATOR)).toThrow(/좌석 수 불일치/)
   })
 })
