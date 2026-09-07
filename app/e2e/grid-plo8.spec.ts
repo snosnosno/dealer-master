@@ -74,3 +74,32 @@ test('승자 판독이 좌석 버튼 두 줄에서 가로로 넘치지 않는다
 
   await page.screenshot({ path: `e2e/shots/plo8-winner-${test.info().project.name}.png` })
 })
+
+test('팟 분배 첫 문제가 열리고 좌석을 고를 수 있다', async ({ page }) => {
+  await page.goto('/games/plo8/potaward')
+
+  // 「팟 분배」로 잡지 않는다 — 제목과 눈썹(「PLO8 하이로우 · 팟 분배」)에 둘 다 있어
+  // strict 모드가 두 개를 물고 실패한다. 진행 줄은 이 드릴에 하나뿐이다
+  await expect(page.getByText(/1 \/ 10/)).toBeVisible()
+
+  // 좌석 이름이 그대로 버튼 이름이다. 테이블 쪽 좌석 라벨은 버튼이 아니라 겹치지 않는다
+  await page.getByRole('button', { name: '1번', exact: true }).click()
+  await page.getByRole('button', { name: '제출' }).click()
+
+  // 맞았는지 틀렸는지를 먼저 말해야 드릴이 성립한다 — 근거만 나오면 안 된다
+  await expect(page.getByText(/정확하다|틀렸다/)).toBeVisible()
+  await expect(page.getByRole('button', { name: '다음' })).toBeVisible()
+})
+
+test('팟 분배가 360px 에서 가로로 넘치지 않는다', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 780 })
+  await page.goto('/games/plo8/potaward')
+  await expect(page.getByRole('button', { name: '제출' })).toBeVisible()
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  )
+  expect(overflow).toBeLessThanOrEqual(0)
+
+  await page.screenshot({ path: `e2e/shots/plo8-potaward-${test.info().project.name}.png` })
+})
