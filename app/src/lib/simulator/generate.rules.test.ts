@@ -65,6 +65,7 @@ function assertEveryActionLegal(seed: string, opts: { require?: DecisionKind[] }
         seatStack: seat.stack,
         isOpenBet,
         hasActedThisRound: acted.has(e.seat),
+        pot: 0,
       },
       e.action,
     )

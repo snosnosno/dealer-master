@@ -155,6 +155,8 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
         seatStack: Number.MAX_SAFE_INTEGER,
         isOpenBet: false,
         hasActedThisRound: false,
+        // 노리밋 경로 — 최대가 늘 스택이므로 팟을 읽지 않는다
+        pot: 0,
       })
       /*
        * 화면에 쓰는 "폭"은 raiseSize 가 아니라 정답에서 되짚은 값이다.

@@ -57,6 +57,7 @@ function ctxFor(s: HandState, seat: number): BettingContext {
     seatStack: s.seats[seat].stack,
     isOpenBet: false,
     hasActedThisRound: true,
+    pot: 0,
   }
 }
 

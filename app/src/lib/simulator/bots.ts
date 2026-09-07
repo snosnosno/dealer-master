@@ -117,6 +117,8 @@ export function decideAction(s: HandState, seat: number, d: BotContext): HandEve
     seatStack: st.stack,
     isOpenBet: d.isOpenBet,
     hasActedThisRound: d.hasActedThisRound,
+    // 노리밋 경로 — 최대가 늘 스택이므로 팟을 읽지 않는다
+    pot: 0,
   }
   // 레이즈 권리는 규칙책에 묻는다. 여기서 판정하면 사본이 갈라진다.
   const canReopen = nlh.canReopen(ctx)

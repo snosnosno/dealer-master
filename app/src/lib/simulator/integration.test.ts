@@ -220,6 +220,7 @@ function verifyActionsLegal(hand: Hand): number {
        */
       isOpenBet: !raiseSeen,
       hasActedThisRound: acted.has(e.seat),
+      pot: 0,
     }
 
     const r = nlh.validateAction(ctx, e.action)

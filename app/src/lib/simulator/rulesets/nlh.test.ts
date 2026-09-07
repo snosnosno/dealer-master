@@ -4,7 +4,7 @@ import type { BettingContext } from './types'
 
 const ctx = (over: Partial<BettingContext> = {}): BettingContext => ({
   currentBet: 0, lastRaiseSize: 0, bigBlind: 200, seatBet: 0, seatStack: 100000,
-  isOpenBet: false, hasActedThisRound: false, ...over,
+  isOpenBet: false, hasActedThisRound: false, pot: 0, ...over,
 })
 
 describe('minRaiseTo — 파일럿 케이스 4', () => {

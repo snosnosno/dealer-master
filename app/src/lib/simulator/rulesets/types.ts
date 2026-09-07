@@ -11,7 +11,7 @@
  */
 import type { PlayerAction } from '../types'
 
-export type RulesetId = 'nlh'
+export type RulesetId = 'nlh' | 'pl'
 
 /** 액션 판정에 필요한 최소 정보만 뽑아 넘긴다 — 룰셋이 HandState 전체에 묶이지 않게. */
 export type BettingContext = {
@@ -44,6 +44,14 @@ export type BettingContext = {
    * 결론은 룰셋의 `canReopen` 이 낸다.
    */
   hasActedThisRound: boolean
+  /**
+   * 지금 테이블 위의 돈 전부 — 가운데로 수거된 팟 + **모든 좌석 앞에 놓인 칩**.
+   * 자기 자신이 이번 라운드에 낸 것도 포함한다.
+   *
+   * 팟리밋 산식이 「콜한 뒤의 팟」을 쓰므로 앞에 놓인 칩을 빼면 답이 틀린다.
+   * 노리밋은 이 값을 읽지 않는다 — 최대가 늘 스택이기 때문이다.
+   */
+  pot: number
 }
 
 export type ValidationResult =

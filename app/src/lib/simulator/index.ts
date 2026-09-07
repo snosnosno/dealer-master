@@ -28,6 +28,7 @@ export type {
 } from './types'
 export { buildPots, awardPots, ODD_CHIP_UNIT, type Pot, type PotAward } from './pots'
 export { nlh } from './rulesets/nlh'
+export { pl } from './rulesets/pl'
 export type {
   Ruleset, RulesetId, BettingContext, ValidationResult, DeclaredIntent,
 } from './rulesets/types'

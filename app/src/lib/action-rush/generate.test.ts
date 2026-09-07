@@ -177,6 +177,7 @@ describe('베팅 기회 재개 — 정답을 엔진으로 재계산한다', () =
         seatStack: Number.MAX_SAFE_INTEGER,
         isOpenBet: false,
         hasActedThisRound: true,
+        pot: 0,
       })
       expect(correctChoice(q)).toBe(canRaise ? '레이즈할 수 있다' : '레이즈할 수 없다')
     }
@@ -210,6 +211,7 @@ describe('오버사이즈 칩 — 정답을 엔진으로 재계산한다', () =>
         seatStack: Number.MAX_SAFE_INTEGER,
         isOpenBet: true,
         hasActedThisRound: false,
+        pot: 0,
       }
       const ruling = nlh.interpretChipPush(ctx, chip, declared ? 'raise' : 'none', [chip])
       const expected =
@@ -263,6 +265,7 @@ describe('다중 칩 베팅 — 정답을 엔진으로 재계산한다', () => {
         seatStack: lastChips ? total : total + Math.min(...pusher.chips),
         isOpenBet: true,
         hasActedThisRound: false,
+        pot: 0,
       }
       const ruling = nlh.interpretChipPush(ctx, total, 'none', pusher.chips)
       const expected = { call: '콜', raise: '레이즈 시도', allin: '올인' }[

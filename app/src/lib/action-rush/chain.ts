@@ -110,6 +110,8 @@ export function replayPreflop(bb: number, wagers: readonly Wager[]): PreflopChai
         seatStack: st.stack,
         isOpenBet: false,
         hasActedThisRound: acted.has(seat),
+        // 노리밋 경로 — 최대가 늘 스택이므로 팟을 읽지 않는다
+        pot: 0,
       },
       action,
     )
@@ -154,6 +156,8 @@ export function replayPreflop(bb: number, wagers: readonly Wager[]): PreflopChai
         seatStack: st?.stack ?? Number.MAX_SAFE_INTEGER,
         isOpenBet: false,
         hasActedThisRound: acted.has(seat),
+        // 노리밋 경로 — 최대가 늘 스택이므로 팟을 읽지 않는다
+        pot: 0,
       }
     },
   }
@@ -185,5 +189,7 @@ export function flopContext(opts: {
     seatStack: opts.seatStack,
     isOpenBet: true,
     hasActedThisRound: false,
+    // 노리밋 경로 — 최대가 늘 스택이므로 팟을 읽지 않는다
+    pot: 0,
   }
 }
