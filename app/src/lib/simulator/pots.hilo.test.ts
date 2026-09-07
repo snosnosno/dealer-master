@@ -61,6 +61,58 @@ describe('awardPots — 하이로우', () => {
     expect(total(awards)).toBe(7000)
   })
 
+  /*
+   * 쿼터링 — **홀칩 두 번이 한 판에 다 나온다.** 이 파일의 다른 케이스는 절반마다
+   * 임자가 하나뿐이라 2차 홀칩이 돌지 않는다. 여기가 그 갈래를 지키는 유일한 곳이다.
+   *
+   * 8,300 → 1차: 하이 4,200 · 로우 4,100 (남는 100 은 하이)
+   *        → 2차: 로우 4,100 을 동점 둘이 2,100 / 2,000 (남는 100 은 버튼 왼쪽 첫 자격자)
+   * 둘을 한 번으로 합쳐 8,300 을 셋으로 나누면 이 숫자가 나오지 않는다.
+   */
+  const quarterBoard = hand('2h 4d 6c Ks Qh')
+  // 0·1번: A-2-3-4-6 으로 **완전히 같은 로우**, 2번: 트리플 K 로 하이 단독 (7 페어라 로우 실격)
+  const quarterHole = [hand('As 3d 9s 8h'), hand('Ad 3c 9d 8c'), hand('Kh Kd 7s 7d')]
+  const quarterPot: Pot[] = [{ amount: 8300, eligibleSeats: [0, 1, 2] }]
+
+  it('쿼터링 — 하이 하나 · 로우 동점 둘에서 홀칩이 두 번 생긴다', () => {
+    const awards = awardPots(quarterPot, quarterHole, quarterBoard, 0, ev)
+
+    // 합계는 팟 그대로
+    expect(total(awards)).toBe(8300)
+
+    const hi = awards.filter((a) => a.half === 'hi')
+    const lo = awards.filter((a) => a.half === 'lo')
+
+    // 홀칩 1차 — 반으로 가른 나머지 100 이 **하이 쪽**이다 (4,150 씩이 아니다)
+    expect(total(hi)).toBe(4200)
+    expect(total(lo)).toBe(4100)
+    expect(hi).toEqual([{ potIndex: 0, seat: 2, amount: 4200, half: 'hi' }])
+
+    // 홀칩 2차 — 로우 절반의 나머지 100 은 **버튼(0번) 왼쪽 첫 자격자**인 1번에게.
+    // 좌석 번호가 규칙이면 0번이 받았을 것이다 — 그래서 여기서 갈린다.
+    expect(lo).toEqual([
+      { potIndex: 0, seat: 1, amount: 2100, half: 'lo' },
+      { potIndex: 0, seat: 0, amount: 2000, half: 'lo' },
+    ])
+
+    for (const a of awards) expect(a.amount % ODD_CHIP_UNIT).toBe(0)
+  })
+
+  it('쿼터링 — 버튼을 옮기면 2차 홀칩의 임자도 바뀐다', () => {
+    // 버튼이 1번이면 그 왼쪽 첫 로우 자격자는 0번이다. 1차 홀칩(하이 4,200)은 그대로다 —
+    // 버튼은 절반을 가르는 기준이 아니기 때문이다.
+    const awards = awardPots(quarterPot, quarterHole, quarterBoard, 1, ev)
+
+    expect(total(awards)).toBe(8300)
+    expect(total(awards.filter((a) => a.half === 'hi'))).toBe(4200)
+    expect(awards.filter((a) => a.half === 'lo')).toEqual([
+      { potIndex: 0, seat: 0, amount: 2100, half: 'lo' },
+      { potIndex: 0, seat: 1, amount: 2000, half: 'lo' },
+    ])
+
+    for (const a of awards) expect(a.amount % ODD_CHIP_UNIT).toBe(0)
+  })
+
   it('자격자가 한 명뿐인 팟은 쇼다운 없이 그 좌석이 받는다', () => {
     const board = hand('2h 4d 6c Ks Qh')
     const hole = [hand('As 3d Ts 9h'), hand('Kh Kd 9s 8c')]
