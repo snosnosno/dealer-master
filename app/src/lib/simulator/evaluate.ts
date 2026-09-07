@@ -6,6 +6,7 @@
  * 카테고리와 타이브레이커 모두 포커 규칙 그대로여야 한다.
  */
 import { RANK_VALUE, type Card } from './cards'
+import type { LowRank } from './lowball'
 
 export type HandCategory = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
 
@@ -133,4 +134,17 @@ export function compareHands(a: HandRank, b: HandRank): number {
     if (av !== bv) return av - bv
   }
   return 0
+}
+
+/**
+ * 「이 종목에서 핸드를 어떻게 매기나」의 포트.
+ *
+ * 엔진은 **모양만 안다.** 어느 원자를 고를지는 종목 데이터를 가진 게임 층이 정한다
+ * (`lib/games/evaluator.ts`). 반대로 놓으면 엔진이 `GameSpec` 을 알게 되어
+ * 「게임 데이터의 정본은 lib/games 하나」(ADR-003)가 무너진다.
+ */
+export type HandEvaluator = {
+  rankHi(hole: Card[], board: Card[]): HandRank
+  /** `null` 이면 이 종목에 로우가 없다. 있어도 성립하지 않으면 호출이 `null` 을 낸다 */
+  rankLo: null | ((hole: Card[], board: Card[]) => LowRank | null)
 }

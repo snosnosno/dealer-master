@@ -16,7 +16,7 @@ export {
 } from './cards'
 export {
   evaluateHand, compareHands, CATEGORY_LABEL,
-  type HandRank, type HandCategory,
+  type HandRank, type HandCategory, type HandEvaluator,
 } from './evaluate'
 export { evaluateLowA5, compareLow, type LowRank } from './lowball'
 export { omahaCombos, bestOmahaHi, bestOmahaLow } from './omaha'
