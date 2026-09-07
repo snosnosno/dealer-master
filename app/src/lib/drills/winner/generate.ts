@@ -8,10 +8,10 @@
  * 무작위는 `Rng` 로만 얻는다 — 여기서 `Math.random()` 을 쓰면 시드가 무의미해진다.
  */
 import {
-  bestOmahaHi, bestOmahaLow, compareHands, compareLow, createRng, makeDeck, shuffle,
-  type Card, type HandRank, type LowRank, type Rng,
+  compareHands, compareLow, createRng, makeDeck, shuffle,
+  type Card, type HandEvaluator, type HandRank, type LowRank, type Rng,
 } from '@/lib/simulator'
-import type { GameSpec } from '@/lib/games'
+import { evaluatorFor, type GameSpec } from '@/lib/games'
 import {
   asksFor, LO_ABSENT_MIN, LO_PRESENT_MIN, WINNER_KIND_LABEL, WINNER_LIMIT_SEC,
   WINNER_QUESTION_COUNT, WINNER_SEAT_COUNT, type WinnerAsks, type WinnerQuestion, type WinnerSeat,
@@ -23,7 +23,7 @@ const MAX_TRIES = 400
 
 type Deal = { seats: WinnerSeat[]; board: Card[]; his: HandRank[]; los: (LowRank | null)[] }
 
-function dealOnce(spec: GameSpec, rng: Rng, asks: WinnerAsks): Deal {
+function dealOnce(spec: GameSpec, rng: Rng, asks: WinnerAsks, ev: HandEvaluator): Deal {
   const deck = shuffle(makeDeck(), rng)
   const board = deck.slice(0, 5)
   const n = spec.holeCardCount
@@ -31,14 +31,11 @@ function dealOnce(spec: GameSpec, rng: Rng, asks: WinnerAsks): Deal {
     name,
     hole: deck.slice(5 + i * n, 5 + (i + 1) * n),
   }))
-  const qualifier = spec.eval.lo?.qualifier ?? null
   return {
     seats,
     board,
-    his: seats.map((s) => bestOmahaHi(s.hole, board)),
-    los: seats.map((s) =>
-      asks.lo && qualifier !== null ? bestOmahaLow(s.hole, board, qualifier) : null,
-    ),
+    his: seats.map((s) => ev.rankHi(s.hole, board)),
+    los: seats.map((s) => (asks.lo && ev.rankLo !== null ? ev.rankLo(s.hole, board) : null)),
   }
 }
 
@@ -114,17 +111,16 @@ function loTargets(rng: Rng): (boolean | null)[] {
 export function generateWinnerRun(spec: GameSpec, seed: string): WinnerQuestion[] {
   const asks = asksFor(spec)
 
-  // 아직 만들지 않은 갈래는 조용히 넘어가지 않고 여기서 던진다. 짐작으로 구현하면
-  // 검증되지 않은 채 굳는다 (설계 §6 — `firstToAct` 의 미구현 값 넷과 같은 이유)
+  // 이 드릴 고유의 제약이다 — 평가기가 아니라 문제 모양의 문제다
   if (!asks.hi) throw new Error('로우 전용 종목은 아직 없다 — 라즈가 붙을 때 만든다')
-  if (spec.eval.mustUse === null) {
-    throw new Error('아무 다섯 장으로 고르는 종목은 아직 없다 — 홀덤·스터드가 붙을 때 만든다')
-  }
+
+  // 아직 만들지 않은 평가 갈래는 여기서 던진다 (lib/games/evaluator.ts)
+  const ev = evaluatorFor(spec)
 
   const rng = createRng(seed)
   return loTargets(rng).map((want) => {
     for (let tries = 0; tries < MAX_TRIES; tries++) {
-      const deal = dealOnce(spec, rng, asks)
+      const deal = dealOnce(spec, rng, asks, ev)
       if (want === null || loWinners(deal).length > 0 === want) {
         return build(deal, asks, rng.int(WINNER_SEAT_COUNT))
       }
