@@ -12,13 +12,13 @@ test('홈에서 PLO8 진행절차까지 간다', async ({ page }) => {
   await expect(page.getByText('승자 판독')).toBeVisible()
 
   await page.getByRole('link', { name: '진행절차' }).click()
-  await expect(page.getByRole('button', { name: '블라인드 수거' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '블라인드 포스팅' })).toBeVisible()
 })
 
 test('팔레트가 늘 일곱이고 순서를 틀리면 힌트가 뜬다', async ({ page }) => {
   await page.goto('/games/plo8/procedure')
 
-  for (const name of ['앤티 수거', '블라인드 수거', '번카드', '카드 딜', '카드 교체', '베팅 진행', '팟 지급']) {
+  for (const name of ['앤티 수거', '블라인드 포스팅', '번카드', '카드 딜', '카드 교체', '베팅 진행', '팟 지급']) {
     await expect(page.getByRole('button', { name })).toBeVisible()
   }
 
@@ -29,7 +29,7 @@ test('팔레트가 늘 일곱이고 순서를 틀리면 힌트가 뜬다', async
 
 test('홀카드 4장이 좌석 상자를 넘치지 않는다', async ({ page }) => {
   await page.goto('/games/plo8/procedure')
-  await page.getByRole('button', { name: '블라인드 수거' }).click()
+  await page.getByRole('button', { name: '블라인드 포스팅' }).click()
   await page.getByRole('button', { name: '카드 딜' }).click()
   await page.waitForTimeout(800)
 

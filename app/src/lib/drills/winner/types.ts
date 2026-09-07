@@ -22,10 +22,10 @@ export const WINNER_KIND_LABEL: Record<WinnerKind, string> = { winner: '승자 �
 export const WINNER_QUESTION_COUNT = 10
 
 /**
- * 제한시간(초). **초안이다** — 기존 로우 승자가 30초였고 하이 판단이 얹혔다.
- * PRD §11 의 열린 질문이고 재미 게이트에서 확정한다 (설계 §9).
+ * 제한시간(초). 40초 초안을 재미 게이트에서 30초로 확정했다 —
+ * 사용자 확인 (2026-09-07). PRD §11 의 열린 질문이 닫혔다.
  */
-export const WINNER_LIMIT_SEC = 40
+export const WINNER_LIMIT_SEC = 30
 
 /** 한 판 10문제 중 로우가 성립하는 판의 하한. 매번 없으면 「로우 없음」이 정답 고정이 된다 */
 export const LO_PRESENT_MIN = 3

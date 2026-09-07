@@ -17,8 +17,13 @@ import type { PaletteAct } from '@/lib/drills/procedure/types'
 import type { GameSpec } from '@/lib/games'
 import { randomSeed } from '@/lib/rush/seed'
 
-/** 카드·칩이 나는 시간. 프로토타입과 같은 값이다 */
+/** 카드가 나는 시간. 프로토타입과 같은 값이다 */
 const ANIM_MS = 520
+/**
+ * 벳칩 박자는 더 길게 세운다. 이 구간에는 읽을 것이 있다 — 좌석 앞에 놓인 칩과
+ * 그것이 팟으로 모이는 것. 520ms 로는 눈이 따라가지 못한다 (사용자 확인 2026-09-07).
+ */
+const BET_MS = 1100
 
 export function ProcedureScreen({ spec }: { spec: GameSpec }) {
   /*
@@ -74,7 +79,10 @@ function ProcedureRun({
   // 애니메이션이 끝나면 스스로 다음 입력을 기다린다. 사용자가 누를 것이 없는 구간이다
   useEffect(() => {
     if (state.phase !== 'anim') return
-    const timer = setTimeout(() => setState((s) => reduce(s, { type: 'animEnd' })), ANIM_MS)
+    // 방금 무엇을 했는가로 박자 길이를 고른다. 규칙 판정이 아니라 표시 속도다
+    const justDid = state.steps[state.at - 1]?.act
+    const dwell = justDid === 'betting' || justDid === 'blinds' ? BET_MS : ANIM_MS
+    const timer = setTimeout(() => setState((s) => reduce(s, { type: 'animEnd' })), dwell)
     return () => clearTimeout(timer)
   }, [state])
 
@@ -161,7 +169,8 @@ function ProcedureRun({
       )}
 
       <ol className="mt-5 space-y-1 text-[11px] text-zinc-400">
-        {state.log.slice(-8).map((line, i) => (
+        {/* 액션이 좌석마다 한 줄씩 남으므로 8줄은 베팅 한 라운드로 꽉 찬다 */}
+        {state.log.slice(-12).map((line, i) => (
           <li key={i}>{line}</li>
         ))}
       </ol>

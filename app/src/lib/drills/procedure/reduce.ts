@@ -13,7 +13,7 @@ import type { GameSpec } from '@/lib/games'
 import { dealHand, SEAT_COUNT } from './deal'
 import { judge } from './judge'
 import { stepsFor } from './steps'
-import type { Phase, ProcedureAction, ProcedureState, Step } from './types'
+import type { BettingAction, Phase, ProcedureAction, ProcedureState, Step } from './types'
 
 export function startProcedure(spec: GameSpec, seed: string): ProcedureState {
   const script = dealHand(spec, seed)
@@ -47,6 +47,8 @@ export function reduce(state: ProcedureState, action: ProcedureAction): Procedur
   // 여기서 막지 않으면 카드가 나는 도중에 다음 스텝을 눌러 화면과 상태가 어긋난다.
   if (state.phase === 'anim') {
     if (action.type !== 'animEnd') return state
+    const swept = sweepBets(state)
+    if (swept !== null) return swept
     return { ...state, phase: phaseFor(state.steps[state.at]) }
   }
 
@@ -82,6 +84,56 @@ export function reduce(state: ProcedureState, action: ProcedureAction): Procedur
 function phaseFor(step: Step | undefined): Phase {
   if (step === undefined) return 'done'
   return step.act === 'open' ? 'openSeat' : 'palette'
+}
+
+const num = (v: number) => v.toLocaleString('ko-KR')
+
+const ACT_LABEL: Record<BettingAction['act'], string> = {
+  fold: '폴드',
+  check: '체크',
+  call: '콜',
+  bet: '벳',
+  raise: '레이즈',
+}
+
+/**
+ * 액션 한 줄 — `3번 레이즈 → 12,000`.
+ *
+ * 문구는 `components/table/log.ts` 의 `describeForLearner` 를 따르되 **좌석 번호를
+ * 덧붙이지 않는다.** 이 드릴의 좌석 이름이 이미 `1번`…`6번` 이라서(`deal.ts` 의
+ * `NAMES`) 그쪽 규약대로 쓰면 `6번(6번) 콜` 이 된다 — 브라우저에서 잡혔다.
+ * 좌석에 사람 이름이 붙는 날이 오면 그때 번호를 되살려야 한다.
+ */
+function actionLine(name: string, a: BettingAction): string {
+  return a.act === 'fold' || a.act === 'check'
+    ? `${name} ${ACT_LABEL[a.act]}`
+    : `${name} ${ACT_LABEL[a.act]} → ${num(a.to)}`
+}
+
+/**
+ * 좌석 앞의 칩을 팟으로 끌어온다. **베팅 스텝보다 한 박자 늦게 온다** —
+ * 칩이 화면에 뜬 다음이라야 학습자가 누가 얼마 냈는지 본다.
+ *
+ * 걷을 것이 없으면 `null` 을 돌려주고 평소대로 다음 단계로 넘어간다. 베팅이 아닌
+ * 스텝(딜·번·블라인드)과 전원이 체크한 라운드가 그리로 간다 — 블라인드는 여기서
+ * 걷히지 않고 프리플랍 베팅이 끝날 때 그 위에 얹혀서 함께 수거된다.
+ */
+function sweepBets(state: ProcedureState): ProcedureState | null {
+  if (state.steps[state.at - 1]?.act !== 'betting') return null
+  const collected = state.table.seats.reduce((sum, seat) => sum + seat.bet, 0)
+  if (collected === 0) return null
+  const pot = state.table.pot + collected
+  return {
+    ...state,
+    // 수거도 한 박자 보여준다 — 칩이 가운데로 모이는 것이 딜러가 하는 일이다
+    phase: 'anim',
+    table: {
+      ...state.table,
+      seats: state.table.seats.map((seat) => ({ ...seat, bet: 0 })),
+      pot,
+    },
+    log: [...state.log, `수거 ${num(collected)} → 팟 ${num(pot)}`],
+  }
 }
 
 /** 스텝 하나가 테이블에 무엇을 하는가. 새 `TableView` 를 돌려준다. */
@@ -142,6 +194,7 @@ function applyStep(
     case 'betting': {
       if (street === null) throw new Error('betting 스텝에 스트릿이 없다')
       let seats = table.seats
+      const log = [`${street.labels.ko} 베팅`]
       for (const a of script.betting[street.id]) {
         seats = seats.map((seat, i) => {
           if (i !== a.seat) return seat
@@ -151,18 +204,15 @@ function applyStep(
           const delta = Math.max(0, a.to - seat.bet)
           return { ...seat, bet: seat.bet + delta, stack: seat.stack - delta }
         })
+        log.push(actionLine(seats[a.seat].name, a))
       }
-      // 라운드가 끝났으니 좌석 앞의 칩을 팟으로 수거한다
-      const collected = seats.reduce((sum, seat) => sum + seat.bet, 0)
-      return {
-        table: {
-          ...table,
-          seats: seats.map((seat) => ({ ...seat, bet: 0 })),
-          pot: table.pot + collected,
-        },
-        burnCount: state.burnCount,
-        log: [`${street.labels.ko} 베팅 — 수거 ${collected.toLocaleString('ko-KR')}`],
-      }
+      /*
+       * **여기서 수거하지 않는다.** 칩은 좌석 앞에 놓인 채로 한 박자 서고 `animEnd`
+       * 가 팟으로 끌어온다(`sweepBets`). 같은 전이에서 걷으면 벳칩이 렌더된 적 없이
+       * 사라진다 — 재미 게이트에서 「베팅할 때 칩이 안 보인다」로 잡힌 결함이다
+       * (사용자 확인 2026-09-07).
+       */
+      return { table: { ...table, seats }, burnCount: state.burnCount, log }
     }
 
     case 'open': {

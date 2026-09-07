@@ -113,4 +113,53 @@ describe('reduce — 맞혔을 때', () => {
   })
 })
 
+describe('베팅 라운드 — 칩이 화면에 뜬 다음에 수거된다', () => {
+  /** 첫 베팅 스텝을 막 적용한 상태까지 간다. 아직 `animEnd` 를 넣지 않았다 */
+  function upToFirstBetting(): ProcedureState {
+    let state = start()
+    for (let guard = 0; guard < 100; guard++) {
+      if (state.phase === 'palette' && state.steps[state.at].act === 'betting') {
+        return reduce(state, { type: 'palette', act: 'betting' })
+      }
+      state = stepCorrectly(state)
+    }
+    throw new Error('베팅 스텝에 닿지 못했다')
+  }
+
+  it('베팅 직후에는 칩이 좌석 앞에 남아 있고 팟은 아직 그대로다', () => {
+    const before = start()
+    const state = upToFirstBetting()
+    expect(state.phase).toBe('anim')
+    expect(state.table.seats.some((seat) => seat.bet > 0)).toBe(true)
+    expect(state.table.pot).toBe(before.table.pot)
+  })
+
+  it('그 다음 `animEnd` 가 좌석 앞을 비우고 팟으로 옮긴다', () => {
+    const bet = upToFirstBetting()
+    const outstanding = bet.table.seats.reduce((sum, seat) => sum + seat.bet, 0)
+    const swept = reduce(bet, { type: 'animEnd' })
+    expect(swept.table.seats.every((seat) => seat.bet === 0)).toBe(true)
+    expect(swept.table.pot).toBe(bet.table.pot + outstanding)
+    // 수거도 한 박자 — 여기서 팔레트로 돌아가면 칩이 모이는 것을 못 본다
+    expect(swept.phase).toBe('anim')
+  })
+
+  it('로그가 좌석마다 무엇을 얼마에 했는지 남긴다', () => {
+    const state = upToFirstBetting()
+    const street = state.spec.streets[state.steps[state.at - 1].streetIndex]
+    const actions = state.script.betting[street.id]
+    expect(actions.length).toBeGreaterThan(0)
+
+    for (const a of actions) {
+      const name = state.script.seats[a.seat].name
+      const line = state.log.find((l) => l.startsWith(`${name} `))
+      expect(line, `${name} 의 액션이 로그에 없다`).toBeDefined()
+      // 금액이 있는 액션은 누적액이 줄에 찍힌다
+      if (a.act !== 'fold' && a.act !== 'check') {
+        expect(line).toContain(a.to.toLocaleString('ko-KR'))
+      }
+    }
+  })
+})
+
 export { stepCorrectly }

@@ -8,7 +8,7 @@ import type { PaletteAct, Step } from './types'
 /** 팔레트는 늘 이 일곱이고 순서도 고정이다. 상황마다 보기가 바뀌면 4지선다가 된다. */
 export const PALETTE: readonly { id: PaletteAct; ko: string }[] = [
   { id: 'ante', ko: '앤티 수거' },
-  { id: 'blinds', ko: '블라인드 수거' },
+  { id: 'blinds', ko: '블라인드 포스팅' },
   { id: 'burn', ko: '번카드' },
   { id: 'deal', ko: '카드 딜' },
   { id: 'draw', ko: '카드 교체' },
