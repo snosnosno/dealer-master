@@ -31,6 +31,19 @@ type Deal = {
   /**
    * 홀칩 순서의 기준이다. **판을 돌리기 전에 뽑아 `awardPots` 에 그대로 넘긴다** —
    * 문제에 표시하는 버튼과 정답을 만든 버튼이 다르면 화면과 정답이 어긋난다.
+   *
+   * **이 어긋남을 막는 것은 테스트가 아니라 이 필드 하나다.** 뽑는 곳부터 문제에
+   * 실리는 곳까지 `buttonSeat` 의 출처가 하나뿐이라 구조적으로 갈라질 수 없다.
+   *
+   * 지금 테스트로는 못 잡는다. `orderFromButton`(`simulator/pots.ts`)은 동점 집단이
+   * 칩을 **받는 순서**만 바꿀 뿐 임자 집합을 바꾸지 않는다. 그런데 지금 네 유형의 정답은
+   * 전부 좌석 **집합**이거나(`hihalf`·`lohalf`·`sidepot`) 하이가 한 명인 경우(`oddchip`)라
+   * **버튼이 무엇이든 같다.** 버튼을 두 번 뽑는 회귀가 나도 테스트는 초록이다 —
+   * 못 실패하는 테스트를 흉내로 넣지 않고 이 주석을 둔다.
+   *
+   * **버튼 순서에 답이 걸리는 유형을 새로 만들면**(예: 홀칩 2차 — 「이 절반을 나누고
+   * 남는 칩은 누구부터」) 그 유형의 정답이 버튼에 따라 달라지는 것을 검사하는 테스트를
+   * 반드시 함께 넣어라. 그때부터 이 필드가 진짜로 위험해진다.
    */
   buttonSeat: number
   pots: Pot[]
@@ -162,6 +175,12 @@ const PROMPT: Record<PotAwardKind, string> = {
 }
 
 const won = (n: number) => n.toLocaleString('ko-KR')
+/**
+ * 정답 좌석들의 이름. **끝은 언제나 「번」이다** (`NAMES`) — 받침이 있으므로 뒤에 붙는
+ * 조사는 「이다」·「이」다. 「1번다」·「1번가」로 되돌리지 마라.
+ * 금액도 100 단위라 마지막 음절이 백·천·만 중 하나여서 받침이 있다 — 「은」·「을」·「이」다.
+ * 조사는 앞말에 붙여 쓴다.
+ */
 const names = (seats: PotAwardSeat[], picks: number[]) =>
   picks.map((i) => seats[i].name).join(' · ')
 
@@ -174,14 +193,14 @@ function whyOf(deal: Deal, kind: PotAwardKind, potIndex: number, answerSeats: nu
   const amount = deal.pots[potIndex].amount
   switch (kind) {
     case 'hihalf':
-      return `하이 절반 ${won(totalOf(deal.awards, potIndex, 'hi'))} 은 ${who}에게 간다`
+      return `하이 절반 ${won(totalOf(deal.awards, potIndex, 'hi'))}은 ${who}에게 간다`
     case 'lohalf':
-      return `로우 절반 ${won(totalOf(deal.awards, potIndex, 'lo'))} 은 ${who}에게 간다`
+      return `로우 절반 ${won(totalOf(deal.awards, potIndex, 'lo'))}은 ${who}에게 간다`
     case 'oddchip':
       // 출처: docs/references/mixgame-facts.md 「홀칩은 Hi 승자에게」(가이드 p5)
-      return `${won(amount)} 을 반으로 가르면 ${won(ODD_CHIP_UNIT)} 이 남는다 — 홀칩은 하이 승자에게 가므로 ${who}다`
+      return `${won(amount)}을 반으로 가르면 ${won(ODD_CHIP_UNIT)}이 남는다 — 홀칩은 하이 승자에게 가므로 ${who}이다`
     case 'sidepot':
-      return `이 사이드팟 ${won(amount)} 은 자격자 중에 로우가 없어 하이 ${who}가 통째로 가져간다`
+      return `이 사이드팟 ${won(amount)}은 자격자 중에 로우가 없어 하이 ${who}이 통째로 가져간다`
   }
 }
 
@@ -236,7 +255,9 @@ export function generatePotAwardRun(spec: GameSpec, seed: string): PotAwardQuest
   return kindTargets(rng).map((kind) => {
     for (let tries = 0; tries < MAX_TRIES; tries++) {
       // 버튼을 판보다 먼저 뽑는다 — 홀칩 순서가 버튼에 걸려 있어서, 나중에 뽑으면
-      // 정답을 만든 버튼과 문제에 표시하는 버튼이 달라진다
+      // 정답을 만든 버튼과 문제에 표시하는 버튼이 달라진다.
+      // 이 한 줄이 유일한 출처라는 것이 그 어긋남을 막는 전부다 — 자세한 사정과
+      // 새 유형을 만들 때 지켜야 할 것은 `Deal.buttonSeat` 주석에 있다.
       const buttonSeat = rng.int(POTAWARD_SEAT_COUNT)
       const deal = dealOnce(spec, rng, ev, buttonSeat)
       const hit = tryBuild(deal, kind)
