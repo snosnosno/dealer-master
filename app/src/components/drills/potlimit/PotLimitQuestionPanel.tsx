@@ -92,7 +92,7 @@ export function PotLimitQuestionPanel({
         />
       </div>
 
-      <p className="mt-3 text-sm font-bold">{question.prompt}</p>
+      <p className="mt-3 break-keep text-sm font-bold">{question.prompt}</p>
       <p className="text-xs text-zinc-500">화면에 놓인 칩을 세어 보세요</p>
 
       <input
@@ -125,7 +125,13 @@ export function PotLimitQuestionPanel({
            * 어느 쪽이었는지 모른 채로 다음 문제로 간다 — 드릴이 성립하지 않는다
            */}
           <p className="mt-3 text-sm font-bold">{verdict.headline}</p>
-          <p className="mt-2 rounded-xl bg-zinc-100 px-4 py-3 text-sm dark:bg-zinc-900">
+          {/*
+           * `break-keep` — 이 줄이 없으면 360px 에서 「팟벳」이 「팟」/「벳은」으로,
+           * 데스크톱에서 「공식」이 「공」/「식은」으로 **단어 가운데가 잘린다**.
+           * 렌더로만 보이는 결함이라 눈으로 찾았다. 집안 규약(`QuestionPanel.tsx`
+           * ·`ActionQuestionPanel.tsx` 의 근거 문단)과 같은 손이다.
+           */}
+          <p className="mt-2 break-keep rounded-xl bg-zinc-100 px-4 py-3 text-sm dark:bg-zinc-900">
             정답 <b>{won(question.answer)}</b> — {question.why}
           </p>
           <button

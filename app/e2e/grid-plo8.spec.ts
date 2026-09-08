@@ -103,3 +103,25 @@ test('팟 분배가 360px 에서 가로로 넘치지 않는다', async ({ page }
 
   await page.screenshot({ path: `e2e/shots/plo8-potaward-${test.info().project.name}.png` })
 })
+
+test('팟리밋 계산은 숫자를 받고 정답을 알려준다', async ({ page }) => {
+  await page.goto('/games/plo8/potlimit')
+
+  // 「팟리밋 계산」으로 잡지 않는다 — 제목과 눈썹(「PLO8 하이로우 · 팟리밋 계산」)에
+  // 둘 다 있어 strict 모드가 두 개를 물고 실패한다. 진행 줄은 이 드릴에 하나뿐이다
+  await expect(page.getByText(/1 \/ 10/)).toBeVisible()
+
+  // 보기가 없다 — 숫자를 친다. 1 은 어떤 판에서도 오답이다(답은 늘 블라인드 이상)
+  await page.getByPlaceholder('금액').fill('1')
+  await page.getByRole('button', { name: '제출' }).click()
+
+  // 맞았는지 틀렸는지를 정답보다 **먼저** 말해야 드릴이 성립한다
+  await expect(page.getByText(/정확하다|틀렸다/)).toBeVisible()
+  await expect(page.getByText('정답')).toBeVisible()
+  await expect(page.getByRole('button', { name: '다음' })).toBeVisible()
+})
+
+test('노리밋 홀덤에는 팟리밋 칸이 아예 없다', async ({ page }) => {
+  await page.goto('/games/nlh')
+  await expect(page.getByText('팟리밋 계산')).toHaveCount(0)
+})
