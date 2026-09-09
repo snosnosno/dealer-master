@@ -27,9 +27,19 @@ function hasChips(): boolean {
   return true
 }
 
-/** 순서를 무시하고 같은 좌석 묶음인가. 채점의 정본이다 */
+/** 순서를 무시하고 같은 좌석 묶음인가 */
 function sameSeats(picked: number[], answer: number[]): boolean {
   return picked.length === answer.length && answer.every((s) => picked.includes(s))
+}
+
+/**
+ * 채점의 정본. **임자와 금액이 둘 다 맞아야 맞다** — 누구인지만 맞히고 얼마인지
+ * 틀린 분배는 테이블에서 그냥 틀린 분배다. 반쯤 맞음을 만들지 않는다.
+ */
+function isCorrect(
+  picked: { seats: number[]; amount: number }, question: PotAwardQuestion,
+): boolean {
+  return sameSeats(picked.seats, question.answerSeats) && picked.amount === question.answerAmount
 }
 
 export default function PotAwardPage({ params }: { params: Promise<{ gameId: string }> }) {
@@ -42,7 +52,7 @@ export default function PotAwardPage({ params }: { params: Promise<{ gameId: str
       path={`/games/${gameId}/potaward`}
       title="팟 분배"
       eyebrow={`${GAMES[gameId].labels.ko} · 팟 분배`}
-      footer={`${POTAWARD_QUESTION_COUNT}문제 · 자격과 홀칩이 갈리는 판만 나온다`}
+      footer={`${POTAWARD_QUESTION_COUNT}문제 · 임자와 금액을 함께 답한다`}
       labels={POTAWARD_KIND_LABEL}
       record={potAwardRecord(gameId)}
       generate={potAwardRun(gameId)}
@@ -55,7 +65,7 @@ export default function PotAwardPage({ params }: { params: Promise<{ gameId: str
           index={index}
           total={total}
           verdict={verdict}
-          onSubmit={(seats) => answer(sameSeats(seats, question.answerSeats))}
+          onSubmit={(picked) => answer(isCorrect(picked, question))}
           onNext={next}
         />
       )}

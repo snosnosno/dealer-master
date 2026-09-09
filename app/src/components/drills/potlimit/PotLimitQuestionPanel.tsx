@@ -17,28 +17,10 @@
 import { useState } from 'react'
 import { PokerTable } from '@/components/table/PokerTable'
 import type { PotLimitQuestion } from '@/lib/drills/potlimit/types'
+import { digitsOnly, parseAmount } from '@/lib/rush/amount'
 import type { Verdict } from '@/lib/rush/session'
 
 const won = (n: number) => n.toLocaleString('ko-KR')
-
-/**
- * 아홉 자리까지만 받는다. 답은 블라인드에서 나온 팟에 매인 값이라 이보다 클 일이 없고,
- * 붙여넣기로 들어온 긴 숫자는 `Number` 가 안전 정수를 넘겨 엉뚱한 값이 된다.
- */
-const MAX_DIGITS = 9
-
-/**
- * 입력칸에 **보이는 것과 채점되는 값을 같게** 만든다.
- *
- * 걸러 내기만 하고 원문을 그대로 두면 「1,0a0」이 칸에 남은 채 100 으로 채점된다 —
- * 트레이니는 자기가 왜 틀렸는지 알 수 없다. 앞의 0 도 여기서 지운다(`007` → `7`).
- */
-function digitsOnly(raw: string): string {
-  return raw
-    .replace(/[^0-9]/g, '')
-    .slice(0, MAX_DIGITS)
-    .replace(/^0+(?=[0-9])/, '')
-}
 
 export function PotLimitQuestionPanel({
   question,
@@ -60,7 +42,7 @@ export function PotLimitQuestionPanel({
   const solving = verdict === null
 
   // `text` 는 숫자만, 아홉 자리 이하다 — `Number` 가 늘 안전 정수를 낸다
-  const parsed = text === '' ? 0 : Number(text)
+  const parsed = parseAmount(text)
   // 0 으로는 제출하지 못한다. 규정이 정하는 최대 벳은 늘 0 보다 크므로 답이 될 수 없고,
   // 빈 칸을 잘못 눌러 「틀렸다」를 받는 것은 계산을 틀린 것과 다른 일이다
   const ready = Number.isSafeInteger(parsed) && parsed > 0
