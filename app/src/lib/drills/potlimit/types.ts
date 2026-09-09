@@ -17,17 +17,29 @@ export const POTLIMIT_KIND_LABEL: Record<PotLimitKind, string> = {
   potraise: '팟까지 레이즈',
 }
 
-/**
- * 제한시간(초). **초안이다** — 재미 게이트에서 확정한다 (설계 §10).
- * 숫자 입력은 고르기보다 느리다.
- */
+/** 제한시간(초). 두 유형 모두 30초다 */
 export const POTLIMIT_LIMIT_SEC: Record<PotLimitKind, number> = {
   potbet: 30,
-  potraise: 45,
+  potraise: 30,
 }
 
 export const POTLIMIT_QUESTION_COUNT = 10
-export const POTLIMIT_SEAT_COUNT = 4
+
+/**
+ * 한 판의 스트릿 배분 — **프리플랍 6 · 포스트플랍 4**.
+ *
+ * 확률로 두면 어떤 판은 프리플랍만 나오고 어떤 판은 하나도 안 나온다. 비중을
+ * 정했으면 숫자로 못박는 것이 맞다 (액션 러시의 `KIND_QUOTA` 와 같은 손).
+ * 포스트플랍 넷은 팟벳 둘 · 팟까지 레이즈 둘로 다시 갈린다 — 팟벳은 프리플랍에
+ * 존재할 수 없으므로 여기서 자리를 잡아 주지 않으면 아예 안 나오는 판이 생긴다.
+ */
+export const POTLIMIT_PREFLOP_COUNT = 6
+export const POTLIMIT_POSTFLOP_BET_COUNT = 2
+export const POTLIMIT_POSTFLOP_RAISE_COUNT = 2
+
+/** 좌석 수는 대본 길이에 따라 늘어난다. 콜이 셋 쌓이려면 자리가 있어야 한다 */
+export const POTLIMIT_MIN_SEATS = 4
+export const POTLIMIT_MAX_SEATS = 6
 
 /** 어느 스트릿인가. 보드 장수가 여기서 나온다 */
 export type PotLimitStreet = '프리플랍' | '플랍' | '턴' | '리버'
@@ -45,11 +57,14 @@ export type PotLimitSeat = {
   /** 이 좌석이 이번 라운드에 앞에 놓은 칩. 화면에 칩으로 보인다 */
   bet: number
   folded: boolean
+  /** 올인했는가. 좌석에 빨간 「올인」이 붙고 뒤에 남은 칩이 0 이라는 뜻이다 */
+  allIn: boolean
   /**
    * 좌석 아래 한 줄 — '체크' · '폴드' · '콜 4,000' · '차례'.
    *
    * **이게 없으면 순서를 읽을 수 없다.** 칩이 0인 좌석이 체크한 것인지 아직 차례가
-   * 오지 않은 것인지 그림만으로는 갈리지 않는다.
+   * 오지 않은 것인지 그림만으로는 갈리지 않는다. 올인 좌석은 비운다 — 빨간
+   * 「올인」 배지가 이미 그 말을 하고 있어서 두 번 적을 자리가 없다.
    */
   act: string
 }
@@ -59,6 +74,9 @@ export type PotLimitQuestion = {
   limitSec: number
   label: string
   prompt: string
+  /** 이 판이 어떤 대본이었나 — '콜 · 올인(언더) → 팟'. 채점 뒤에 되짚어 준다 */
+  patternId: string
+  patternLabel: string
   street: PotLimitStreet
   /** 스몰블라인드 · 빅블라인드. 화면에 적는다 — 판의 크기가 여기서 나온다 */
   sb: number

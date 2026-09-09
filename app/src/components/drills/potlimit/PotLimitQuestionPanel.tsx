@@ -89,7 +89,7 @@ export function PotLimitQuestionPanel({
               stack: 0,
               bet: s.bet,
               folded: s.folded,
-              allIn: false,
+              allIn: s.allIn,
               hole: [],
               revealed: false,
             })),
@@ -142,9 +142,20 @@ export function PotLimitQuestionPanel({
            * 렌더로만 보이는 결함이라 눈으로 찾았다. 집안 규약(`QuestionPanel.tsx`
            * ·`ActionQuestionPanel.tsx` 의 근거 문단)과 같은 손이다.
            */}
-          <p className="mt-2 break-keep rounded-xl bg-zinc-100 px-4 py-3 text-sm dark:bg-zinc-900">
-            정답 <b>{won(question.answer)}</b> — {question.why}
-          </p>
+          <div className="mt-2 rounded-xl bg-zinc-100 px-4 py-3 dark:bg-zinc-900">
+            {/*
+             * 상황에 이름을 붙여 준다. 「방금 그건 콜 · 올인(언더) → 팟이었다」를
+             * 알아야 다음에 같은 모양을 알아본다 — 숫자만 맞히고 넘어가면 열 판이
+             * 다 남의 판이다. 채점 **뒤에만** 보여준다: 풀기 전에 보이면 화면에
+             * 놓인 칩을 읽는 대신 이 줄을 읽는다
+             */}
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-zinc-400">
+              {question.patternLabel}
+            </p>
+            <p className="mt-1 break-keep text-sm">
+              정답 <b>{won(question.answer)}</b> — {question.why}
+            </p>
+          </div>
           <button
             type="button"
             onClick={onNext}
