@@ -1,49 +1,70 @@
 /**
  * 팟 분배 드릴의 타입.
  *
- * 승자 판독이 「이 판의 임자」를 묻는다면 이 드릴은 「**이 팟의** 임자」를 묻는다.
- * 차별점은 자격(사이드팟)과 홀칩에 있다 — 그래서 출제가 자격이 갈리거나
- * 반으로 갈리는 판으로 치우친다 (설계 §5-2).
+ * 승자 판독이 「이 판의 임자」를 묻는다면 이 드릴은 「**팟마다의** 임자」를 묻는다.
+ * 층이 갈리면 자격자가 층마다 좁아지고, 그래서 메인팟의 임자와 서드팟의 임자가
+ * 다를 수 있다 — 그 판단이 이 드릴의 전부다.
  *
- * **임자만으로는 분배가 아니다.** 누구인지 골랐으면 얼마인지도 답해야 한다 —
- * 층을 세고 반으로 가르고 홀칩을 얹는 것이 딜러가 실제로 하는 일이고, 금액을
- * 화면이 대신 세어 주면 그 일이 통째로 빠진다. 그래서 답이 좌석 **과** 금액이다.
+ * **한 문제가 한 판이다.** 팟을 하나씩 떼어 물으면 트레이니는 층이 몇 개인지,
+ * 어느 층이 누구에게 가는지를 한 번도 통째로 보지 못한다. 실제 쇼다운에서
+ * 딜러는 메인팟부터 서드팟까지 **한 번에** 정리한다.
+ *
+ * **금액은 묻지 않는다.** 층을 가르고 스쿱인지 스플릿인지 가리는 것이 판단이고,
+ * 거기서 나온 금액은 산수다 — 산수를 묻느라 판단을 묻는 자리를 잃지 않는다.
+ * 금액은 채점 뒤 근거에서 보여준다.
  */
 import type { Card, Pot } from '@/lib/simulator'
 
-export type PotAwardKind = 'hihalf' | 'lohalf' | 'oddchip' | 'sidepot'
+/** 층이 몇 개인 판인가. **이것이 문제의 난이도다** */
+export type PotAwardKind = 'onepot' | 'twopots' | 'threepots'
 
 export const POTAWARD_KIND_LABEL: Record<PotAwardKind, string> = {
-  hihalf: '하이 절반',
-  lohalf: '로우 절반',
-  oddchip: '홀칩 배분',
-  sidepot: '사이드팟 임자',
+  onepot: '메인팟',
+  twopots: '세컨드팟까지',
+  threepots: '서드팟까지',
+}
+
+/** 유형별 층 수. `buildPots` 가 실제로 이만큼 내놓지 않으면 그 판은 버린다 */
+export const POTAWARD_LAYERS: Record<PotAwardKind, number> = {
+  onepot: 1,
+  twopots: 2,
+  threepots: 3,
 }
 
 /**
- * 제한시간(초). **초안이다** — 재미 게이트에서 확정한다 (설계 §10).
- * 기존 팟 러시가 사이드팟 45 · 메인팟 지급 40 · 홀칩 20 이었고, 하이로우가 얹혔다.
- * 금액 입력이 붙으면서 유형마다 10초씩 늘렸다 — 세고 가르는 데 드는 시간이다.
+ * 제한시간(초). 층마다 하이·로우를 다 골라야 하므로 층 수에 따라 늘어난다.
+ * **초안이다** — 재미 게이트에서 확정한다 (설계 §10).
  */
 export const POTAWARD_LIMIT_SEC: Record<PotAwardKind, number> = {
-  hihalf: 50,
-  lohalf: 50,
-  oddchip: 35,
-  sidepot: 60,
+  onepot: 40,
+  twopots: 55,
+  threepots: 70,
 }
 
 export const POTAWARD_QUESTION_COUNT = 10
-/** 이 드릴의 출제 좌석 수. 사이드팟이 성립하려면 올인이 필요해 승자 판독보다 많다 */
-export const POTAWARD_SEAT_COUNT = 4
 
 /**
- * 팟이 몇 층까지 쌓이나.
- *
- * 예전에는 늘 짧은 올인 둘로 세 층을 노렸다 — 열 판이 다 같은 모양이었고, 「메인팟
- * 하나뿐인 판」을 본 적이 없는 트레이니가 만들어졌다. 층 수를 문제마다 뽑는다:
- * 1이면 메인팟만, 2면 세컨드팟까지, 3이면 서드팟까지다.
+ * 열 문제의 층 배분. 미리 정해 두면 시드와 무관하게 보장된다.
+ * 합이 문제 수와 같아야 한다 — 생성기가 그것을 확인한다.
  */
-export const POTAWARD_MAX_LAYERS = 3
+export const POTAWARD_KIND_QUOTA: Record<PotAwardKind, number> = {
+  onepot: 4,
+  twopots: 3,
+  threepots: 3,
+}
+
+/**
+ * 한 판 10문제 중 **스쿱이 있는 판**과 **로우가 아예 없는 판**의 하한.
+ *
+ * 없으면 열 판이 다 「하이 한 명 · 로우 한 명」으로 굳는다 — 트레이니는 늘 둘을
+ * 갈라 고르는 손버릇만 배우고, 한 사람이 다 가져가는 판에서 손이 멈춘다.
+ * 승자 판독의 `LO_PRESENT_MIN`·`LO_ABSENT_MIN` 과 같은 규약이다.
+ */
+export const POTAWARD_SCOOP_MIN = 2
+export const POTAWARD_NO_LOW_MIN = 2
+
+/** 이 드릴의 출제 좌석 수. 사이드팟이 성립하려면 올인이 필요해 승자 판독보다 많다 */
+export const POTAWARD_SEAT_COUNT = 4
 
 export type PotAwardSeat = {
   name: string
@@ -54,6 +75,15 @@ export type PotAwardSeat = {
   allIn: boolean
 }
 
+/**
+ * 한 팟의 임자. **둘 다 여럿일 수 있다** — 하이가 동점이면 하이가 여럿이고,
+ * 같은 누트 로우를 둘이 쥐면 로우가 여럿이다.
+ *
+ * `lo` 가 비면 그 팟에 자격 있는 로우가 없다는 뜻이고, 그때 하이가 통째로 가져간다.
+ * `hi` 와 `lo` 가 같은 한 사람이면 스쿱이다.
+ */
+export type PotAwardPotAnswer = { hi: number[]; lo: number[] }
+
 export type PotAwardQuestion = {
   kind: PotAwardKind
   limitSec: number
@@ -63,16 +93,8 @@ export type PotAwardQuestion = {
   board: Card[]
   buttonSeat: number
   pots: Pot[]
-  /**
-   * 몇 번째 팟을 묻나. `sidepot` 은 1 이상이고, 나머지 셋은 층이 있는 판이면
-   * 위층도 물을 수 있다 — 세컨드팟의 하이 절반도 딜러가 가르는 팟이다.
-   */
-  potIndex: number
-  /** 정답 좌석. **동점이면 여럿이다** */
-  answerSeats: number[]
-  /** 정답 금액. 그 좌석들이 이 문제에서 **함께 받는 총액**이다 (1인당이 아니다) */
-  answerAmount: number
-  /** 금액 입력칸 위에 붙는 이름 — 무엇을 넣으라는 것인지 한 줄로 */
-  amountLabel: string
-  why: string
+  /** 팟마다 하나. **`pots` 와 같은 길이·같은 순서다** */
+  answers: PotAwardPotAnswer[]
+  /** 팟마다 근거 한 줄. 금액은 여기서만 보여준다 */
+  reasons: string[]
 }

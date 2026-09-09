@@ -18,6 +18,7 @@ import {
   POTAWARD_KIND_LABEL,
   POTAWARD_QUESTION_COUNT,
   type PotAwardKind,
+  type PotAwardPotAnswer,
   type PotAwardQuestion,
 } from '@/lib/drills/potaward/types'
 import { drillHref, GAMES, isGameId } from '@/lib/games'
@@ -28,18 +29,22 @@ function hasChips(): boolean {
 }
 
 /** 순서를 무시하고 같은 좌석 묶음인가 */
-function sameSeats(picked: number[], answer: number[]): boolean {
+function sameSeats(picked: readonly number[], answer: readonly number[]): boolean {
   return picked.length === answer.length && answer.every((s) => picked.includes(s))
 }
 
 /**
- * 채점의 정본. **임자와 금액이 둘 다 맞아야 맞다** — 누구인지만 맞히고 얼마인지
- * 틀린 분배는 테이블에서 그냥 틀린 분배다. 반쯤 맞음을 만들지 않는다.
+ * 채점의 정본. **층 하나라도 틀리면 틀린 것이다** — 메인팟만 맞히고 서드팟을 놓친
+ * 분배는 테이블에서 그냥 틀린 분배다. 반쯤 맞음을 만들지 않는다.
+ *
+ * 로우를 비워 낸 것은 「이 층에 자격 있는 로우가 없다」는 답이다 (패널의
+ * 「로우 없음」 버튼). 정답 쪽 `lo` 도 그때 비어 있으므로 그대로 대조하면 된다.
  */
-function isCorrect(
-  picked: { seats: number[]; amount: number }, question: PotAwardQuestion,
-): boolean {
-  return sameSeats(picked.seats, question.answerSeats) && picked.amount === question.answerAmount
+function isCorrect(picked: PotAwardPotAnswer[], question: PotAwardQuestion): boolean {
+  if (picked.length !== question.answers.length) return false
+  return question.answers.every(
+    (a, i) => sameSeats(picked[i].hi, a.hi) && sameSeats(picked[i].lo, a.lo),
+  )
 }
 
 export default function PotAwardPage({ params }: { params: Promise<{ gameId: string }> }) {
@@ -52,7 +57,7 @@ export default function PotAwardPage({ params }: { params: Promise<{ gameId: str
       path={`/games/${gameId}/potaward`}
       title="팟 분배"
       eyebrow={`${GAMES[gameId].labels.ko} · 팟 분배`}
-      footer={`${POTAWARD_QUESTION_COUNT}문제 · 임자와 금액을 함께 답한다`}
+      footer={`${POTAWARD_QUESTION_COUNT}문제 · 층마다 하이·로우 임자를 고른다`}
       labels={POTAWARD_KIND_LABEL}
       record={potAwardRecord(gameId)}
       generate={potAwardRun(gameId)}
