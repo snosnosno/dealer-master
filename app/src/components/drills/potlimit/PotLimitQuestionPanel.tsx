@@ -72,6 +72,15 @@ export function PotLimitQuestionPanel({
         {index + 1} / {total} · {question.label}
       </p>
 
+      {/*
+        * 판이 어떤 상황인지를 **그림보다 먼저** 적는다. 블라인드를 모르면 앞에 놓인
+        * 칩이 큰지 작은지 판단할 근거가 없고, 스트릿을 모르면 가운데 팟이 어디서
+        * 왔는지 읽을 수 없다 — 둘 다 없던 화면이 「이건 무슨 상황이냐」였다.
+        */}
+      <p className="mb-2 text-xs font-bold text-zinc-600 dark:text-zinc-400">
+        블라인드 {won(question.sb)}/{won(question.bb)} · {question.street}
+      </p>
+
       <div className="sim-root">
         <PokerTable
           state={{
@@ -85,10 +94,12 @@ export function PotLimitQuestionPanel({
               revealed: false,
             })),
             buttonSeat: question.buttonSeat,
-            board: [],
+            board: question.board,
             pot: question.collected,
           }}
           burnCount={0}
+          seatActs={question.seats.map((s) => s.act)}
+          heroSeat={question.heroSeat}
         />
       </div>
 

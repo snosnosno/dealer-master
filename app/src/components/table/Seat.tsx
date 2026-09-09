@@ -14,12 +14,24 @@ export function Seat({
   seatIndex,
   positionTag,
   hasButton,
+  actLabel = '',
+  isHero = false,
 }: {
   seat: SeatState
   seatIndex: number
   /** 'SB' | 'BB' | 'BTN' | '' */
   positionTag: string
   hasButton: boolean
+  /**
+   * 이 좌석이 한 액션 — '체크' · '폴드' · '콜 4,000' · '차례'.
+   *
+   * **칩만으로는 순서를 읽을 수 없다.** 앞에 칩이 없는 좌석이 체크한 것인지 아직
+   * 차례가 오지 않은 것인지 그림은 말해 주지 않는다. 스택 자리에 함께 놓아
+   * 좌석 상자 높이를 늘리지 않는다 — 링을 당겨 둔 탓에 한 줄만 늘어도 겹친다.
+   */
+  actLabel?: string
+  /** 문제를 받는 좌석인가. 지문에만 이름이 있으면 매번 지문을 다시 읽게 된다 */
+  isHero?: boolean
 }) {
   return (
     <div
@@ -37,7 +49,11 @@ export function Seat({
         ))}
       </div>
 
-      <div className="relative flex items-center gap-1 rounded-full bg-white/95 px-2 py-0.5">
+      <div
+        className={`relative flex items-center gap-1 rounded-full bg-white/95 px-2 py-0.5 ${
+          isHero ? 'ring-2 ring-dm-amber-400' : ''
+        }`}
+      >
         <span className="text-[10px] font-bold text-dm-teal-800">
           {seat.name}({displaySeat(seatIndex)})
         </span>
@@ -60,14 +76,31 @@ export function Seat({
         * 색이 아니라 배경을 확정한다: 이름 알약과 같은 흰 알약을 깔고 진한 앰버를
         * 얹으면 어디에 놓이든 6.73:1 이다(올인 빨강은 5.94:1).
         */}
-      <span
-        className={`rounded-full bg-white/95 px-1.5 text-[9px] font-bold ${
-          seat.allIn ? 'text-dm-red' : 'text-dm-amber-600'
-        }`}
-      >
-        {seat.allIn ? '올인 ' : ''}
-        {seat.stack.toLocaleString('ko-KR')}
-      </span>
+      {/*
+        * 스택이 0 이면 숫자를 지운다. 스택을 쓰지 않는 드릴(팟 분배·팟리밋 계산)이
+        * 0 을 넘기는데, 그 「0」은 좌석마다 붙어 훈련생에게 **모두가 빈털터리라는
+        * 거짓말**을 한다. 올인은 스택이 0 이어도 그 사실 자체가 정보라 남긴다.
+        */}
+      {seat.stack > 0 || seat.allIn ? (
+        <span
+          className={`rounded-full bg-white/95 px-1.5 text-[9px] font-bold ${
+            seat.allIn ? 'text-dm-red' : 'text-dm-amber-600'
+          }`}
+        >
+          {seat.allIn ? '올인 ' : ''}
+          {seat.stack.toLocaleString('ko-KR')}
+        </span>
+      ) : null}
+
+      {actLabel ? (
+        <span
+          className={`rounded-full px-1.5 text-[9px] font-bold ${
+            isHero ? 'bg-dm-amber-400 text-dm-amber-800' : 'bg-white/95 text-zinc-600'
+          }`}
+        >
+          {actLabel}
+        </span>
+      ) : null}
 
       {seat.bet > 0 ? (
         <div className="sim-move">

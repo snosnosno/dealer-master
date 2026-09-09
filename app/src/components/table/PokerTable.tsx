@@ -63,6 +63,8 @@ function positionTags(seatCount: number, buttonSeat: number): string[] {
 export function PokerTable({
   state,
   burnCount,
+  seatActs,
+  heroSeat = -1,
 }: {
   /**
    * **`HandState` 가 아니라 `TableView` 다.** 이 컴포넌트가 실제로 읽는 것은
@@ -73,6 +75,14 @@ export function PokerTable({
   state: TableView
   /** 지금까지 번된 카드 수. 번은 상태를 바꾸지 않으므로 밖에서 센다. */
   burnCount: number
+  /**
+   * 좌석별 액션 라벨. **선택이다** — 시뮬레이터는 이벤트 로그가 있어 필요 없고,
+   * 한 장면만 보여 주는 드릴은 이게 없으면 액션 순서를 화면에 담지 못한다.
+   * `TableView` 에 넣지 않는 이유가 그것이다 — 엔진 상태가 아니라 문제의 사정이다.
+   */
+  seatActs?: readonly string[]
+  /** 문제를 받는 좌석. 없으면 -1 */
+  heroSeat?: number
 }) {
   const n = state.seats.length
   const tags = positionTags(n, state.buttonSeat)
@@ -128,6 +138,8 @@ export function PokerTable({
               seatIndex={i}
               positionTag={tags[i]}
               hasButton={i === state.buttonSeat}
+              actLabel={seatActs?.[i] ?? ''}
+              isHero={i === heroSeat}
             />
           </div>
         )
