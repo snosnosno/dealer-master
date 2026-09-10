@@ -11,7 +11,7 @@
  * **무작위는 `Rng` 로만 얻는다.** 여기서 `Math.random()` 을 한 번이라도 쓰면
  * 같은 시드가 다른 핸드를 만들어 재현이 불가능해진다.
  */
-import { createRng, makeDeck, shuffle, type Card, type Rng } from '@/lib/simulator'
+import { asDown, asUp, createRng, makeDeck, shuffle, type Card, type DealtCard, type Rng } from '@/lib/simulator'
 import type { FirstToAct, GameSpec } from '@/lib/games'
 import { firstToActSeat } from './steps'
 import type { BettingAction, HandScript } from './types'
@@ -35,7 +35,7 @@ export function dealHand(spec: GameSpec, seed: string): HandScript {
 
   const seats = NAMES.map((name) => ({
     name,
-    hole: [] as Card[],
+    hole: [] as DealtCard[],
     // 20~99 BB. 스택이 다르면 좌석마다 화면이 달라져 판이 하나로 안 보인다
     stack: BIG_BLIND * (20 + rng.int(80)),
   }))
@@ -49,8 +49,16 @@ export function dealHand(spec: GameSpec, seed: string): HandScript {
     if (street.burn) take(1)
 
     for (let i = 0; i < SEAT_COUNT; i++) {
-      const n = street.deal.down + street.deal.up
-      if (n > 0) seats[i].hole = [...seats[i].hole, ...take(n)]
+      /*
+       * **엎은 것 먼저, 연 것 나중.** 스터드 3번가는 다운 둘을 돌린 뒤 도어카드를
+       * 연다 — 순서가 곧 딜러의 손이고, 진행절차 드릴이 보여주는 것이 그 손이다.
+       * `deal:{down,up}` 을 합쳐 장수만 세면 이 순서가 사라진다 (설계 §1).
+       */
+      const down = asDown(take(street.deal.down))
+      const up = asUp(take(street.deal.up))
+      if (down.length + up.length > 0) {
+        seats[i].hole = [...seats[i].hole, ...down, ...up]
+      }
     }
     board[street.id] = take(street.deal.board)
 

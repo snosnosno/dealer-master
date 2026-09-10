@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { cardToString } from '@/lib/simulator'
-import { GAMES } from '@/lib/games'
+import { cards, cardToString } from '@/lib/simulator'
+import { GAMES, type GameSpec } from '@/lib/games'
 import { BIG_BLIND, dealHand, SEAT_COUNT, SMALL_BLIND } from './deal'
+
+/*
+ * 라즈는 아직 `dealHand` 를 통째로 통과하지 못한다 — 첫 액션 규칙
+ * `highest-upcard`·`lowest-hand` 를 `firstToActSeat`(`./steps.ts`)가 아직 모르고
+ * 던진다. 그것은 **Task 5** 가 채운다.
+ *
+ * 그때까지 **스트릿 모양은 라즈 그대로 두고 베팅만 끈** 스펙으로 딜 루프를 부른다.
+ * 뽑히는 카드는 진짜 라즈와 **한 장도 다르지 않다** — 덱 커서를 움직이는 것은
+ * 번카드·좌석 딜·보드뿐이고, 베팅 라운드 생성은 덱을 건드리지 않는다.
+ *
+ * **Task 5 가 들어오면 이 상수를 지우고 `GAMES.razz` 를 그대로 넘기세요.**
+ */
+const razzDealOnly: GameSpec = {
+  ...GAMES.razz,
+  streets: GAMES.razz.streets.map((street) => ({ ...street, betting: false })),
+}
 
 const seeds = ['a1', 'b2', 'c3', 'd4', 'e5', 'f6', 'g7', 'h8', 'i9', 'j0']
 
@@ -34,7 +50,7 @@ describe('dealHand(plo8)', () => {
     for (const seed of seeds) {
       const script = dealHand(GAMES.plo8, seed)
       const seen = [
-        ...script.seats.flatMap((s) => s.hole),
+        ...script.seats.flatMap((s) => cards(s.hole)),
         ...Object.values(script.board).flat(),
       ].map(cardToString)
       expect(new Set(seen).size, seed).toBe(seen.length)
@@ -90,5 +106,32 @@ describe('dealHand(plo8)', () => {
         }
       }
     }
+  })
+})
+
+describe('딜이 앞뒤를 붙인다', () => {
+  it('PLO8 은 홀카드 넉 장을 전부 엎어서 놓는다', () => {
+    const script = dealHand(GAMES.plo8, 'faceup-plo8')
+    expect(script.seats[0].hole).toHaveLength(4)
+    expect(script.seats[0].hole.every((d) => !d.faceUp)).toBe(true)
+  })
+
+  it('라즈 3번가는 엎어 둘 · 열어 하나 순서로 놓는다', () => {
+    const script = dealHand(razzDealOnly, 'faceup-razz')
+    const first3 = script.seats[0].hole.slice(0, 3)
+    expect(first3.map((d) => d.faceUp)).toEqual([false, false, true])
+  })
+
+  it('라즈 7번가는 다시 엎는다 — 좌석마다 일곱 장에 앞면 넷', () => {
+    const script = dealHand(razzDealOnly, 'faceup-razz')
+    const hole = script.seats[0].hole
+    expect(hole).toHaveLength(7)
+    expect(hole.map((d) => d.faceUp)).toEqual([false, false, true, true, true, true, false])
+  })
+
+  it('같은 카드가 두 번 나오지 않는다 — 번카드까지 덱에서 빠진다', () => {
+    const script = dealHand(razzDealOnly, 'faceup-razz')
+    const all = script.seats.flatMap((s) => s.hole.map((d) => `${d.card.rank}${d.card.suit}`))
+    expect(new Set(all).size).toBe(all.length)
   })
 })

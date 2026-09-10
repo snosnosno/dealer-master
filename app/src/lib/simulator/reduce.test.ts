@@ -94,6 +94,9 @@ describe('stateAt', () => {
 /** 상태의 중첩 구조까지 전부 얼린다. 제자리 수정이 있으면 strict mode 에서 던진다. */
 function deepFreeze(s: HandState): HandState {
   s.seats.forEach((seat) => {
+    // 원소까지 얼린다 — `hole` 이 이제 `{card, faceUp}` 이라, 배열만 얼리면
+    // `hole[0].faceUp = true` 같은 제자리 수정이 그대로 통과한다
+    seat.hole.forEach(Object.freeze)
     Object.freeze(seat.hole)
     Object.freeze(seat)
   })

@@ -1,8 +1,13 @@
 /**
  * 좌석 하나.
  *
- * 홀카드 노출의 유일한 기준은 `SeatState.revealed` 다 — 엔진이 showdown_reveal
- * 로만 세운다. UI 가 "폴드 안 했으니 보여줘도 되겠지" 같은 판단을 하지 않는다.
+ * 홀카드가 보이는 길은 **둘이고, 둘은 다른 질문이다.** 카드 자신이 앞면으로
+ * 놓였는가(`DealtCard.faceUp` — 스터드 업카드)와, 쇼다운에서 손이 열렸는가
+ * (`SeatState.revealed` — 엔진이 showdown_reveal 로만 세운다)다. 라즈 7번가는
+ * 엎어서 주고 쇼다운에 열리므로 하나만으로는 그 카드를 그릴 수 없다.
+ *
+ * 둘 다 **엔진이 준 사실**이다. UI 가 "폴드 안 했으니 보여줘도 되겠지" 같은
+ * 판단을 여기서 새로 하지 않는다.
  */
 import { Card } from './Card'
 import { ChipStack } from './ChipStack'
@@ -45,7 +50,12 @@ export function Seat({
         */}
       <div className="flex gap-0.5">
         {seat.hole.map((dealt, i) => (
-          <Card key={i} card={dealt.card} faceUp={seat.revealed} size="xs" />
+          /*
+           * 앞면이거나(스터드 업카드) 쇼다운에서 열렸거나(`revealed`) 둘 중 하나면
+           * 보인다. 「지금 앞면인가」와 「쇼다운에 공개됐는가」는 다른 질문이고,
+           * 라즈 7번가는 엎어서 주고 쇼다운에 열리므로 둘 다 필요하다.
+           */
+          <Card key={i} card={dealt.card} faceUp={dealt.faceUp || seat.revealed} size="xs" />
         ))}
       </div>
 

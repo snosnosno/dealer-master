@@ -4,7 +4,7 @@
  * 이 드릴은 **문제가 주어지지 않는다.** 딜러가 할 수 있는 행동 전부가 팔레트에 늘 떠
  * 있고, 그중 무엇을 먼저 할지를 스스로 고른다. 그것이 4지선다와 갈리는 지점이다.
  */
-import type { Card, TableView } from '@/lib/simulator'
+import type { Card, DealtCard, TableView } from '@/lib/simulator'
 import type { GameSpec } from '@/lib/games'
 
 /** 팔레트에서 고를 수 있는 행동. **늘 일곱이다** — 종목에 따라 줄어들지 않는다. */
@@ -35,7 +35,8 @@ export type BettingAction = {
 export type HandScript = {
   buttonSeat: number
   blinds: { sb: number; bb: number }
-  seats: { name: string; hole: Card[]; stack: number }[]
+  /** 좌석에 놓인 카드 — **앞뒤와 함께.** 스터드는 엎은 것과 열린 것이 섞인다 */
+  seats: { name: string; hole: DealtCard[]; stack: number }[]
   /** 스트릿 id → 그 스트릿에 보드로 나갈 카드 */
   board: Record<string, Card[]>
   /** 스트릿 id → 그 라운드의 액션. 재생만 한다 */
