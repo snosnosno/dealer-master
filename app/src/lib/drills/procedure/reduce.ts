@@ -8,7 +8,7 @@
  * **칩은 라운드가 끝나야 수거한다.** 블라인드와 벳이 좌석 앞에 남아 있다가
  * 라운드 끝에 팟으로 간다. 앤티만 예외지만 PLO8 에는 앤티가 없다.
  */
-import type { SeatState, TableView } from '@/lib/simulator'
+import { asDown, type SeatState, type TableView } from '@/lib/simulator'
 import type { GameSpec } from '@/lib/games'
 import { dealHand, SEAT_COUNT } from './deal'
 import { judge } from './judge'
@@ -178,7 +178,9 @@ function applyStep(
       if (street === null) throw new Error('deal 스텝에 스트릿이 없다')
       const perSeat = street.deal.down + street.deal.up
       const seats = table.seats.map((seat, i) =>
-        perSeat > 0 ? { ...seat, hole: script.seats[i].hole.slice(0, seat.hole.length + perSeat) } : seat,
+        perSeat > 0
+          ? { ...seat, hole: asDown(script.seats[i].hole.slice(0, seat.hole.length + perSeat)) }
+          : seat,
       )
       const board = [...table.board, ...script.board[street.id]]
       return {

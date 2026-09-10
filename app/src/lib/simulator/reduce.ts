@@ -5,6 +5,7 @@
  * 새로 만들어 돌려준다. 얕은 복사만 하고 seats·board·contributed 를 공유하면
  * 되감기로 만든 과거 상태가 조용히 오염돼서, 재현이 안 되는 버그가 된다.
  */
+import { asDown } from './dealt'
 import type { HandEvent, HandState, SeatInit, SeatState } from './types'
 
 export function initialState(seats: SeatInit[], buttonSeat: number): HandState {
@@ -109,7 +110,7 @@ export function applyEvent(state: HandState, e: HandEvent): HandState {
     case 'deal_hole':
       return {
         ...state,
-        seats: withSeat(state, e.seat, { hole: [...state.seats[e.seat].hole, e.card] }),
+        seats: withSeat(state, e.seat, { hole: [...state.seats[e.seat].hole, ...asDown([e.card])] }),
       }
 
     case 'burn':

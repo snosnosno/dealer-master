@@ -17,6 +17,7 @@
 
 import { useState } from 'react'
 import { PokerTable } from '@/components/table/PokerTable'
+import { asDown } from '@/lib/simulator'
 import { potName } from '@/lib/drills/potaward/potname'
 import type { PotAwardPotAnswer, PotAwardQuestion } from '@/lib/drills/potaward/types'
 import type { Verdict } from '@/lib/rush/session'
@@ -128,7 +129,7 @@ export function PotAwardQuestionPanel({
               bet: s.contributed,
               folded: s.folded,
               allIn: s.allIn,
-              hole: s.hole,
+              hole: asDown(s.hole),
               revealed: true,
             })),
             buttonSeat: question.buttonSeat,

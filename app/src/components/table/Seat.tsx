@@ -44,8 +44,8 @@ export function Seat({
         * 좌표만 퍼센트라 화면이 좁아질수록 이 초과가 커진다.
         */}
       <div className="flex gap-0.5">
-        {seat.hole.map((card, i) => (
-          <Card key={i} card={card} faceUp={seat.revealed} size="xs" />
+        {seat.hole.map((dealt, i) => (
+          <Card key={i} card={dealt.card} faceUp={seat.revealed} size="xs" />
         ))}
       </div>
 

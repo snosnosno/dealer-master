@@ -6,6 +6,7 @@
  * 되감기·재생이 공짜로 나오고, 같은 시드가 항상 같은 핸드를 만든다.
  */
 import type { Card } from './cards'
+import type { DealtCard } from './dealt'
 
 export type Street = 'preflop' | 'flop' | 'turn' | 'river'
 
@@ -40,7 +41,12 @@ export type SeatState = {
   bet: number
   folded: boolean
   allIn: boolean
-  hole: Card[]
+  /**
+   * 이 좌석에 놓인 카드 — **앞뒤와 함께.** 스터드는 한 좌석에 엎은 것과 열린 것이
+   * 섞이므로 좌석 단위 플래그로는 표현되지 않는다 (`DealtCard` 주석 참조).
+   */
+  hole: DealtCard[]
+  /** 쇼다운에서 **엎은 카드까지** 열렸는가. `faceUp` 과 다른 질문이다 */
   revealed: boolean
 }
 

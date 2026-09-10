@@ -9,6 +9,7 @@
  * 여기서 출제하지 않는다. 그래서 이 파일은 nlh.validateAction 을 호출하지 않고,
  * 규정이 금액을 확정하는 minRaiseTo 만 쓴다.
  */
+import { cards } from './dealt'
 import { buildPots, awardPots } from './pots'
 import { initialState, stateAt } from './reduce'
 import { createRng, type Rng } from './rng'
@@ -249,7 +250,7 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
   // ── 4. 승자 판정
   const mainPot = pots[0]
   if (mainPot && mainPot.eligibleSeats.length >= 2 && finalState.board.length === 5) {
-    const hole = finalState.seats.map((s) => s.hole)
+    const hole = finalState.seats.map((s) => cards(s.hole))
     const awards = awardPots(pots, hole, finalState.board, hand.buttonSeat, ANY_FIVE_EVALUATOR)
     // 팟은 갈릴 수 있다. 승자를 한 명으로 접으면 공동 승자를 지목한 유저가
     // 오답 처리된다 — 보드 플레이나 킥커 카운터피트로 실제로 나오는 상황이다.
@@ -276,7 +277,7 @@ export function extractDecisions(hand: Hand): DecisionPoint[] {
           type: 'seat',
           options: mainPot.eligibleSeats.map((seat) => ({
             seat,
-            label: `${finalState.seats[seat].name} — ${finalState.seats[seat].hole.map((c) => c.rank + c.suit).join(' ')}`,
+            label: `${finalState.seats[seat].name} — ${cards(finalState.seats[seat].hole).map((c) => c.rank + c.suit).join(' ')}`,
           })),
           correctSeats: winners,
         },
