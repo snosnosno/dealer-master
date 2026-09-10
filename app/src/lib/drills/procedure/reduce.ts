@@ -6,7 +6,8 @@
  * 여기서는 리듀서 하나가 새 상태를 돌려준다.
  *
  * **칩은 라운드가 끝나야 수거한다.** 블라인드와 벳이 좌석 앞에 남아 있다가
- * 라운드 끝에 팟으로 간다. 앤티만 예외지만 PLO8 에는 앤티가 없다.
+ * 라운드 끝에 팟으로 간다. **앤티만 예외다** — 아무도 콜하지 않으므로 걷는 즉시
+ * 팟으로 들어간다(`ante` 케이스).
  */
 import type { SeatState, TableView } from '@/lib/simulator'
 import type { GameSpec } from '@/lib/games'
@@ -146,25 +147,42 @@ function applyStep(
 
   switch (step.act) {
     case 'blinds': {
+      const forced = script.forced
+      if (forced.kind !== 'blinds') {
+        throw new Error(`블라인드가 없는 종목에 블라인드 스텝이 왔다: ${forced.kind}`)
+      }
       const sb = (script.buttonSeat + 1) % SEAT_COUNT
       const bb = (script.buttonSeat + 2) % SEAT_COUNT
       const seats = table.seats.map((seat, i) =>
         i === sb
-          ? { ...seat, bet: script.blinds.sb, stack: seat.stack - script.blinds.sb }
+          ? { ...seat, bet: forced.sb, stack: seat.stack - forced.sb }
           : i === bb
-            ? { ...seat, bet: script.blinds.bb, stack: seat.stack - script.blinds.bb }
+            ? { ...seat, bet: forced.bb, stack: seat.stack - forced.bb }
             : seat,
       )
       return {
         table: { ...table, seats },
         burnCount: state.burnCount,
-        log: [`블라인드 — SB ${script.blinds.sb.toLocaleString('ko-KR')} · BB ${script.blinds.bb.toLocaleString('ko-KR')}`],
+        log: [`블라인드 — SB ${num(forced.sb)} · BB ${num(forced.bb)}`],
       }
     }
 
     case 'ante': {
-      // PLO8 에는 앤티가 없다. 앤티 종목이 붙을 때 채운다 — 짐작으로 구현하지 않는다
-      throw new Error('앤티 수거는 아직 구현하지 않았다 — 스터드를 붙일 때 채운다')
+      const forced = script.forced
+      if (forced.kind !== 'ante+bringin') {
+        throw new Error(`앤티가 없는 종목에 앤티 스텝이 왔다: ${forced.kind}`)
+      }
+      /*
+       * **앤티는 좌석 앞에 서지 않는다.** 블라인드는 콜해야 할 금액이라 좌석 앞에
+       * 남지만, 앤티는 걷는 즉시 팟으로 들어간다 — 아무도 그것을 콜하지 않는다.
+       * 좌석 앞에 놓으면 훈련생이 「앤티를 콜한다」는 없는 규칙을 배운다.
+       */
+      const seats = table.seats.map((seat) => ({ ...seat, stack: seat.stack - forced.ante }))
+      return {
+        table: { ...table, seats, pot: table.pot + forced.ante * seats.length },
+        burnCount: state.burnCount,
+        log: [`앤티 수거 — 좌석마다 ${num(forced.ante)}`],
+      }
     }
 
     case 'burn':

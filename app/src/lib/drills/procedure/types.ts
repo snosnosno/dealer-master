@@ -19,6 +19,20 @@ export type StepAct = PaletteAct | 'open'
 /** `streetIndex: -1` 은 스트릿에 속하지 않는다(블라인드·앤티·팟 지급). */
 export type Step = { act: StepAct; streetIndex: number }
 
+/**
+ * 이 종목이 무엇으로 판을 여는가. **`kind` 로만 갈린다** — 종목 id 를 읽지 않는다.
+ *
+ * 플랍게임은 블라인드 둘로 열고, 스터드는 전원 앤티 + 최고 업카드 한 좌석의 브링인으로
+ * 연다. 둘을 한 객체에 합치면 「앤티가 0 인 블라인드 종목」 같은 없는 상태가 타입에
+ * 생긴다 — 유니온이면 컴파일러가 그 상태를 만들지 못하게 막는다.
+ *
+ * 픽스리밋의 스몰벳·빅벳이 여기 붙는 이유: 스터드에서 브링인은 스몰벳의 일부이고,
+ * 셋이 한 자리에 있어야 「브링인 500 → 스몰벳 1,000 → 5번가부터 2,000」이 한 눈에 읽힌다.
+ */
+export type ForcedBets =
+  | { kind: 'blinds'; sb: number; bb: number }
+  | { kind: 'ante+bringin'; ante: number; bringIn: number; smallBet: number; bigBet: number }
+
 /** 이 라운드에 좌석이 한 행동. `to` 는 이 라운드에 낸 **누적** 금액이다. */
 export type BettingAction = {
   seat: number
@@ -34,7 +48,8 @@ export type BettingAction = {
  */
 export type HandScript = {
   buttonSeat: number
-  blinds: { sb: number; bb: number }
+  /** 이 판을 연 강제 베팅. 금액의 정본은 여기 하나다 — 리듀서가 상수를 다시 읽지 않는다 */
+  forced: ForcedBets
   /** 좌석에 놓인 카드 — **앞뒤와 함께.** 스터드는 엎은 것과 열린 것이 섞인다 */
   seats: { name: string; hole: DealtCard[]; stack: number }[]
   /** 스트릿 id → 그 스트릿에 보드로 나갈 카드 */

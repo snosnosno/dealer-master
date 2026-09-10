@@ -11,23 +11,105 @@
  * **무작위는 `Rng` 로만 얻는다.** 여기서 `Math.random()` 을 한 번이라도 쓰면
  * 같은 시드가 다른 핸드를 만들어 재현이 불가능해진다.
  */
-import { asDown, asUp, createRng, makeDeck, shuffle, type Card, type DealtCard, type Rng } from '@/lib/simulator'
+import {
+  asDown,
+  asUp,
+  compareUpcardsHi,
+  createRng,
+  makeDeck,
+  shuffle,
+  type Card,
+  type DealtCard,
+  type Rng,
+} from '@/lib/simulator'
 import type { FirstToAct, GameSpec } from '@/lib/games'
 import { firstToActSeat } from './steps'
-import type { BettingAction, HandScript } from './types'
+import type { BettingAction, ForcedBets, HandScript } from './types'
 
 export const SEAT_COUNT = 6
+
+/**
+ * 강제 베팅. **자료에 금액이 없다** — `docs/references/mixgame-facts.md` 는
+ * 구조(앤티+브링인 · 5번가부터 빅벳)만 적고 금액을 적지 않는다.
+ * 아래 여섯은 **사용자 확인 2026-09-11** 이다. 자료를 받으면 출처를 바꾼다.
+ *
+ * 스몰벳이 PLO8 의 BB 와 같아 두 종목의 칩 그림이 한 세계로 읽힌다.
+ */
 export const SMALL_BLIND = 500
 export const BIG_BLIND = 1000
+export const ANTE = 100
+export const BRING_IN = 500
+export const SMALL_BET = 1000
+export const BIG_BET = 2000
+
+/** 이 종목이 무엇으로 판을 여는가. **`spec.forced` 코드값으로만 갈린다** */
+function forcedBetsFor(spec: GameSpec): ForcedBets {
+  return spec.forced === 'ante+bringin'
+    ? { kind: 'ante+bringin', ante: ANTE, bringIn: BRING_IN, smallBet: SMALL_BET, bigBet: BIG_BET }
+    : { kind: 'blinds', sb: SMALL_BLIND, bb: BIG_BLIND }
+}
 
 const NAMES = ['1번', '2번', '3번', '4번', '5번', '6번']
 
 /** 강제 베팅이 없는 라운드가 체크로 열릴 확률. 첫 액션이 늘 벳이면 상황이 하나뿐이다. */
 const CHECK_OPEN_RATE = 0.45
 
+/**
+ * 무한 루프 대신 명확한 실패로 드러나게 하는 상한.
+ * 값 400 은 `drills/winner/generate.ts` 의 `MAX_TRIES` 와 같다.
+ */
+const MAX_SHUFFLES = 400
+
+/**
+ * 첫 액션을 업카드로 정하는 종목에서, **최고 업카드가 유일한 덱**인가.
+ *
+ * 동률이면 무늬로 갈라야 하는데 자료에 그 우열이 없다 — mixgame-facts §2 의 7-Card
+ * Stud 절이 「동률의 무늬 우열은 7카드 스터드 기준으로 자료에 없다」고 못 박고,
+ * 라즈는 그 절을 따른다(§2 Razz). 답을 규칙으로 정당화할 수 없는 문제를 내면
+ * 훈련생이 맞는 답을 고르고도 틀린다 —
+ * 비교기가 0 을 낼 때 임의로 한 좌석을 고르는 것이 바로 그 거짓말이다
+ * (`steps.ts` 의 `firstToActSeat` 가 먼저 만난 좌석을 남기는 자리).
+ *
+ * **플랍게임은 이 검사를 통과만 하고 지나간다** — 첫 스트릿에 업카드가 0 장이라
+ * 동률이 생길 자리가 없다. 그래서 PLO8 의 덱은 한 번도 다시 섞이지 않는다.
+ */
+function firstStreetTieFree(spec: GameSpec, deck: Card[]): boolean {
+  const street = spec.streets[0]
+  if (street.deal.up === 0) return true
+
+  /*
+   * **번카드가 커서를 밀기 전에 센다.** 아래 오프셋은 첫 스트릿에 번카드가 없다는
+   * 것에 기댄다 — 라즈 3번가도 PLO8 프리플랍도 `burn: false` 다(각 스펙 파일 확인).
+   * 첫 스트릿에 번카드가 있는 종목이 붙으면 이 함수부터 고쳐야 한다.
+   */
+  const per = street.deal.down + street.deal.up
+  const ups: Card[][] = []
+  for (let i = 0; i < SEAT_COUNT; i++) {
+    const start = i * per + street.deal.down
+    ups.push(deck.slice(start, start + street.deal.up))
+  }
+
+  // 잣대는 `compareUpcardsHi` 에게만 묻는다. 여기서 랭크를 다시 세면 판정 사본이 둘이 된다
+  const top = ups.reduce((best, cur) => (compareUpcardsHi(cur, best) > 0 ? cur : best))
+  return ups.filter((cards) => compareUpcardsHi(cards, top) === 0).length === 1
+}
+
 export function dealHand(spec: GameSpec, seed: string): HandScript {
   const rng = createRng(seed)
-  const deck = shuffle(makeDeck(), rng)
+
+  /*
+   * **다시 섞을 때도 같은 `rng` 를 쓴다.** 새 `rng` 를 만들거나 `Math.random()` 을
+   * 쓰면 그 순간 같은 시드가 다른 판을 만들어 재현이 깨진다.
+   */
+  let deck = shuffle(makeDeck(), rng)
+  let tries = 0
+  while (!firstStreetTieFree(spec, deck)) {
+    if (++tries >= MAX_SHUFFLES) {
+      throw new Error(`동률 없는 첫 스트릿을 ${MAX_SHUFFLES}번 안에 만들지 못함`)
+    }
+    deck = shuffle(makeDeck(), rng)
+  }
+
   let cursor = 0
   const take = (n: number): Card[] => deck.slice(cursor, (cursor += n))
 
@@ -76,7 +158,7 @@ export function dealHand(spec: GameSpec, seed: string): HandScript {
     })
   })
 
-  return { buttonSeat, blinds: { sb: SMALL_BLIND, bb: BIG_BLIND }, seats, board, betting }
+  return { buttonSeat, forced: forcedBetsFor(spec), seats, board, betting }
 }
 
 /**

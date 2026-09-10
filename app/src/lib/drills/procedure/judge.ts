@@ -7,6 +7,7 @@
  *
  * **틀렸을 때 가리지 않는다.** 무엇이 먼저인지 한 줄로 말해 준다 — 연습이기 때문이다.
  */
+import type { FirstToAct } from '@/lib/games'
 import { firstToActSeat } from './steps'
 import type { ProcedureAction, ProcedureState, Step } from './types'
 
@@ -53,9 +54,28 @@ function denyHint(state: ProcedureState, step: Step): string {
   }
 }
 
+/**
+ * 첫 순서 규칙마다 **무엇을 봐야 하는지** 한 줄.
+ *
+ * 예전에는 `left-of-bb` 가 아니면 전부 「버튼 왼쪽」이라고 말했다. 스터드가 붙은
+ * 지금 그것은 **틀린 것을 가르친다** — 라즈 3번가의 첫 순서는 버튼과 아무 상관이 없고
+ * 업카드가 정한다. 종목마다 갈리는 규칙에 기본값을 두면 힌트가 조용히 거짓이 된다.
+ *
+ * 마지막 둘은 그 규칙을 쓰는 종목이 아직 없어 화면에 닿지 않는다. `Record` 로 둔 이유는
+ * 새 규칙이 `FirstToAct` 에 붙는 날 컴파일러가 힌트를 빠뜨리지 못하게 하려는 것이다.
+ */
+const FIRST_TO_ACT_HINT: Record<FirstToAct, string> = {
+  'left-of-bb': '빅블라인드 왼쪽부터입니다',
+  'left-of-button': '버튼 왼쪽에서 살아 있는 좌석부터입니다',
+  'highest-upcard': '업카드가 가장 높은 좌석입니다 — 그 좌석이 브링인을 냅니다',
+  'lowest-hand': '열린 카드로 만든 로우가 가장 좋은 좌석입니다',
+  'lowest-upcard': '업카드가 가장 낮은 좌석입니다',
+  'highest-upcard-by-suit': '업카드가 가장 높은 좌석이고, 같으면 무늬로 가릅니다',
+}
+
 function openHint(state: ProcedureState, step: Step): string {
   const street = step.streetIndex >= 0 ? state.spec.streets[step.streetIndex] : null
-  return street?.firstToAct === 'left-of-bb'
-    ? '이번 라운드의 첫 순서를 지목하세요 — 빅블라인드 왼쪽부터입니다.'
-    : '이번 라운드의 첫 순서를 지목하세요 — 버튼 왼쪽에서 살아 있는 좌석부터입니다.'
+  // 스트릿에 속하지 않는 스텝(앤티·블라인드·팟 지급)은 첫 순서를 묻지 않는다
+  if (street === null) return '이번 라운드의 첫 순서를 지목하세요.'
+  return `이번 라운드의 첫 순서를 지목하세요 — ${FIRST_TO_ACT_HINT[street.firstToAct]}.`
 }

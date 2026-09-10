@@ -15,8 +15,15 @@ export type GameId = 'nlh' | 'plo8' | 'razz'
 /**
  * 이 스트릿의 첫 액션은 누구인가.
  *
- * **여섯을 다 적되 앞의 둘만 구현한다.** 나머지 넷은 스터드·라즈가 붙을 때
- * `firstToActSeat` 에서 채운다 — 지금 짐작으로 구현하면 검증되지 않은 채 굳는다
+ * **여섯을 다 적고 그중 넷이 구현돼 있다** (`drills/procedure/steps.ts` 의
+ * `firstToActSeat`): 버튼에서 세는 `left-of-bb`·`left-of-button`, 좌석의 업카드를
+ * 읽는 `highest-upcard`(라즈 3번가 브링인)·`lowest-hand`(라즈 4번가 이후).
+ * 스펙 파일들이 지금 쓰는 값도 이 넷뿐이다.
+ *
+ * 남은 둘은 `firstToActSeat` 가 던진다. `lowest-upcard` 는 그것으로 브링인을 정하는
+ * 종목(7카드 스터드 하이)이 아직 없고, `highest-upcard-by-suit` 는 무늬 우열이
+ * 자료에 없다(mixgame-facts §2 7-Card Stud 절. Stud Hi/Lo Regular 의 「스페이드 K
+ * 최고」 한 줄뿐이라 라즈에 그대로 옮길 근거가 없다). 짐작으로 구현하면 검증되지 않은 채 굳는다
  * (PRD §6-3 함정 1).
  */
 export type FirstToAct =

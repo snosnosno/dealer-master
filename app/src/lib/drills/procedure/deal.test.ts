@@ -43,7 +43,7 @@ describe('dealHand(plo8)', () => {
 
   it('블라인드가 SB·BB로 잡혀 있다', () => {
     const script = dealHand(GAMES.plo8, 'seed-1')
-    expect(script.blinds).toEqual({ sb: SMALL_BLIND, bb: BIG_BLIND })
+    expect(script.forced).toEqual({ kind: 'blinds', sb: SMALL_BLIND, bb: BIG_BLIND })
   })
 
   it('프리플랍에는 늘 콜할 금액이 있다 — 전원 체크로 열리지 않는다', () => {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { compareUpcardsHi } from '@/lib/simulator'
 import { GAMES } from '@/lib/games'
-import { firstToActSeat } from './steps'
+import { dealHand } from './deal'
+import { firstToActSeat, stepsFor } from './steps'
 import { reduce, startProcedure } from './reduce'
 import type { ProcedureState } from './types'
 
@@ -160,6 +162,62 @@ describe('베팅 라운드 — 칩이 화면에 뜬 다음에 수거된다', () 
         expect(line).toContain(a.to.toLocaleString('ko-KR'))
       }
     }
+  })
+})
+
+describe('앤티 수거', () => {
+  it('좌석 전원에게서 앤티를 걷는다', () => {
+    const opened = startProcedure(GAMES.razz, 'ante-seed')
+    const stacksBefore = opened.table.seats.map((s) => s.stack)
+
+    const after = reduce(opened, { type: 'palette', act: 'ante' })
+
+    after.table.seats.forEach((seat, i) => {
+      expect(seat.stack).toBe(stacksBefore[i] - 100)
+    })
+  })
+
+  it('앤티는 좌석 앞이 아니라 팟으로 간다 — 콜할 금액이 아니다', () => {
+    const opened = startProcedure(GAMES.razz, 'ante-seed')
+    const after = reduce(opened, { type: 'palette', act: 'ante' })
+    expect(after.table.seats.every((s) => s.bet === 0)).toBe(true)
+    expect(after.table.pot).toBe(100 * after.table.seats.length)
+  })
+
+  it('로그가 앤티 금액을 남긴다', () => {
+    const opened = startProcedure(GAMES.razz, 'ante-seed')
+    const after = reduce(opened, { type: 'palette', act: 'ante' })
+    expect(after.log.join(' ')).toMatch(/앤티/)
+    expect(after.log.join(' ')).toMatch(/100/)
+  })
+
+  it('PLO8 은 여전히 블라인드로 연다', () => {
+    expect(stepsFor(GAMES.plo8)[0].act).toBe('blinds')
+    expect(stepsFor(GAMES.razz)[0].act).toBe('ante')
+  })
+})
+
+describe('동률 판은 출제하지 않는다', () => {
+  /*
+   * 3번가 브링인이 동률이면 무늬로 갈라야 하는데 **자료가 없다**
+   * (mixgame-facts §2 7-Card Stud 절). 답을 규칙으로 정당화할 수 없는 문제를 내면 훈련생이
+   * 맞는 답을 고르고도 틀린다. 그런 판은 애초에 만들지 않는다.
+   */
+  it('시드 서른 개 어디에도 3번가 최고 업카드 동률이 없다', () => {
+    for (let i = 0; i < 30; i++) {
+      const script = dealHand(GAMES.razz, `tie-${i}`)
+      const ups = script.seats.map((s) => s.hole.filter((d) => d.faceUp).map((d) => d.card))
+      // 3번가 시점 = 좌석마다 업카드 한 장
+      const third = ups.map((cards) => cards.slice(0, 1))
+      const top = third.reduce((best, cur) => (compareUpcardsHi(cur, best) > 0 ? cur : best))
+      const tied = third.filter((cards) => compareUpcardsHi(cards, top) === 0)
+      expect(tied).toHaveLength(1)
+    }
+  })
+
+  it('PLO8 은 이 제약에 걸리지 않는다 — 업카드가 없다', () => {
+    const script = dealHand(GAMES.plo8, 'tie-0')
+    expect(script.seats.every((s) => s.hole.every((d) => !d.faceUp))).toBe(true)
   })
 })
 
