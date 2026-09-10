@@ -1,13 +1,21 @@
 /**
  * 좌석 하나.
  *
- * 홀카드가 보이는 길은 **둘이고, 둘은 다른 질문이다.** 카드 자신이 앞면으로
- * 놓였는가(`DealtCard.faceUp` — 스터드 업카드)와, 쇼다운에서 손이 열렸는가
- * (`SeatState.revealed` — 엔진이 showdown_reveal 로만 세운다)다. 라즈 7번가는
- * 엎어서 주고 쇼다운에 열리므로 하나만으로는 그 카드를 그릴 수 없다.
+ * 홀카드가 보이는 길은 **둘이고, 둘은 다른 질문이다.**
  *
- * 둘 다 **엔진이 준 사실**이다. UI 가 "폴드 안 했으니 보여줘도 되겠지" 같은
- * 판단을 여기서 새로 하지 않는다.
+ * `DealtCard.faceUp` 은 **카드를 놓는 순간 정해진다** — 진행절차 딜
+ * (`drills/procedure/deal.ts`)이 스터드 업카드만 `asUp` 으로 열어서 얹는다.
+ *
+ * `SeatState.revealed` 는 **밖에서 정해져 들어온다.** 쇼다운만이 아니다 — 엔진의
+ * `showdown_reveal`(`simulator/reduce.ts`)뿐 아니라 진행절차 리듀서의 팟 지급 스텝
+ * (`drills/procedure/reduce.ts` 의 `revealed: !s.folded`)과 문제 화면
+ * (`PotAwardQuestionPanel` 의 `revealed: true`)도 각자 세운다.
+ *
+ * 라즈 7번가는 엎어서 주고 쇼다운에 열리므로 하나만으로는 그 카드를 그릴 수 없다.
+ *
+ * **이 파일은 둘을 받아 그릴 뿐 노출을 스스로 판단하지 않는다.** "폴드 안 했으니
+ * 보여줘도 되겠지" 는 실제로 내려지는 판단이지만, 그것은 위 팟 지급 스텝처럼
+ * 자기 자리에서 내려져 `revealed` 에 담겨 온다 — 여기서 다시 내리지 않는다.
  */
 import { Card } from './Card'
 import { ChipStack } from './ChipStack'
@@ -51,8 +59,8 @@ export function Seat({
       <div className="flex gap-0.5">
         {seat.hole.map((dealt, i) => (
           /*
-           * 앞면이거나(스터드 업카드) 쇼다운에서 열렸거나(`revealed`) 둘 중 하나면
-           * 보인다. 「지금 앞면인가」와 「쇼다운에 공개됐는가」는 다른 질문이고,
+           * 앞면이거나(스터드 업카드) 좌석이 열렸거나(`revealed`) 둘 중 하나면
+           * 보인다. 「지금 앞면인가」와 「이 좌석이 공개됐는가」는 다른 질문이고,
            * 라즈 7번가는 엎어서 주고 쇼다운에 열리므로 둘 다 필요하다.
            */
           <Card key={i} card={dealt.card} faceUp={dealt.faceUp || seat.revealed} size="xs" />
