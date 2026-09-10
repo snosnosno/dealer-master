@@ -14,6 +14,7 @@ export {
   makeDeck, shuffle, cardToString, parseCard, RANK_VALUE, RANKS, SUITS,
   type Card, type Rank, type Suit,
 } from './cards'
+export { cards, asDown, asUp, type DealtCard } from './dealt'
 export {
   evaluateHand, compareHands, CATEGORY_LABEL, ANY_FIVE_EVALUATOR,
   type HandRank, type HandCategory, type HandEvaluator,
