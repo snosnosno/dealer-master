@@ -34,8 +34,11 @@ function SeatRow({
   picked,
   disabled,
   onPick,
+  group,
 }: {
   label: string
+  /** 이 줄이 속한 층의 이름. 좌석 버튼의 접근 가능한 이름을 층까지 포함해 유일하게 만든다 */
+  group: string
   seats: readonly { name: string }[]
   eligible: readonly number[]
   picked: readonly number[]
@@ -54,6 +57,12 @@ function SeatRow({
               type="button"
               onClick={() => onPick(i)}
               disabled={disabled || !can}
+              /*
+               * 「1번」만으로는 층이 셋이면 같은 이름 버튼이 여섯이 된다. 낭독기에는
+               * 전부 똑같이 들리고, 테스트도 무엇을 누르는지 말할 수 없다.
+               * 보이는 글자는 그대로 두고 이름만 층까지 붙여 유일하게 만든다.
+               */
+              aria-label={`${group} ${label} ${seat.name}`}
               aria-pressed={picked.includes(i)}
               className={`rounded-lg border py-1.5 text-xs font-bold disabled:opacity-30 ${
                 picked.includes(i)
@@ -133,7 +142,12 @@ export function PotAwardQuestionPanel({
       <p className="mt-3 break-keep text-sm font-bold">{question.prompt}</p>
 
       {question.pots.map((pot, p) => (
-        <div key={p} className="mt-2 rounded-xl border border-zinc-200 p-2.5 dark:border-zinc-800">
+        <div
+          key={p}
+          role="group"
+          aria-label={potName(p)}
+          className="mt-2 rounded-xl border border-zinc-200 p-2.5 dark:border-zinc-800"
+        >
           <p className="text-xs text-zinc-500">
             {/*
              * 팟 이름을 알약으로 **감싼다**. 예전에 「사이드팟 2 4,800」이 「24,800」
@@ -151,6 +165,7 @@ export function PotAwardQuestionPanel({
 
           <SeatRow
             label="하이"
+            group={potName(p)}
             seats={question.seats}
             eligible={pot.eligibleSeats}
             picked={picks[p].hi}
@@ -160,6 +175,7 @@ export function PotAwardQuestionPanel({
 
           <SeatRow
             label="로우"
+            group={potName(p)}
             seats={question.seats}
             eligible={pot.eligibleSeats}
             picked={picks[p].lo}
@@ -173,6 +189,7 @@ export function PotAwardQuestionPanel({
               edit(p, (cur) => ({ ...cur, loNone: !cur.loNone, lo: cur.loNone ? cur.lo : [] }))
             }
             disabled={!solving}
+            aria-label={`${potName(p)} 로우 없음`}
             aria-pressed={picks[p].loNone}
             className={`mt-1.5 w-full rounded-lg border py-1.5 text-xs font-bold disabled:opacity-40 ${
               picks[p].loNone

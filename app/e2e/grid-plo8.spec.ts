@@ -75,15 +75,31 @@ test('승자 판독이 좌석 버튼 두 줄에서 가로로 넘치지 않는다
   await page.screenshot({ path: `e2e/shots/plo8-winner-${test.info().project.name}.png` })
 })
 
-test('팟 분배 첫 문제가 열리고 좌석을 고를 수 있다', async ({ page }) => {
+test('팟 분배 첫 문제가 열리고 층마다 임자를 고를 수 있다', async ({ page }) => {
   await page.goto('/games/plo8/potaward')
 
   // 「팟 분배」로 잡지 않는다 — 제목과 눈썹(「PLO8 하이로우 · 팟 분배」)에 둘 다 있어
   // strict 모드가 두 개를 물고 실패한다. 진행 줄은 이 드릴에 하나뿐이다
   await expect(page.getByText(/1 \/ 10/)).toBeVisible()
 
-  // 좌석 이름이 그대로 버튼 이름이다. 테이블 쪽 좌석 라벨은 버튼이 아니라 겹치지 않는다
-  await page.getByRole('button', { name: '1번', exact: true }).click()
+  /*
+   * 한 장이 한 판이라 **층마다** 하이를 고르고 로우를 정해야 제출이 열린다.
+   * 층이 몇인지는 문제가 정하므로 세지 않고 있는 만큼 돈다.
+   *
+   * 자격 없는 좌석은 눌리지 않으므로 `:enabled` 로 고른다 — 층이 깊어질수록
+   * 자격자가 줄어드는 것이 이 드릴이 가르치는 것이라, 첫 번째 버튼이 늘
+   * 눌린다고 기대하면 안 된다.
+   */
+  const pots = page.getByRole('group')
+  const potCount = await pots.count()
+  expect(potCount).toBeGreaterThan(0)
+
+  for (let i = 0; i < potCount; i++) {
+    const pot = pots.nth(i)
+    await pot.locator('button:enabled[aria-label*="하이"]').first().click()
+    await pot.locator('button[aria-label$="로우 없음"]').click()
+  }
+
   await page.getByRole('button', { name: '제출' }).click()
 
   // 맞았는지 틀렸는지를 먼저 말해야 드릴이 성립한다 — 근거만 나오면 안 된다
