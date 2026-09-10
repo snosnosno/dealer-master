@@ -20,6 +20,8 @@ export {
   type HandRank, type HandCategory, type HandEvaluator,
 } from './evaluate'
 export { evaluateLowA5, compareLow, type LowRank } from './lowball'
+// 업카드는 1~4장이라 5장 평가기를 쓸 수 없다 — 스터드의 첫 액션 순서가 이 둘로 정해진다.
+export { compareUpcardsHi, compareUpcardsLo } from './upcards'
 export { omahaCombos, bestOmahaHi, bestOmahaLow } from './omaha'
 // isFullRaise 는 "이 레이즈가 베팅을 다시 여는 풀 레이즈인가"의 정본이다.
 // 러시 생성기가 "짧은 올인을 만들었는지"를 스스로 판단하지 않고 여기 묻는다.

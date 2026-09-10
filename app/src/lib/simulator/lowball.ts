@@ -11,8 +11,14 @@
  */
 import { type Card, type Rank } from './cards'
 
-/** 에이스를 1 로 읽는다. 하이 평가기의 `RANK_VALUE`(A=14)와 **다른 잣대**라 여기 따로 둔다. */
-const LOW_VALUE: Record<Rank, number> = {
+/**
+ * 에이스를 1 로 읽는다. 하이 평가기의 `RANK_VALUE`(A=14)와 **다른 잣대**라 여기 따로 둔다.
+ *
+ * **업카드 비교기와 라즈 생성기가 함께 쓴다** — `upcards.ts` 가 지금 쓰고, 라즈 생성기가
+ * 뒤이어 쓴다. 그래서 export 다: 같은 표를 저쪽에 다시 적으면 한쪽만 고쳐지는 날이
+ * 온다(판정 사본 금지).
+ */
+export const LOW_VALUE: Record<Rank, number> = {
   A: 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7,
   '8': 8, '9': 9, T: 10, J: 11, Q: 12, K: 13,
 }
