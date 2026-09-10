@@ -10,7 +10,7 @@
  * **게임을 데이터로 적고 드릴은 그 데이터에서 생성한다.**
  */
 
-export type GameId = 'nlh' | 'plo8'
+export type GameId = 'nlh' | 'plo8' | 'razz'
 
 /**
  * 이 스트릿의 첫 액션은 누구인가.
