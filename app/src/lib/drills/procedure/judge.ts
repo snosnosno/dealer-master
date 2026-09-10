@@ -19,12 +19,10 @@ export function judge(state: ProcedureState, action: ProcedureAction): Verdict {
   if (state.phase === 'openSeat') {
     if (action.type !== 'seat') return { ok: false, hint: openHint(state, step) }
     const street = state.spec.streets[step.streetIndex]
-    const expected = firstToActSeat(
-      street.firstToAct,
-      state.script.buttonSeat,
-      state.table.seats.length,
-      state.table.seats.map((s) => s.folded),
-    )
+    const expected = firstToActSeat(street.firstToAct, {
+      buttonSeat: state.script.buttonSeat,
+      seats: state.table.seats,
+    })
     return action.seat === expected ? { ok: true } : { ok: false, hint: openHint(state, step) }
   }
 

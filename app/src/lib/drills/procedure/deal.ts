@@ -72,6 +72,7 @@ export function dealHand(spec: GameSpec, seed: string): HandScript {
       isForced: index === 0,
       buttonSeat,
       firstToAct: street.firstToAct,
+      seats,
     })
   })
 
@@ -82,9 +83,12 @@ export function dealHand(spec: GameSpec, seed: string): HandScript {
  * 한 라운드의 액션을 만든다. `folded` 를 **제자리에서 갱신한다** — 이 함수는
  * `dealHand` 안에서만 쓰이는 지역 헬퍼이고, 밖으로 나가는 값은 새 배열이다.
  *
- * 첫 액션 좌석은 `firstToActSeat`(`./steps.ts`)에게만 묻는다. `isForced` 는
- * 순서를 정하는 데 쓰지 않는다 — 강제 베팅 사이징·`'call'` 액션·체크로 열리지
- * 않는다는 규칙에만 쓴다. 순서 규칙이 두 곳에 있으면 하나만 고쳤을 때 나머지가
+ * 첫 액션 좌석은 `firstToActSeat`(`./steps.ts`)에게만 묻는다. 스터드에서는 그것이
+ * 업카드를 읽으므로 `seats` 를 함께 넘긴다 — 이 스트릿의 카드는 `dealHand` 가 이미
+ * 얹어 둔 뒤에 이 함수를 부른다.
+ *
+ * `isForced` 는 순서를 정하는 데 쓰지 않는다 — 강제 베팅 사이징·`'call'` 액션·체크로
+ * 열리지 않는다는 규칙에만 쓴다. 순서 규칙이 두 곳에 있으면 하나만 고쳤을 때 나머지가
  * 조용히 틀어진다 (design §5-5).
  */
 function makeRound({
@@ -93,18 +97,23 @@ function makeRound({
   isForced,
   buttonSeat,
   firstToAct,
+  seats,
 }: {
   rng: Rng
   folded: boolean[]
   isForced: boolean
   buttonSeat: number
   firstToAct: FirstToAct
+  seats: readonly { hole: readonly DealtCard[] }[]
 }): BettingAction[] {
   const alive = () => folded.filter((f) => !f).length
 
   // 강제 베팅이 걸린 첫 라운드는 늘 콜할 금액이 있다. 나머지는 45% 가 체크로 열린다
   const checkRound = !isForced && rng.next() < CHECK_OPEN_RATE
-  const startSeat = firstToActSeat(firstToAct, buttonSeat, SEAT_COUNT, folded)
+  const startSeat = firstToActSeat(firstToAct, {
+    buttonSeat,
+    seats: seats.map((s, i) => ({ hole: s.hole, folded: folded[i] })),
+  })
   const order: number[] = []
   for (let i = 0; i < SEAT_COUNT; i++) {
     const seat = (startSeat + i) % SEAT_COUNT

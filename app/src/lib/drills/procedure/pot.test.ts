@@ -24,12 +24,10 @@ function playToEnd(seed: string): ProcedureState {
       const street = state.spec.streets[state.steps[state.at].streetIndex]
       state = reduce(state, {
         type: 'seat',
-        seat: firstToActSeat(
-          street.firstToAct,
-          state.script.buttonSeat,
-          SEAT_COUNT,
-          state.table.seats.map((s) => s.folded),
-        ),
+        seat: firstToActSeat(street.firstToAct, {
+          buttonSeat: state.script.buttonSeat,
+          seats: state.table.seats,
+        }),
       })
       continue
     }

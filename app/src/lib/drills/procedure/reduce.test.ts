@@ -11,12 +11,10 @@ function stepCorrectly(state: ProcedureState): ProcedureState {
   if (state.phase === 'anim') return reduce(state, { type: 'animEnd' })
   if (state.phase === 'openSeat') {
     const street = state.spec.streets[state.steps[state.at].streetIndex]
-    const seat = firstToActSeat(
-      street.firstToAct,
-      state.script.buttonSeat,
-      state.table.seats.length,
-      state.table.seats.map((s) => s.folded),
-    )
+    const seat = firstToActSeat(street.firstToAct, {
+      buttonSeat: state.script.buttonSeat,
+      seats: state.table.seats,
+    })
     return reduce(state, { type: 'seat', seat })
   }
   const act = state.steps[state.at].act
@@ -68,7 +66,10 @@ describe('reduce — 순서를 어겼을 때', () => {
     state = reduce(state, { type: 'animEnd' })
     expect(state.phase).toBe('openSeat')
 
-    const right = firstToActSeat('left-of-bb', state.script.buttonSeat, 6, new Array(6).fill(false))
+    const right = firstToActSeat('left-of-bb', {
+      buttonSeat: state.script.buttonSeat,
+      seats: state.table.seats,
+    })
     const wrong = (right + 1) % 6
     const next = reduce(state, { type: 'seat', seat: wrong })
     expect(next.stuck).toBe(1)
