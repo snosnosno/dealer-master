@@ -48,6 +48,10 @@ export function Seat({
 }) {
   return (
     <div
+      // e2e 가 「이 좌석에 배정된 상자」를 재는 유일한 손잡이다(`e2e/grid-razz.spec.ts`).
+      // 이 div 자체는 `w-full` 이라 자식이 넘쳐도 자기 rect 는 그대로 보고하므로,
+      // 넘침은 이 상자와 안의 카드 rect 를 **따로** 재서 비교해야 잡힌다.
+      data-seat={seatIndex}
       className={`flex w-full flex-col items-center gap-0.5 ${seat.folded ? 'opacity-40' : ''}`}
     >
       {/*
