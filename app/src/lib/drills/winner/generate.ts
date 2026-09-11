@@ -75,16 +75,40 @@ function formatLowCards(cards: Card[]): string {
 }
 
 /**
+ * 이긴 손이 A-5 로우에서 **무시되는** 모양인가. 무시되지 않으면 `null`.
+ *
+ * **런과 플러시를 갈라 말한다.** 둘을 한 문구로 뭉치면 플러시 판에서 「스트레이트를
+ * 세지 않는다」고 가르치게 되고, 훈련생은 플러시도 무시된다는 것을 못 배운다.
+ *
+ * 조사까지 붙여 돌려주는 것은 「스트레이트를」과 「스트레이트도 플러시도」의 조사가
+ * 다르기 때문이다 — 부르는 쪽에서 붙이면 다시 어긋난다.
+ */
+function ignoredShape(five: Card[]): string | null {
+  const run = isRun(five)
+  const flush = isFlush(five)
+  if (run && flush) return '스트레이트도 플러시도'
+  if (run) return '스트레이트를'
+  if (flush) return '플러시를'
+  return null
+}
+
+/**
  * 라즈 근거 문구. 이긴 손의 모양에 따라 **왜** 이겼는지 한 줄을 더한다 — 답만
  * 되풀이하지 않는다. `isRun`·`isFlush` 는 `matchesRazzTarget` 과 같은 판정을 쓴다
  * (판정 사본 금지).
+ *
+ * **종목 이름을 박지 않는다.** 스트레이트·플러시를 안 세는 것은 「라즈」라는 이름이
+ * 아니라 A-5 로우 잣대의 성질이고, 그 성질은 PLO8 의 로우 절반에도 그대로 있다.
+ * 여기까지 왔다면 잣대가 A-5 인 것이 보장된다 — `evaluatorFor` 가 다른 로우 방식을
+ * 던져서 막는다 (`lib/games/evaluator.ts`).
  */
 function razzLowWhy(deal: Deal, answerLo: number[]): string {
   const best = deal.los[answerLo[0]] as LowRank
   const base = `${names(deal.seats, answerLo)}이 ${formatLowCards(best.cards)} 로 가장 낮다.`
 
-  if (isRun(best.cards) || isFlush(best.cards)) {
-    return `${base} 라즈는 스트레이트를 세지 않으므로 이것이 최고 패다.`
+  const ignored = ignoredShape(best.cards)
+  if (ignored !== null) {
+    return `${base} A-5 로우는 ${ignored} 세지 않으므로 이것이 최고 패다.`
   }
 
   // 이긴 손이 이미 페어면 「상대 페어 때문에」는 거짓 설명이다 — 노페어로 이겼을 때만 말한다
@@ -93,11 +117,28 @@ function razzLowWhy(deal: Deal, answerLo: number[]): string {
       .flatMap((low, i) => (answerLo.includes(i) || low === null ? [] : [{ low, i }]))
       .find((x) => x.low.category > 0)
     if (paired !== undefined) {
-      return `${base} ${deal.seats[paired.i].name}는 페어가 있어 로우가 망가졌다.`
+      // 좌석 이름은 언제나 「번」으로 끝난다 (`NAMES`) — 받침이 있으므로 「은」이다.
+      // 「3번는」으로 되돌리지 마라
+      return `${base} ${deal.seats[paired.i].name}은 페어가 있어 로우가 망가졌다.`
     }
   }
 
   return base
+}
+
+/**
+ * 무엇을 고르라고 말하나. **`asks.hi` 와 `asks.lo` 를 둘 다 본다.**
+ *
+ * 화면은 선택 UI 를 `asks` 로 갈라 내놓는다 — `asks.hi` 가 거짓이면 하이 칸이 아예
+ * 없다 (`WinnerQuestionPanel.tsx`). 그래서 여기서 `asks.lo` 만 보면 라즈에서
+ * 「하이 승자와 로우 승자를 고르세요」라고 말해 놓고 고를 곳을 안 주게 된다.
+ */
+function promptFor(asks: WinnerAsks): string {
+  if (asks.hi && asks.lo) return '하이 승자와 로우 승자를 고르세요.'
+  if (asks.hi) return '하이 승자를 고르세요.'
+  if (asks.lo) return '로우 승자를 고르세요.'
+  // 둘 다 묻지 않는 문제는 `generateWinnerRun` 이 `!asks.lo` 로 이미 던진다
+  throw new Error('하이도 로우도 묻지 않는 문제는 있을 수 없다')
 }
 
 function build(deal: Deal, asks: WinnerAsks, buttonSeat: number): WinnerQuestion {
@@ -119,7 +160,7 @@ function build(deal: Deal, asks: WinnerAsks, buttonSeat: number): WinnerQuestion
     kind: 'winner',
     limitSec: WINNER_LIMIT_SEC,
     label: WINNER_KIND_LABEL.winner,
-    prompt: asks.lo ? '하이 승자와 로우 승자를 고르세요.' : '하이 승자를 고르세요.',
+    prompt: promptFor(asks),
     seats: deal.seats,
     board: deal.board,
     buttonSeat,
@@ -215,6 +256,8 @@ function razzTargets(rng: Rng): RazzTarget[] {
  * `straightish` — **이긴 손**의 다섯 장이 연속이거나 무늬가 같다. 라즈는 그 둘을
  * 무시하므로, 홀덤을 배운 사람이 「스트레이트라 세다」고 착각하기 딱 좋은 판이다.
  * `paired` — **이긴 손은 노페어인데 진 손에 페어가 있다.** 페어가 로우를 망치는 것을 본다.
+ * **이긴 손이 런/플러시 모양이면 `paired` 로 세지 않는다** — `razzLowWhy` 가 그쪽
+ * 근거를 먼저 말해 페어 교훈이 가려지기 때문이다 (휠 5-4-3-2-A 가 대표적).
  *
  * 임자가 여럿인 판(동점)은 목표로 삼지 않는다 — 가르치려는 것이 흐려진다.
  * 다만 목표가 `null` 인 문제에서는 동점이 자연히 나오고, **그것을 걸러내지 않는다**

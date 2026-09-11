@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { asksFor, WINNER_QUESTION_COUNT } from './types'
 import { generateWinnerRun } from './generate'
 import { GAMES } from '@/lib/games'
-import { bestOmahaHi, bestOmahaLow, cardToString, compareHands, compareLow } from '@/lib/simulator'
+import {
+  bestFiveLow, bestOmahaHi, bestOmahaLow, cardToString, compareHands, compareLow, LOW_VALUE,
+  type Card, type LowRank,
+} from '@/lib/simulator'
 
 const plo8 = GAMES.plo8
 const run = (seed: string) => generateWinnerRun(plo8, seed)
@@ -128,9 +131,74 @@ describe('라즈 승자 판독', () => {
     expect(paired.length).toBeGreaterThanOrEqual(2)
   })
 
+  it('묻지 않는 것을 고르라고 하지 않는다 — 하이 칸이 없으니 하이를 말하지 않는다', () => {
+    for (const q of run()) {
+      expect(q.prompt).toBe('로우 승자를 고르세요.')
+      expect(q.prompt).not.toMatch(/하이/)
+    }
+  })
+
+  it('이름 뒤 조사가 받침에 맞는다 — 「3번은」이지 「3번는」이 아니다', () => {
+    for (let s = 0; s < 40; s++) {
+      for (const q of generateWinnerRun(GAMES.razz, `razz-josa-${s}`)) {
+        expect(q.why).not.toMatch(/번는/)
+      }
+    }
+  })
+
+  /*
+   * **플러시 판에서 플러시라고 말하나.** 「스트레이트|플러시」로 뭉쳐서 보면
+   * 스트레이트만 맞아도 통과해 이 구멍이 그대로 남는다 — 그래서 이긴 손의 모양을
+   * 여기서 **따로 재고** 모양마다 문구를 못박는다.
+   *
+   * 모양 판정을 생성기에서 가져다 쓰지 않고 여기서 다시 세우는 것은 일부러다.
+   * 같은 함수를 불러 비교하면 그 함수가 틀려도 테스트가 같이 틀린다.
+   * 손 자체는 엔진(`bestFiveLow`)에게 물어 생성기와 같은 다섯 장을 본다.
+   *
+   * 한 시드에 늘 있는 판이 아니라 여러 시드를 훑는다 — 아래 `flushOnly` 단언이
+   * 이 테스트가 공허하지 않은 것을 지킨다.
+   */
+  it('플러시로 이긴 판은 플러시라고 가르친다 — 스트레이트라고 하지 않는다', () => {
+    const sameSuit = (five: Card[]) => five.every((c) => c.suit === five[0].suit)
+    const consecutive = (five: Card[]) => {
+      const vs = five.map((c) => LOW_VALUE[c.rank]).sort((a, b) => a - b)
+      return vs.every((v, i) => i === 0 || v === vs[i - 1] + 1)
+    }
+
+    let flushOnly = 0
+    let runOnly = 0
+    for (let s = 0; s < 40; s++) {
+      for (const q of generateWinnerRun(GAMES.razz, `razz-flush-${s}`)) {
+        const best = bestFiveLow(q.seats[q.answerLo[0]].hole, null)
+        expect(best).not.toBeNull()
+        const five = (best as LowRank).cards
+        const flush = sameSuit(five)
+        const straight = consecutive(five)
+
+        if (flush && straight) {
+          expect(q.why).toContain('스트레이트도 플러시도 세지 않으므로')
+        } else if (flush) {
+          flushOnly++
+          expect(q.why).toContain('플러시를 세지 않으므로')
+          expect(q.why).not.toMatch(/스트레이트/)
+        } else if (straight) {
+          runOnly++
+          expect(q.why).toContain('스트레이트를 세지 않으므로')
+          expect(q.why).not.toMatch(/플러시/)
+        } else {
+          expect(q.why).not.toMatch(/스트레이트|플러시/)
+        }
+      }
+    }
+    // 두 모양이 다 나온 것을 확인하고서야 위 단언들이 무언가를 지켰다고 말할 수 있다
+    expect(flushOnly).toBeGreaterThan(0)
+    expect(runOnly).toBeGreaterThan(0)
+  })
+
   it('PLO8 은 그대로다 — 하이와 로우를 둘 다 묻는다', () => {
     for (const q of generateWinnerRun(GAMES.plo8, 'razz-winner')) {
       expect(q.asks).toEqual({ hi: true, lo: true })
+      expect(q.prompt).toBe('하이 승자와 로우 승자를 고르세요.')
     }
   })
 })
