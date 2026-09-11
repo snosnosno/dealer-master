@@ -24,6 +24,14 @@ test('3번가 뒤 좌석마다 열린 카드가 하나 선다', async ({ page })
   await expect(page.locator('[data-face="up"]')).toHaveCount(6)
 })
 
+test('라즈 화면엔 SB/BB 배지가 없다', async ({ page }) => {
+  await page.goto('/games/razz/procedure')
+  // 라즈는 앤티+브링인이다 — 버튼 위치만 보고 SB/BB 를 찍던 결함이 있었다
+  // (`PokerTable.positionTags`). 강제 베팅 종류를 봐야 한다
+  await expect(page.getByText('SB', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('BB', { exact: true })).toHaveCount(0)
+})
+
 test('라즈 좌석 일곱 장이 좌석 상자를 넘치지 않는다', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 780 })
   await page.goto('/games/razz/procedure')

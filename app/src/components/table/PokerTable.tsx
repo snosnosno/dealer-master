@@ -52,19 +52,36 @@ const px = (v: number, total: number) => `${((v / total) * 100).toFixed(4)}%`
 const x = (v: number) => px(v, LAYOUT_W)
 const y = (v: number) => px(v, LAYOUT_H)
 
-/** 버튼 기준 포지션 태그. 3인 테이블은 역할이 겹치는데 그건 3인의 사실이다. */
-function positionTags(seatCount: number, buttonSeat: number): string[] {
+/**
+ * 버튼 기준 포지션 태그. 3인 테이블은 역할이 겹치는데 그건 3인의 사실이다.
+ *
+ * **블라인드가 없는 종목엔 SB/BB 가 없다.** 이 함수는 버튼 위치만 보고 늘 SB/BB 를
+ * 찍었는데, PLO8 하나만 있던 동안은 그것이 늘 참이라 드러나지 않았다. 라즈(앤티+브링인)가
+ * 붙으면서 거짓이 됐다 — 화면이 대본에 없는 규칙(블라인드)을 스스로 그려 훈련생에게
+ * 가르치는 결함이었다(스크린샷으로 잡힘, `document.scrollWidth` 류 지표로는 안 잡힌다).
+ */
+function positionTags(seatCount: number, buttonSeat: number, forced: Forced): string[] {
   const tags = Array.from({ length: seatCount }, () => '')
-  tags[(buttonSeat + 1) % seatCount] = 'SB'
-  tags[(buttonSeat + 2) % seatCount] = 'BB'
+  if (forced === 'blinds') {
+    tags[(buttonSeat + 1) % seatCount] = 'SB'
+    tags[(buttonSeat + 2) % seatCount] = 'BB'
+  }
   return tags
 }
+
+/**
+ * `GameSpec.forced` · `HandScript.forced.kind` 와 같은 코드값이다. **라벨을 읽지
+ * 않는다** — `GameSpec` 자체를 끌어오면 `TableView` 처럼 좁은 계약을 깨므로 여기서는
+ * 값만 그대로 되풀이한다.
+ */
+type Forced = 'blinds' | 'ante+bringin'
 
 export function PokerTable({
   state,
   burnCount,
   seatActs,
   heroSeat = -1,
+  forced = 'blinds',
 }: {
   /**
    * **`HandState` 가 아니라 `TableView` 다.** 이 컴포넌트가 실제로 읽는 것은
@@ -83,9 +100,16 @@ export function PokerTable({
   seatActs?: readonly string[]
   /** 문제를 받는 좌석. 없으면 -1 */
   heroSeat?: number
+  /**
+   * 이 종목이 무엇으로 판을 여는가. **기본값이 `'blinds'` 인 이유**: 이 prop 이
+   * 없던 기존 호출부(시뮬레이터·팟리밋/팟 분배 문제 패널) 는 전부 노리밋
+   * 홀덤·PLO8 이고 둘 다 블라인드다 — 기본값을 바꾸면 그 화면들이 조용히 SB/BB 를
+   * 잃는다.
+   */
+  forced?: Forced
 }) {
   const n = state.seats.length
-  const tags = positionTags(n, state.buttonSeat)
+  const tags = positionTags(n, state.buttonSeat, forced)
 
   return (
     <div

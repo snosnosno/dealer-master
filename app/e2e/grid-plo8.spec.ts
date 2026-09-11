@@ -27,6 +27,14 @@ test('팔레트가 늘 일곱이고 순서를 틀리면 힌트가 뜬다', async
   await expect(page.getByText('막힘')).toBeVisible()
 })
 
+test('PLO8 화면엔 SB/BB 배지가 있다', async ({ page }) => {
+  await page.goto('/games/plo8/procedure')
+  // 라즈(앤티+브링인) 를 열면서 `PokerTable` 에 `forced` prop 이 생겼다 — PLO8(블라인드)
+  // 은 기본값으로 그대로 SB/BB 를 받는지 못박는다. 여기서 사라지면 그게 더 큰 문제다
+  await expect(page.getByText('SB', { exact: true })).toBeVisible()
+  await expect(page.getByText('BB', { exact: true })).toBeVisible()
+})
+
 test('홀카드 4장이 좌석 상자를 넘치지 않는다', async ({ page }) => {
   await page.goto('/games/plo8/procedure')
   await page.getByRole('button', { name: '블라인드 포스팅' }).click()

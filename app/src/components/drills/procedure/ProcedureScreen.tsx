@@ -113,7 +113,8 @@ function ProcedureRun({
         * 펠트가 무색으로 뜬다.
         */}
       <div className="sim-root">
-        <PokerTable state={state.table} burnCount={state.burnCount} />
+        {/* 라즈(앤티+브링인)는 SB/BB 가 없다 — 대본이 아는 사실을 테이블에 그대로 넘긴다 */}
+        <PokerTable state={state.table} burnCount={state.burnCount} forced={spec.forced} />
       </div>
 
       {state.phase === 'done' ? (
