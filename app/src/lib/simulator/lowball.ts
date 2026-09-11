@@ -63,3 +63,40 @@ export function compareLow(a: LowRank, b: LowRank): number {
   }
   return 0
 }
+
+/**
+ * 여러 장 중 **최고 로우 다섯 장**을 고른다.
+ *
+ * 비유: 손에 든 일곱 장을 늘어놓고 "이 중 가장 낮은 다섯은 어느 것인가"를 고르는 일이다.
+ * 잣대(`evaluateLowA5`)는 다섯 장을 재기만 하고, 어느 다섯을 고를지는 이 함수가 정한다 —
+ * 파일 상단 주석이 세운 그 분업이다.
+ *
+ * `qualifier` 가 숫자면 다섯 장이 **전부 그 값 이하**여야 성립한다. `null` 이면
+ * 자격이 없다 — **라즈가 그것이다.** 어떤 다섯 장이든 로우가 되므로 절대 `null` 을
+ * 돌려주지 않는다.
+ */
+export function bestFiveLow(cards: Card[], qualifier: 8 | null): LowRank | null {
+  if (cards.length < 5) throw new Error(`로우를 고르려면 5장 이상이 필요함: ${cards.length}장`)
+
+  let best: LowRank | null = null
+
+  // C(n,5) 를 전부 돈다. n=7 이면 21가지라 값이 싸다
+  for (let a = 0; a < cards.length - 4; a++) {
+    for (let b = a + 1; b < cards.length - 3; b++) {
+      for (let c = b + 1; c < cards.length - 2; c++) {
+        for (let d = c + 1; d < cards.length - 1; d++) {
+          for (let e = d + 1; e < cards.length; e++) {
+            const five = [cards[a], cards[b], cards[c], cards[d], cards[e]]
+            if (qualifier !== null && five.some((card) => LOW_VALUE[card.rank] > qualifier)) {
+              continue
+            }
+            const rank = evaluateLowA5(five)
+            if (best === null || compareLow(rank, best) < 0) best = rank
+          }
+        }
+      }
+    }
+  }
+
+  return best
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseCard } from './cards'
-import { compareLow, evaluateLowA5 } from './lowball'
+import { bestFiveLow, compareLow, evaluateLowA5 } from './lowball'
 
 const hand = (s: string) => s.split(' ').map(parseCard)
 
@@ -57,5 +57,45 @@ describe('compareLow', () => {
     const a = evaluateLowA5(hand('8s 6h 4d 3c 2c'))
     const b = evaluateLowA5(hand('8h 6s 4c 3d 2d'))
     expect(compareLow(a, b)).toBe(0)
+  })
+})
+
+describe('bestFiveLow', () => {
+  it('일곱 장에서 최고 로우 다섯을 고른다 — 휠이 있으면 휠이다', () => {
+    const low = bestFiveLow(hand('5h 4d 3s 2c Ah Kd Qc'), null)
+    expect(low).not.toBeNull()
+    expect(low!.category).toBe(0)
+    // 5-4-3-2-A. key 는 [category, ...값] 이고 A=1 이다
+    expect(low!.key).toEqual([0, 5, 4, 3, 2, 1])
+  })
+
+  it('페어를 피해 다섯을 고른다', () => {
+    // 8 이 둘 있지만 8 하나만 쓰면 노페어가 된다
+    const low = bestFiveLow(hand('8h 8d 7s 5c 3h 2d Kc'), null)
+    expect(low!.category).toBe(0)
+  })
+
+  it('피할 수 없으면 페어를 안고 간다', () => {
+    const low = bestFiveLow(hand('Kh Kd Ks Qc Qh Jd Jc'), null)
+    expect(low!.category).toBeGreaterThan(0)
+  })
+
+  it('스트레이트·플러시를 세지 않는다 — 같은 무늬 휠도 최고 로우다', () => {
+    const flush = bestFiveLow(hand('5s 4s 3s 2s As Kd Qc'), null)
+    const mixed = bestFiveLow(hand('5h 4d 3s 2c Ah Kd Qc'), null)
+    expect(compareLow(flush!, mixed!)).toBe(0)
+  })
+
+  it('자격이 있으면 넘는 손은 null 이다', () => {
+    // 8 이하 다섯 장을 만들 수 없다
+    expect(bestFiveLow(hand('9h Th Jd Qc Kh Ah 2d'), 8)).toBeNull()
+  })
+
+  it('자격이 null 이면 아무 다섯 장이나 로우가 된다 — 라즈다', () => {
+    expect(bestFiveLow(hand('9h Th Jd Qc Kh Ah 2d'), null)).not.toBeNull()
+  })
+
+  it('다섯 장보다 적으면 던진다', () => {
+    expect(() => bestFiveLow(hand('Ah 2d 3s'), null)).toThrow()
   })
 })
