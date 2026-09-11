@@ -19,7 +19,7 @@ export {
   evaluateHand, compareHands, CATEGORY_LABEL, ANY_FIVE_EVALUATOR,
   type HandRank, type HandCategory, type HandEvaluator,
 } from './evaluate'
-export { evaluateLowA5, compareLow, bestFiveLow, type LowRank } from './lowball'
+export { evaluateLowA5, compareLow, bestFiveLow, LOW_VALUE, type LowRank } from './lowball'
 // 업카드는 1~4장이라 5장 평가기를 쓸 수 없다 — 스터드의 첫 액션 순서가 이 둘로 정해진다.
 export { compareUpcardsHi, compareUpcardsLo } from './upcards'
 export { omahaCombos, bestOmahaHi, bestOmahaLow } from './omaha'

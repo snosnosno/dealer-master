@@ -83,3 +83,54 @@ describe('generateWinnerRun', () => {
     expect(() => generateWinnerRun(GAMES.nlh, 'x')).toThrow(/로우가 없는 종목/)
   })
 })
+
+describe('라즈 승자 판독', () => {
+  const run = () => generateWinnerRun(GAMES.razz, 'razz-winner')
+
+  it('열 문제를 낸다', () => {
+    expect(run()).toHaveLength(10)
+  })
+
+  it('하이를 묻지 않는다', () => {
+    for (const q of run()) {
+      expect(q.asks).toEqual({ hi: false, lo: true })
+      expect(q.answerHi).toEqual([])
+    }
+  })
+
+  it('보드가 없고 좌석마다 일곱 장이다', () => {
+    for (const q of run()) {
+      expect(q.board).toEqual([])
+      for (const seat of q.seats) expect(seat.hole).toHaveLength(7)
+    }
+  })
+
+  it('로우가 늘 성립한다 — 자격이 없으니 「로우 없음」이 답인 문제는 없다', () => {
+    for (const q of run()) expect(q.answerLo.length).toBeGreaterThan(0)
+  })
+
+  it('같은 시드는 같은 문제를 낸다', () => {
+    expect(run()).toEqual(run())
+  })
+
+  it('한 판에 같은 카드가 두 번 나오지 않는다', () => {
+    for (const q of run()) {
+      const all = q.seats.flatMap((s) => s.hole.map((c) => `${c.rank}${c.suit}`))
+      expect(new Set(all).size).toBe(all.length)
+    }
+  })
+
+  it('가르치는 손이 배분된다 — 두 유형이 각각 둘 이상', () => {
+    const questions = run()
+    const straightish = questions.filter((q) => /스트레이트|플러시/.test(q.why))
+    const paired = questions.filter((q) => /페어/.test(q.why))
+    expect(straightish.length).toBeGreaterThanOrEqual(2)
+    expect(paired.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('PLO8 은 그대로다 — 하이와 로우를 둘 다 묻는다', () => {
+    for (const q of generateWinnerRun(GAMES.plo8, 'razz-winner')) {
+      expect(q.asks).toEqual({ hi: true, lo: true })
+    }
+  })
+})

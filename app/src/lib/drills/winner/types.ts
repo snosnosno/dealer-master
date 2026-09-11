@@ -35,6 +35,14 @@ export const LO_ABSENT_MIN = 2
 /** 이 드릴의 출제 좌석 수. `GameSpec` 에 없다 — 격자가 아니라 이 드릴의 설정이다 */
 export const WINNER_SEAT_COUNT = 4
 
+/** 라즈 한 판 10문제 중 「스트레이트·플러시가 무시된다」를 가르치는 문제의 하한 */
+export const RAZZ_STRAIGHTISH_MIN = 2
+/** 라즈 한 판 10문제 중 「페어가 로우를 망친다」를 가르치는 문제의 하한 */
+export const RAZZ_PAIRED_MIN = 2
+
+/** 라즈 문제 하나가 노리는 것. `null` 이면 아무 판이나 좋다 */
+export type RazzTarget = 'straightish' | 'paired' | null
+
 export type WinnerSeat = { name: string; hole: Card[] }
 
 /** 이 종목이 무엇을 묻는가. **`spec.eval` 이 정한다** — 화면이 정하지 않는다 */
