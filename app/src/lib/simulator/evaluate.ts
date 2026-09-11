@@ -144,7 +144,12 @@ export function compareHands(a: HandRank, b: HandRank): number {
  * 「게임 데이터의 정본은 lib/games 하나」(ADR-003)가 무너진다.
  */
 export type HandEvaluator = {
-  rankHi(hole: Card[], board: Card[]): HandRank
+  /**
+   * `null` 이면 이 종목에 **하이가 없다** — 라즈가 그것이다. 로우와 대칭이다:
+   * 종목이 무엇을 묻지 *않는가*도 종목의 사실이고, 포트가 그것을 표현하지 못하면
+   * 로우 전용 종목은 「하이가 늘 있다」는 거짓말 위에서만 돌아간다.
+   */
+  rankHi: null | ((hole: Card[], board: Card[]) => HandRank)
   /** `null` 이면 이 종목에 로우가 없다. 있어도 성립하지 않으면 호출이 `null` 을 낸다 */
   rankLo: null | ((hole: Card[], board: Card[]) => LowRank | null)
 }

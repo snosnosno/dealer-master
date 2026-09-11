@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { ANY_FIVE_EVALUATOR } from './evaluate'
+import { ANY_FIVE_EVALUATOR, type HandEvaluator } from './evaluate'
 import { buildPots, awardPots } from './pots'
 import { parseCard } from './cards'
+import { bestFiveLow } from './lowball'
 
 const h = (...s: string[]) => s.map(parseCard)
 
@@ -184,5 +185,36 @@ describe('awardPots — 동점 분배와 홀칩', () => {
     // 이대로 두면 seatCount 가 2 라 홀칩 순서가 조용히 틀어진다.
     const pots = [{ amount: 1000, eligibleSeats: [0, 3] }]
     expect(() => awardPots(pots, tie, board, 0, ANY_FIVE_EVALUATOR)).toThrow(/좌석 수 불일치/)
+  })
+})
+
+describe('하이가 없는 종목의 팟 분배', () => {
+  const LOW_ONLY: HandEvaluator = {
+    rankHi: null,
+    rankLo: (hole) => bestFiveLow(hole, null),
+  }
+
+  it('로우가 팟을 통째로 가져간다 — 절반으로 가르지 않는다', () => {
+    const pots = [{ amount: 10_000, eligibleSeats: [0, 1] }]
+    const hole = [
+      '5h 4d 3s 2c Ah Kd Qc'.split(' ').map(parseCard),  // 휠
+      'Kh Kd Ks Qc Qh Jd Jc'.split(' ').map(parseCard),  // 나쁜 로우
+    ]
+    const awards = awardPots(pots, hole, [], 0, LOW_ONLY)
+    expect(awards).toHaveLength(1)
+    expect(awards[0].seat).toBe(0)
+    expect(awards[0].amount).toBe(10_000)
+    expect(awards[0].half).toBe('lo')
+  })
+
+  it('로우가 동점이면 나눈다', () => {
+    const pots = [{ amount: 10_000, eligibleSeats: [0, 1] }]
+    const hole = [
+      '5h 4d 3s 2c Ah Kd Qc'.split(' ').map(parseCard),
+      '5s 4c 3h 2d Ac Kh Qd'.split(' ').map(parseCard),
+    ]
+    const awards = awardPots(pots, hole, [], 0, LOW_ONLY)
+    expect(awards).toHaveLength(2)
+    expect(awards.map((a) => a.amount).reduce((x, y) => x + y)).toBe(10_000)
   })
 })

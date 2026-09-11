@@ -8,16 +8,31 @@
  * 정답으로 배운다 — 승자 판독 설계 §6 이 세운 규율을 그대로 잇는다.
  */
 import {
-  ANY_FIVE_EVALUATOR, bestOmahaHi, bestOmahaLow,
+  ANY_FIVE_EVALUATOR, bestFiveLow, bestOmahaHi, bestOmahaLow,
   type HandEvaluator,
 } from '@/lib/simulator'
 import type { GameSpec } from './types'
 
 export function evaluatorFor(spec: GameSpec): HandEvaluator {
+  if (spec.family === 'stud') {
+    const { hi, lo, mustUse } = spec.eval
+    if (mustUse !== null) throw new Error('강제 조합이 있는 스터드는 없다 — 자료를 확인하라')
+    if (hi !== null) {
+      throw new Error('스터드 하이 평가기는 아직 없다 — 7카드 스터드가 붙을 때 만든다')
+    }
+    if (lo === null) throw new Error('하이도 로우도 없는 종목은 있을 수 없다')
+    if (lo.kind !== 'a5') throw new Error(`아직 없는 로우 방식: ${lo.kind}`)
+
+    const qualifier = lo.qualifier
+    /*
+     * 스터드는 공유 보드가 없다. `board` 인자는 빈 배열로 들어오고 읽지 않는다 —
+     * 포트의 모양을 종목마다 바꾸지 않기 위해 인자는 그대로 받는다.
+     */
+    return { rankHi: null, rankLo: (hole) => bestFiveLow(hole, qualifier) }
+  }
+
   if (spec.family !== 'flop') {
-    throw new Error(
-      `공유 보드가 없는 종목의 평가기는 아직 없다: ${spec.family} — 스터드·라즈가 붙을 때 만든다`,
-    )
+    throw new Error(`아직 없는 패밀리의 평가기: ${spec.family} — 드로우가 붙을 때 만든다`)
   }
 
   const { mustUse, lo } = spec.eval

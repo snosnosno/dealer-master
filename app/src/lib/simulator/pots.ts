@@ -126,13 +126,26 @@ export function awardPots(
      * 반으로 가르지도 않는다 — 나눌 상대가 없다.
      */
     if (pot.eligibleSeats.length === 1) {
-      awards.push({ potIndex, seat: pot.eligibleSeats[0], amount: pot.amount, half: 'hi' })
+      // 하이가 없는 종목이면 이 팟도 로우 쪽이다 — 라벨이 화면 문구가 된다
+      const half = evaluator.rankHi === null ? 'lo' : 'hi'
+      awards.push({ potIndex, seat: pot.eligibleSeats[0], amount: pot.amount, half })
       return
     }
 
     // **팟마다 다시 구한다** — 팟마다 자격자가 다르므로 임자도 다르다
     const hiSet = hiSeats(pot.eligibleSeats, hole, board, evaluator)
     const loSet = loSeats(pot.eligibleSeats, hole, board, evaluator)
+
+    /*
+     * 하이가 없는 종목(라즈)은 **가르지 않는다.** 로우가 팟을 통째로 가져간다 —
+     * 나눌 층이 하나뿐이라 홀칩 1차(`splitHalf`)가 돌 자리가 없다.
+     * 이 갈래가 없으면 `hiSet` 이 빈 배열인 채로 절반이 하이 쪽에 얹혀 사라진다.
+     */
+    if (hiSet.length === 0) {
+      if (loSet.length === 0) throw new Error('하이도 로우도 임자가 없다 — 평가기가 잘못됐다')
+      pushShare(awards, potIndex, 'lo', pot.amount, loSet, buttonSeat, seatCount)
+      return
+    }
 
     // 로우 성립자가 없으면 하이가 전부 가져간다 (가이드 p5)
     if (loSet.length === 0) {
@@ -148,11 +161,13 @@ export function awardPots(
   return awards
 }
 
-/** 이 팟 자격자 중 하이 최고 동률 좌석들. **동점이면 여럿이다** — 걸러내지 않는다 */
+/** 이 팟 자격자 중 하이 최고 동률 좌석들. **하이가 없는 종목이면 빈 배열이다** */
 function hiSeats(
   eligible: number[], hole: Card[][], board: Card[], ev: HandEvaluator,
 ): number[] {
-  const ranked = eligible.map((seat) => ({ seat, rank: ev.rankHi(hole[seat], board) }))
+  const rankHi = ev.rankHi
+  if (rankHi === null) return []
+  const ranked = eligible.map((seat) => ({ seat, rank: rankHi(hole[seat], board) }))
   let best = ranked[0].rank
   for (const r of ranked) if (compareHands(r.rank, best) > 0) best = r.rank
   return ranked.filter((r) => compareHands(r.rank, best) === 0).map((r) => r.seat)

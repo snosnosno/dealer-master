@@ -24,6 +24,11 @@ const MAX_TRIES = 400
 type Deal = { seats: WinnerSeat[]; board: Card[]; his: HandRank[]; los: (LowRank | null)[] }
 
 function dealOnce(spec: GameSpec, rng: Rng, asks: WinnerAsks, ev: HandEvaluator): Deal {
+  // generateWinnerRun 이 asks.hi 를 미리 가드했으니(로우 전용 종목은 아직 없다) 여기 오면
+  // 늘 함수여야 한다. 타입은 그 연결을 모르므로 다시 확인하고, 어긋나면 같은 사유로 던진다.
+  const rankHi = ev.rankHi
+  if (rankHi === null) throw new Error('로우 전용 종목은 아직 없다 — 라즈가 붙을 때 만든다')
+
   const deck = shuffle(makeDeck(), rng)
   const board = deck.slice(0, 5)
   const n = spec.holeCardCount
@@ -34,7 +39,7 @@ function dealOnce(spec: GameSpec, rng: Rng, asks: WinnerAsks, ev: HandEvaluator)
   return {
     seats,
     board,
-    his: seats.map((s) => ev.rankHi(s.hole, board)),
+    his: seats.map((s) => rankHi(s.hole, board)),
     los: seats.map((s) => (asks.lo && ev.rankLo !== null ? ev.rankLo(s.hole, board) : null)),
   }
 }

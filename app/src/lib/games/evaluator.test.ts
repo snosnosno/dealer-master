@@ -13,7 +13,9 @@ describe('evaluatorFor — PLO8', () => {
     // 홀에 A K Q J 가 있어도 보드 3장을 반드시 써야 하므로 스트레이트가 되지 않는다
     const hole = hand('As Ks Qs Js')
     const board = hand('2h 7d 9c 4s 5h')
-    const rank = ev.rankHi(hole, board)
+    expect(ev.rankHi).not.toBeNull()
+    const rankHi = ev.rankHi as NonNullable<typeof ev.rankHi>
+    const rank = rankHi(hole, board)
     // 하이카드 A (스트레이트도 플러시도 아니다). category 0 = 하이카드
     expect(rank.category).toBe(0)
   })
@@ -36,13 +38,34 @@ describe('evaluatorFor — 노리밋 홀덤', () => {
   const ev = evaluatorFor(GAMES.nlh)
 
   it('강제 조합이 없으면 일곱 장에서 가장 좋은 다섯 장을 고른다', () => {
-    const rank = ev.rankHi(hand('As Ks'), hand('Qs Js Ts 2h 3d'))
+    expect(ev.rankHi).not.toBeNull()
+    const rankHi = ev.rankHi as NonNullable<typeof ev.rankHi>
+    const rank = rankHi(hand('As Ks'), hand('Qs Js Ts 2h 3d'))
     // 로열 = 스트레이트 플러시. category 8 이 최상위다
     expect(rank.category).toBe(8)
   })
 
   it('로우가 없는 종목은 rankLo 가 null 이다', () => {
     expect(ev.rankLo).toBeNull()
+  })
+})
+
+describe('라즈 평가기', () => {
+  it('하이가 없다', () => {
+    expect(evaluatorFor(GAMES.razz).rankHi).toBeNull()
+  })
+
+  it('로우는 자격 없이 늘 성립한다', () => {
+    const ev = evaluatorFor(GAMES.razz)
+    const hole = 'Kh Kd Ks Qc Qh Jd Jc'.split(' ').map(parseCard)
+    expect(ev.rankLo).not.toBeNull()
+    expect(ev.rankLo!(hole, [])).not.toBeNull()
+  })
+
+  it('보드를 안 쓴다 — 좌석 카드만으로 판정한다', () => {
+    const ev = evaluatorFor(GAMES.razz)
+    const hole = '5h 4d 3s 2c Ah Kd Qc'.split(' ').map(parseCard)
+    expect(ev.rankLo!(hole, [])!.key).toEqual([0, 5, 4, 3, 2, 1])
   })
 })
 
