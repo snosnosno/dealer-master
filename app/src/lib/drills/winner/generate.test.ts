@@ -195,10 +195,28 @@ describe('라즈 승자 판독', () => {
     expect(runOnly).toBeGreaterThan(0)
   })
 
+  it('「로우 없음」이 왜 답이 아닌지 문제마다 말한다', () => {
+    for (const q of run()) {
+      // 자격 조건이 없다는 것이 이 종목을 PLO8 과 가르는 사실이다 — 그것을 말해야 한다
+      expect(q.loNoneWhy).toContain('자격 조건이 없다')
+    }
+  })
+
   it('PLO8 은 그대로다 — 하이와 로우를 둘 다 묻는다', () => {
     for (const q of generateWinnerRun(GAMES.plo8, 'razz-winner')) {
       expect(q.asks).toEqual({ hi: true, lo: true })
       expect(q.prompt).toBe('하이 승자와 로우 승자를 고르세요.')
     }
+  })
+
+  it('PLO8 은 로우가 선 판에서만 「로우 없음」을 설명한다 — 안 선 판은 그게 정답이다', () => {
+    const qs = generateWinnerRun(GAMES.plo8, 'razz-winner')
+    const stood = qs.filter((q) => q.answerLo.length > 0)
+    const absent = qs.filter((q) => q.answerLo.length === 0)
+    // 배분 하한(LO_PRESENT_MIN·LO_ABSENT_MIN)이 두 쪽을 다 보장한다
+    expect(stood.length).toBeGreaterThan(0)
+    expect(absent.length).toBeGreaterThan(0)
+    for (const q of stood) expect(q.loNoneWhy).toBe('8 이하 서로 다른 다섯 장이 나와 로우가 섰다.')
+    for (const q of absent) expect(q.loNoneWhy).toBe('')
   })
 })

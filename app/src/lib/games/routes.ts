@@ -22,6 +22,7 @@ const ROUTES: Record<GameId, Partial<Record<DrillId, string>>> = {
   },
   razz: {
     procedure: '/games/razz/procedure',
+    winner: '/games/razz/winner',
   },
 }
 

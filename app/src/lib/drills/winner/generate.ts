@@ -11,7 +11,7 @@ import {
   compareHands, compareLow, createRng, LOW_VALUE, makeDeck, shuffle,
   type Card, type HandEvaluator, type HandRank, type LowRank, type Rng,
 } from '@/lib/simulator'
-import { evaluatorFor, type GameSpec } from '@/lib/games'
+import { boardSize, evaluatorFor, type GameSpec } from '@/lib/games'
 import {
   asksFor, LO_ABSENT_MIN, LO_PRESENT_MIN, RAZZ_PAIRED_MIN, RAZZ_STRAIGHTISH_MIN,
   WINNER_KIND_LABEL, WINNER_LIMIT_SEC, WINNER_QUESTION_COUNT, WINNER_SEAT_COUNT,
@@ -23,11 +23,6 @@ const NAMES = ['1번', '2번', '3번', '4번']
 const MAX_TRIES = 400
 
 type Deal = { seats: WinnerSeat[]; board: Card[]; his: (HandRank | null)[]; los: (LowRank | null)[] }
-
-/** 이 종목의 공유 보드 장수. 스펙이 스트릿마다 보드로 내는 장수의 합이다 */
-function boardSize(spec: GameSpec): number {
-  return spec.streets.reduce((n, s) => n + s.deal.board, 0)
-}
 
 function dealOnce(spec: GameSpec, rng: Rng, asks: WinnerAsks, ev: HandEvaluator): Deal {
   const deck = shuffle(makeDeck(), rng)
@@ -141,7 +136,24 @@ function promptFor(asks: WinnerAsks): string {
   throw new Error('하이도 로우도 묻지 않는 문제는 있을 수 없다')
 }
 
-function build(deal: Deal, asks: WinnerAsks, buttonSeat: number): WinnerQuestion {
+/**
+ * 「로우 없음」이 이 판의 답이 아닌 이유. 그 버튼을 고른 사람에게만 보여줄 한 줄이다.
+ *
+ * **자격 조건이 정한다.** 라즈는 `qualifier` 가 `null` 이라 아무 다섯 장이나 로우가
+ * 되고, 그래서 「로우 없음」이 답이 되는 판이 한 판도 없다 — 그 사실이 이 종목을
+ * PLO8 과 가르는 것이라 화면이 그냥 「틀렸다」고만 하고 넘어가면 배울 자리가 사라진다.
+ *
+ * 로우가 성립하지 않는 판에서는 그 버튼이 **정답**이다 — 설명할 것이 없다.
+ */
+function loNoneWhyFor(spec: GameSpec, answerLo: number[]): string {
+  if (answerLo.length === 0) return ''
+  const qualifier = spec.eval.lo === null ? null : spec.eval.lo.qualifier
+  return qualifier === null
+    ? '이 종목은 로우 자격 조건이 없다 — 누구에게나 로우가 서므로 「로우 없음」이 답인 판은 없다.'
+    : `${qualifier} 이하 서로 다른 다섯 장이 나와 로우가 섰다.`
+}
+
+function build(spec: GameSpec, deal: Deal, asks: WinnerAsks, buttonSeat: number): WinnerQuestion {
   const answerHi = asks.hi ? hiWinners(deal) : []
   const answerLo = asks.lo ? loWinners(deal) : []
   const hiWhy = answerHi.length === 0
@@ -168,6 +180,7 @@ function build(deal: Deal, asks: WinnerAsks, buttonSeat: number): WinnerQuestion
     answerHi,
     answerLo,
     why: [hiWhy, loWhy].filter((s) => s !== '').join(' · '),
+    loNoneWhy: loNoneWhyFor(spec, answerLo),
   }
 }
 
@@ -214,7 +227,7 @@ export function generateWinnerRun(spec: GameSpec, seed: string): WinnerQuestion[
     for (let tries = 0; tries < MAX_TRIES; tries++) {
       const deal = dealOnce(spec, rng, asks, ev)
       if (want === null || loWinners(deal).length > 0 === want) {
-        return build(deal, asks, rng.int(WINNER_SEAT_COUNT))
+        return build(spec, deal, asks, rng.int(WINNER_SEAT_COUNT))
       }
     }
     throw new Error(`로우 ${want ? '성립' : '불성립'} 판을 ${MAX_TRIES}번 안에 만들지 못함`)
@@ -227,7 +240,7 @@ function razzRun(spec: GameSpec, rng: Rng, asks: WinnerAsks, ev: HandEvaluator):
     for (let tries = 0; tries < MAX_TRIES; tries++) {
       const deal = dealOnce(spec, rng, asks, ev)
       if (want === null || matchesRazzTarget(deal, want)) {
-        return build(deal, asks, rng.int(WINNER_SEAT_COUNT))
+        return build(spec, deal, asks, rng.int(WINNER_SEAT_COUNT))
       }
     }
     throw new Error(`라즈 ${want ?? '아무'} 판을 ${MAX_TRIES}번 안에 만들지 못함`)

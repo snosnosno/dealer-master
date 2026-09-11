@@ -128,3 +128,83 @@ test('라즈 좌석 일곱 장이 좌석 상자를 넘치지 않는다', async (
 
   await page.screenshot({ path: `e2e/shots/razz-procedure-${test.info().project.name}.png` })
 })
+
+test('라즈 승자 판독은 하이 줄 없이 로우만 묻는다', async ({ page }) => {
+  await page.goto('/games/razz/winner')
+  await expect(page.getByText(/1 \/ 10/)).toBeVisible()
+
+  // 하이 줄이 아예 없다. `aria-label` 이 줄 이름을 달고 있어 줄마다 셀 수 있다
+  await expect(page.locator('button[aria-label^="하이 "]')).toHaveCount(0)
+  await expect(page.locator('button[aria-label^="로우 "]')).toHaveCount(4)
+  await expect(page.getByText('하이 승자', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('로우 승자를 고르세요.')).toBeVisible()
+
+  // 공유 보드가 없는 종목이라 보드 상자를 그리지 않는다 (빈 상자가 뜨던 결함)
+  await expect(page.getByText('보드', { exact: true })).toHaveCount(0)
+
+  // 로우만 고르면 확인이 열린다 — 하이를 요구하면 제출이 영영 안 열린다
+  await expect(page.getByRole('button', { name: '확인' })).toBeDisabled()
+  await page.locator('button[aria-label="로우 1번"]').click()
+  await expect(page.getByRole('button', { name: '확인' })).toBeEnabled()
+
+  await page.getByRole('button', { name: '확인' }).click()
+  await expect(page.getByRole('button', { name: '다음 문제' })).toBeVisible()
+})
+
+test('라즈는 「로우 없음」이 왜 답이 아닌지 가르친다', async ({ page }) => {
+  await page.goto('/games/razz/winner')
+  await expect(page.getByText(/1 \/ 10/)).toBeVisible()
+
+  // 라즈는 자격 조건이 없어 로우가 늘 선다 — 이 버튼은 어느 판에서도 답이 아니다
+  await page.getByRole('button', { name: '로우 없음' }).click()
+  await page.getByRole('button', { name: '확인' }).click()
+  await expect(page.getByText('이 종목은 로우 자격 조건이 없다', { exact: false })).toBeVisible()
+})
+
+test('라즈 승자 판독의 좌석 일곱 장이 줄을 넘치지 않는다', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 780 })
+  await page.goto('/games/razz/winner')
+  await expect(page.getByText(/1 \/ 10/)).toBeVisible()
+
+  // 참고 지표. 좌석 카드는 절대좌표가 아니라 이 화면에선 유효하지만, 카드가
+  // `flex-shrink` 로 쭈그러들면 넘침 없이 랭크만 안 읽히므로 이것만으로는 못 지킨다
+  const scrollOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  )
+  expect(scrollOverflow).toBeLessThanOrEqual(0)
+
+  // 진짜 잣대: 카드 rect 가 좌석 줄 안에 들어오고, 폭이 설계값(`sm` = 24px)대로인가
+  const EPS = 1
+  const rows = await page.evaluate(() => {
+    const byRow = new Map<Element, Element[]>()
+    for (const card of document.querySelectorAll('[data-face]')) {
+      // 카드 → 카드 묶음(div) → 좌석 줄(div)
+      const row = card.parentElement?.parentElement
+      if (row == null) continue
+      byRow.set(row, [...(byRow.get(row) ?? []), card])
+    }
+    return [...byRow].map(([row, cards]) => {
+      const box = row.getBoundingClientRect()
+      const rects = cards.map((c) => c.getBoundingClientRect())
+      return {
+        cards: cards.length,
+        rowLeft: box.left,
+        rowRight: box.right,
+        minX: Math.min(...rects.map((r) => r.left)),
+        maxX: Math.max(...rects.map((r) => r.right)),
+        minWidth: Math.min(...rects.map((r) => r.width)),
+      }
+    })
+  })
+
+  expect(rows).toHaveLength(4) // 좌석 넷
+  for (const row of rows) {
+    expect(row.cards, '라즈는 좌석마다 일곱 장이다').toBe(7)
+    expect(row.minX).toBeGreaterThanOrEqual(row.rowLeft - EPS)
+    expect(row.maxX).toBeLessThanOrEqual(row.rowRight + EPS)
+    // 쭈그러들면 랭크 글자가 안 읽힌다 — 카드를 줄이지 말고 줄바꿈을 허용하라는 설계
+    expect(row.minWidth, '카드가 flex-shrink 로 쭈그러들었다').toBeGreaterThanOrEqual(24 - EPS)
+  }
+
+  await page.screenshot({ path: `e2e/shots/razz-winner-${test.info().project.name}.png` })
+})

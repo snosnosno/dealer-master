@@ -20,7 +20,7 @@ import {
   type WinnerKind,
   type WinnerQuestion,
 } from '@/lib/drills/winner/types'
-import { drillHref, GAMES, isGameId } from '@/lib/games'
+import { boardSize, drillHref, GAMES, isGameId } from '@/lib/games'
 
 /** 이 드릴에는 칩이 나오지 않는다. **모듈 최상위 함수여야 한다** */
 function hasChips(): boolean {
@@ -42,7 +42,10 @@ export default function WinnerPage({ params }: { params: Promise<{ gameId: strin
       path={`/games/${gameId}/winner`}
       title="승자 판독"
       eyebrow={`${GAMES[gameId].labels.ko} · 승자 판독`}
-      footer={`${WINNER_QUESTION_COUNT}문제 · 보드와 홀카드는 매번 새로 만들어진다`}
+      // 공유 보드가 없는 종목에 보드를 약속하지 않는다 — 라즈 화면엔 보드가 아예 없다
+      footer={`${WINNER_QUESTION_COUNT}문제 · ${
+        boardSize(GAMES[gameId]) > 0 ? '보드와 홀카드는' : '카드는'
+      } 매번 새로 만들어진다`}
       labels={WINNER_KIND_LABEL}
       record={winnerRecord(gameId)}
       generate={winnerRun(gameId)}

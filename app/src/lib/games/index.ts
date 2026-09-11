@@ -17,6 +17,7 @@ export function isGameId(value: string): value is GameId {
   return value in GAMES
 }
 
+export { boardSize } from './board'
 export { drillsFor, DRILL_LABEL, type DrillId } from './drills'
 export { evaluatorFor } from './evaluator'
 export { FAMILY_ORDER, type Family } from './families'

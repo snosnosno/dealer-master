@@ -61,12 +61,23 @@ export function WinnerQuestionPanel({
   /** 내가 고른 것. 시간이 먼저 끝나면 고른 것이 없다 */
   const pickedText = (list: number[], picked: boolean) => (picked ? names(list) : '고른 것 없음')
 
-  const seatButton = (seat: number, list: number[], onPick: (seat: number) => void) => (
+  /**
+   * 좌석 버튼 하나. **접근 가능한 이름에 줄 이름을 붙인다** — 글자만 두면 하이 줄과
+   * 로우 줄의 「1번」이 똑같이 들려 낭독기가 둘을 구분하지 못하고, 테스트도 DOM
+   * 순서(`.first()`)에 기대야 한다. 팟 분배가 `fb7c362` 에서 같은 결함을 고쳤다.
+   */
+  const seatButton = (
+    row: string,
+    seat: number,
+    list: number[],
+    onPick: (seat: number) => void,
+  ) => (
     <button
       key={seat}
       type="button"
       disabled={!solving}
       aria-pressed={list.includes(seat)}
+      aria-label={`${row} ${question.seats[seat].name}`}
       onClick={() => onPick(seat)}
       className={`rounded-lg border px-2 py-1.5 text-xs font-bold disabled:opacity-40 ${
         list.includes(seat)
@@ -85,15 +96,22 @@ export function WinnerQuestionPanel({
       </p>
       <p className="mt-1 text-base font-bold">{question.prompt}</p>
 
-      {/* 펠트 초록은 `--felt` 로 쓰지 않는다 — 그 변수는 `.sim-root` 에만 있다 */}
-      <div className="mt-3 rounded-xl bg-dm-teal-800 p-3">
-        <p className="text-[10px] font-bold text-dm-teal-50">보드</p>
-        <div className="mt-1 flex gap-1">
-          {question.board.map((card, i) => (
-            <Card key={i} card={card} faceUp size="sm" />
-          ))}
+      {/*
+       * 공유 보드가 없는 종목은 보드 상자를 아예 그리지 않는다 — 스터드 갈래(라즈)는
+       * 스트릿마다 보드로 내는 장수가 0 이라 상자가 빈 채로 남았다(관찰로 잡음).
+       * 빈 상자는 「여기 보드가 있는데 아직 안 깔렸다」는 거짓말이다.
+       * 펠트 초록은 `--felt` 로 쓰지 않는다 — 그 변수는 `.sim-root` 에만 있다
+       */}
+      {question.board.length > 0 ? (
+        <div className="mt-3 rounded-xl bg-dm-teal-800 p-3">
+          <p className="text-[10px] font-bold text-dm-teal-50">보드</p>
+          <div className="mt-1 flex gap-1">
+            {question.board.map((card, i) => (
+              <Card key={i} card={card} faceUp size="sm" />
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="mt-3 space-y-2">
         {question.seats.map((seat, i) => (
@@ -112,7 +130,7 @@ export function WinnerQuestionPanel({
         <div className="mt-4">
           <p className="text-xs font-bold text-zinc-500">하이 승자</p>
           <div className="mt-1 grid grid-cols-4 gap-1.5">
-            {question.seats.map((_, i) => seatButton(i, hi, pickHi))}
+            {question.seats.map((_, i) => seatButton('하이', i, hi, pickHi))}
           </div>
         </div>
       ) : null}
@@ -121,7 +139,7 @@ export function WinnerQuestionPanel({
         <div className="mt-3">
           <p className="text-xs font-bold text-zinc-500">로우 승자</p>
           <div className="mt-1 grid grid-cols-4 gap-1.5">
-            {question.seats.map((_, i) => seatButton(i, lo, pickLo))}
+            {question.seats.map((_, i) => seatButton('로우', i, lo, pickLo))}
           </div>
           <button
             type="button"
@@ -181,6 +199,15 @@ export function WinnerQuestionPanel({
             >
               {question.why}
             </p>
+
+            {/*
+             * 「로우 없음」을 골랐는데 로우가 서 있던 판이면, **왜** 그 버튼이 답이
+             * 아니었는지를 한 줄 더 붙인다. 문구는 엔진이 자격 조건에서 지었다
+             * (`loNoneWhyFor`) — 화면은 고른 것과 답을 견줄 뿐이다.
+             */}
+            {noLow && question.loNoneWhy !== '' ? (
+              <p className="text-zinc-600 dark:text-zinc-400">{question.loNoneWhy}</p>
+            ) : null}
           </div>
 
           <button

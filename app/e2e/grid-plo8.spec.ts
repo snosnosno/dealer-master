@@ -59,8 +59,10 @@ test('승자 판독 첫 문제가 열리고 하이·로우를 둘 다 고른다'
   await expect(page.getByText('하이 승자', { exact: true })).toBeVisible()
   await expect(page.getByText('로우 승자', { exact: true })).toBeVisible()
 
-  // 하이만 고른 상태에서는 확인이 열리지 않는다
-  await page.getByRole('button', { name: '1번' }).first().click()
+  // 하이만 고른 상태에서는 확인이 열리지 않는다.
+  // `.first()` 로 잡던 것을 `aria-label` 로 바꿨다 — 그건 「하이 줄이 먼저 그려진다」는
+  // DOM 순서에 기댄 것이라 줄 순서를 바꾸면 조용히 로우를 누르게 된다
+  await page.locator('button[aria-label="하이 1번"]').click()
   await expect(page.getByRole('button', { name: '확인' })).toBeDisabled()
 
   await page.getByRole('button', { name: '로우 없음' }).click()
