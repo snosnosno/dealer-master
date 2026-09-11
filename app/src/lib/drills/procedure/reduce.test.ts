@@ -197,6 +197,46 @@ describe('앤티 수거', () => {
   })
 })
 
+/*
+ * 대본이 좌석마다 다른 장수를 들고 오면(폴드한 손은 걷힌다) 리듀서가 그것을 그대로
+ * 드러내야 한다. 화면이 보는 것은 `table.seats` 이고 대본이 아니므로, 둘이 어긋나면
+ * 폴드한 좌석 앞에 업카드가 남는다 — 그 어긋남을 좌석별로 맞춰 본다.
+ *
+ * 이 두 검사는 붙일 때 이미 초록이었다(적색 단계가 없다). `reduce.ts` 의 옛 코드가
+ * `slice(0, 한 숫자)` 로 잘랐지만 `slice` 가 대본 배열 길이에서 알아서 멈춰 결과가
+ * 같았기 때문이다 — 그 우연에 기대던 자리를 명시로 바꾼 것이고, 이 검사는 그 뒤로
+ * 누가 천장을 지워도 잡히게 두는 회귀 그물이다.
+ */
+describe('라즈 완주 — 폴드한 손이 걷힌 채로 남는다', () => {
+  function playThrough(seed: string): ProcedureState {
+    let state = startProcedure(GAMES.razz, seed)
+    for (let guard = 0; guard < 200 && state.phase !== 'done'; guard++) {
+      state = stepCorrectly(state)
+    }
+    expect(state.phase, seed).toBe('done')
+    return state
+  }
+
+  it('완주한 뒤 좌석의 장수가 대본과 한 장도 어긋나지 않는다', () => {
+    for (const seed of ['a1', 'b2', 'razz-2', 'razz-3']) {
+      const state = playThrough(seed)
+      state.table.seats.forEach((seat, i) => {
+        expect(seat.hole.length, `${seed}/좌석 ${i}`).toBe(state.script.seats[i].hole.length)
+      })
+    }
+  })
+
+  it('폴드한 좌석은 남은 좌석보다 카드가 적다', () => {
+    const state = playThrough('a1')
+    const folded = state.table.seats.filter((s) => s.folded)
+    const alive = state.table.seats.filter((s) => !s.folded)
+    expect(folded.length, 'a1 에 폴드가 없으면 이 검사가 공허하다').toBeGreaterThan(0)
+    expect(alive.length).toBeGreaterThanOrEqual(2)
+    const fewest = Math.min(...alive.map((s) => s.hole.length))
+    for (const seat of folded) expect(seat.hole.length).toBeLessThan(fewest)
+  })
+})
+
 describe('동률 판은 출제하지 않는다', () => {
   /*
    * 3번가 브링인이 동률이면 무늬로 갈라야 하는데 **자료가 없다**

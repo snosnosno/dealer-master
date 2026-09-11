@@ -195,13 +195,20 @@ function applyStep(
     case 'deal': {
       if (street === null) throw new Error('deal 스텝에 스트릿이 없다')
       const perSeat = street.deal.down + street.deal.up
-      // 대본이 이미 카드마다 앞뒤를 들고 있다 — 여기서 다시 나누면 `deal.ts` 가 내린
-      // 판정의 사본이 생기고, 두 곳이 어긋나는 날 화면이 조용히 거짓말을 한다
-      const seats = table.seats.map((seat, i) =>
-        perSeat > 0
-          ? { ...seat, hole: script.seats[i].hole.slice(0, seat.hole.length + perSeat) }
-          : seat,
-      )
+      /*
+       * 대본이 이미 카드마다 앞뒤를 들고 있다 — 여기서 다시 나누면 `deal.ts` 가 내린
+       * 판정의 사본이 생기고, 두 곳이 어긋나는 날 화면이 조용히 거짓말을 한다.
+       *
+       * **장수도 대본에 묻는다.** `perSeat` 는 한 숫자라 모든 좌석을 같은 자리에서
+       * 자르는데, 폴드한 좌석은 그 뒤 스트릿의 카드를 받지 않아 대본의 배열이 좌석마다
+       * 짧다(`HandScript.seats[].hole`). 「이 좌석이 몇 장까지 받았나」를 여기서 다시
+       * 세면 그것이 폴드 판정의 사본이 되므로, 대본이 가진 길이를 천장으로 삼는다.
+       */
+      const seats = table.seats.map((seat, i) => {
+        const dealt = script.seats[i].hole
+        const upTo = Math.min(seat.hole.length + perSeat, dealt.length)
+        return upTo > seat.hole.length ? { ...seat, hole: dealt.slice(0, upTo) } : seat
+      })
       const board = [...table.board, ...script.board[street.id]]
       return {
         table: { ...table, seats, board },
