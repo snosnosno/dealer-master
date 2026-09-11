@@ -20,8 +20,9 @@ const ROUTES: Record<GameId, Partial<Record<DrillId, string>>> = {
     potlimit: '/games/plo8/potlimit',
     potaward: '/games/plo8/potaward',
   },
-  // 스파이크(2026-09-11): 라즈는 아직 한 칸도 열지 않았다 — 화면에 「준비 중」으로 뜬다
-  razz: {},
+  razz: {
+    procedure: '/games/razz/procedure',
+  },
 }
 
 export function drillHref(gameId: GameId, drillId: DrillId): string | null {

@@ -32,6 +32,9 @@ export function Card({
 
   return (
     <div
+      // e2e 가 앞면 카드 수를 세는 유일한 방법이다 (`e2e/grid-razz.spec.ts`) — 랭크
+      // 글자는 뒷면에서 DOM 에 없어 텍스트로는 못 세고, 앞뒤는 화면의 사실이라 셀 수 있어야 한다
+      data-face={showFace ? 'up' : 'down'}
       className={`sim-flip flex items-center justify-center rounded font-bold ${SIZE[size]} ${
         showFace
           ? `border border-zinc-300 bg-white ${red ? 'text-dm-red' : 'text-zinc-900'}`
