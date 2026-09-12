@@ -33,10 +33,21 @@ export type ForcedBets =
   | { kind: 'blinds'; sb: number; bb: number }
   | { kind: 'ante+bringin'; ante: number; bringIn: number; smallBet: number; bigBet: number }
 
-/** 이 라운드에 좌석이 한 행동. `to` 는 이 라운드에 낸 **누적** 금액이다. */
+/**
+ * 이 라운드에 좌석이 한 행동. `to` 는 이 라운드에 낸 **누적** 금액이다.
+ *
+ * 뒤의 둘은 **픽스리밋 스터드에만 있는 행동**이고, 화면 로그가 그 낱말을 그대로 띄운다.
+ * 이 드릴이 가르치는 것이 「스터드는 블라인드가 아니라 앤티와 브링인으로 연다」라서
+ * 둘을 `'bet'`·`'raise'` 로 뭉개면 화면에 브링인이라는 낱말이 한 번도 안 뜨고,
+ * 「벳 500 다음에 또 벳 1,000」이라는 없는 그림이 남는다 (설계 §10 재미 게이트 진행절차-3).
+ *
+ * - `'bringin'` — 최고 업카드 좌석이 **강제로** 세우는 벳. 스몰벳보다 작다
+ * - `'complete'` — 그 벳을 스몰벳까지 채우는 것. 아직 서지 않은 벳을 채우는 것이라
+ *   픽스리밋은 이것을 레이즈로 세지 않는다
+ */
 export type BettingAction = {
   seat: number
-  act: 'check' | 'call' | 'bet' | 'raise' | 'fold'
+  act: 'check' | 'call' | 'bet' | 'raise' | 'fold' | 'bringin' | 'complete'
   to: number
 }
 

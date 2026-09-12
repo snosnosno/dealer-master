@@ -95,6 +95,8 @@ const ACT_LABEL: Record<BettingAction['act'], string> = {
   call: '콜',
   bet: '벳',
   raise: '레이즈',
+  bringin: '브링인',
+  complete: '컴플리트',
 }
 
 /**

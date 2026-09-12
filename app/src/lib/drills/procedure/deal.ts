@@ -54,6 +54,9 @@ const NAMES = ['1번', '2번', '3번', '4번', '5번', '6번']
 /** 강제 베팅이 없는 라운드가 체크로 열릴 확률. 첫 액션이 늘 벳이면 상황이 하나뿐이다. */
 const CHECK_OPEN_RATE = 0.45
 
+/** 좌석이 접을 확률. 라운드 생성기 **둘이 같은 값을 쓴다** — 두 곳에 적으면 한쪽만 바뀐다 */
+const FOLD_RATE = 0.35
+
 /**
  * 무한 루프 대신 명확한 실패로 드러나게 하는 상한.
  * 값 400 은 `drills/winner/generate.ts` 의 `MAX_TRIES` 와 같다.
@@ -122,6 +125,12 @@ export function dealHand(spec: GameSpec, seed: string): HandScript {
     stack: BIG_BLIND * (20 + rng.int(80)),
   }))
 
+  /*
+   * **금액의 정본은 여기 하나다.** 아래 `makeRound` 가 상수를 다시 읽지 않고 이 값을
+   * 받는다 — 그래서 라즈의 벳 크기가 PLO8 의 BB 를 빌려 쓰던 자리가 사라진다.
+   */
+  const forced = forcedBetsFor(spec)
+
   const board: Record<string, Card[]> = {}
   const betting: Record<string, BettingAction[]> = {}
   const folded = new Array<boolean>(SEAT_COUNT).fill(false)
@@ -173,11 +182,40 @@ export function dealHand(spec: GameSpec, seed: string): HandScript {
       isForced: index === 0,
       buttonSeat,
       firstToAct: street.firstToAct,
+      sizeMultiplier: street.sizeMultiplier,
+      forced,
       seats,
     })
   })
 
-  return { buttonSeat, forced: forcedBetsFor(spec), seats, board, betting }
+  return { buttonSeat, forced, seats, board, betting }
+}
+
+/**
+ * 이 라운드의 벳 크기. **픽스리밋은 종목이 정하고, 노리밋·팟리밋은 판마다 다르다.**
+ *
+ * 픽스리밋에 있는 벳 크기는 스몰벳과 빅벳 **둘뿐이다.** 그래서 `sizeMultiplier` 를
+ * 곱하지 않고 **고르는 데** 쓴다 — 「빅벳은 스몰벳의 2배」라는 관계는 `types.ts` 의
+ * `ForcedBets` 가 이미 적고 있고, 여기서 다시 곱하면 그 관계의 사본이 둘이 된다.
+ *
+ * 예전에는 이 자리에 `BIG_BLIND * (2 + rng.int(3))` 하나뿐이어서 라즈에도
+ * 3,000·4,000 이 나왔다 — 픽스리밋에 **없는 금액**이고, 아무도 벳하지 않은 금액을
+ * 전원이 콜하는 로그가 그래서 떴다.
+ *
+ * **`spec.betting`·`spec.id` 를 읽지 않는다** — 금액의 정본이 `forced` 니 금액을 정하는
+ * 코드도 그것만 본다.
+ */
+function roundAmount(
+  forced: ForcedBets,
+  sizeMultiplier: 1 | 2,
+  isForced: boolean,
+  rng: Rng,
+): number {
+  if (forced.kind === 'ante+bringin') {
+    return sizeMultiplier === 2 ? forced.bigBet : forced.smallBet
+  }
+  // 노리밋·팟리밋은 크기가 상황이다. **이 식을 건드리면 PLO8 의 시드가 달라진다**
+  return isForced ? forced.bb : forced.bb * (2 + rng.int(3))
 }
 
 /**
@@ -198,6 +236,8 @@ function makeRound({
   isForced,
   buttonSeat,
   firstToAct,
+  sizeMultiplier,
+  forced,
   seats,
 }: {
   rng: Rng
@@ -205,12 +245,13 @@ function makeRound({
   isForced: boolean
   buttonSeat: number
   firstToAct: FirstToAct
+  sizeMultiplier: 1 | 2
+  forced: ForcedBets
   seats: readonly { hole: readonly DealtCard[] }[]
 }): BettingAction[] {
-  const alive = () => folded.filter((f) => !f).length
-
   // 강제 베팅이 걸린 첫 라운드는 늘 콜할 금액이 있다. 나머지는 45% 가 체크로 열린다
   const checkRound = !isForced && rng.next() < CHECK_OPEN_RATE
+
   const startSeat = firstToActSeat(firstToAct, {
     buttonSeat,
     seats: seats.map((s, i) => ({ hole: s.hole, folded: folded[i] })),
@@ -225,14 +266,40 @@ function makeRound({
     return order.map((seat) => ({ seat, act: 'check' as const, to: 0 }))
   }
 
-  const amount = isForced ? BIG_BLIND : BIG_BLIND * (2 + rng.int(3))
+  const amount = roundAmount(forced, sizeMultiplier, isForced, rng)
+  if (isForced && forced.kind === 'ante+bringin') {
+    return bringInRound({ rng, folded, order, bringIn: forced.bringIn, completeTo: amount })
+  }
+  return plainRound({ rng, folded, order, amount, isForced })
+}
+
+/** 살아 있는 좌석 수. 마지막 둘이 남았으면 더 접지 않는다 — 쇼다운이 사라지면 판이 없다 */
+const aliveCount = (folded: readonly boolean[]) => folded.filter((f) => !f).length
+
+/**
+ * 블라인드 종목의 라운드, 그리고 스터드의 3번가 이후. 첫 좌석이 열고 나머지가 받는다.
+ *
+ * `isForced` 는 순서가 아니라 **문구**에만 쓴다 — 프리플랍은 블라인드가 이미 서 있어
+ * 첫 좌석도 「벳」이 아니라 「콜」이다.
+ */
+function plainRound({
+  rng,
+  folded,
+  order,
+  amount,
+  isForced,
+}: {
+  rng: Rng
+  folded: boolean[]
+  order: readonly number[]
+  amount: number
+  isForced: boolean
+}): BettingAction[] {
   const out: BettingAction[] = []
   let opened = false
 
   for (const seat of order) {
-    // 마지막 두 좌석이 남았으면 더 접지 않는다 — 쇼다운이 사라지면 판이 성립하지 않는다
-    const mayFold = alive() > 2 && rng.next() < 0.35
-    if (mayFold) {
+    if (aliveCount(folded) > 2 && rng.next() < FOLD_RATE) {
       folded[seat] = true
       out.push({ seat, act: 'fold', to: 0 })
       continue
@@ -241,4 +308,56 @@ function makeRound({
     opened = true
   }
   return out
+}
+
+/**
+ * 스터드의 첫 라운드 — **브링인이 판을 연다.**
+ *
+ * 최고 업카드 좌석이 브링인(500)을 내고, 다음 좌석이 스몰벳(1,000)까지 컴플리트하면
+ * 나머지가 그것을 받는다. 브링인 좌석은 **마지막에 차액 500 을 콜해** 라운드를 닫는다 —
+ * `to` 가 라운드 누적액이라 리듀서가 이미 낸 만큼을 뺀 차액만 스택에서 뺀다
+ * (`reduce.ts` 의 `delta`). 그래서 좌석마다 낸 돈이 정확히 스몰벳으로 맞는다.
+ *
+ * **이 라운드만 한 좌석이 두 번 액션한다.** 브링인은 강제로 세워진 벳이라 그 좌석이
+ * 컴플리트를 받을 차례가 한 번 더 오는 것이 이 종목의 절차다. 다른 라운드는 여전히
+ * 좌석당 한 번이다 (`deal.test.ts` 가 둘을 따로 못박는다).
+ *
+ * **컴플리트가 없는 판(전원이 브링인 500 만 받고 끝나는 판)은 만들지 않는다** — 그것도
+ * 실제로 있는 상황이지만 상황을 늘리는 것은 이 수정의 범위가 아니다(설계 §8).
+ */
+function bringInRound({
+  rng,
+  folded,
+  order,
+  bringIn,
+  completeTo,
+}: {
+  rng: Rng
+  folded: boolean[]
+  order: readonly number[]
+  bringIn: number
+  completeTo: number
+}): BettingAction[] {
+  const [bringInSeat, ...rest] = order
+  const out: BettingAction[] = [{ seat: bringInSeat, act: 'bringin', to: bringIn }]
+  let completed = false
+
+  for (const seat of rest) {
+    // 브링인 좌석은 접지 않는다 — 강제로 낸 벳이다. 그래서 폴드 판정은 나머지에게만 묻는다
+    if (aliveCount(folded) > 2 && rng.next() < FOLD_RATE) {
+      folded[seat] = true
+      out.push({ seat, act: 'fold', to: 0 })
+      continue
+    }
+    out.push({ seat, act: completed ? 'call' : 'complete', to: completeTo })
+    completed = true
+  }
+
+  /*
+   * 여섯에서 둘까지만 줄어드니 폴드는 넷이 상한이고, 나머지 다섯 중 **적어도 하나는
+   * 컴플리트한다** — 그래서 아래는 늘 실행된다. 그래도 조건을 다는 이유: 폴드 규칙이
+   * 바뀌는 날 브링인 좌석이 **아무도 안 낸 금액을 콜하는** 그림이 뜨는 것보다 낫다.
+   */
+  if (!completed) return out
+  return [...out, { seat: bringInSeat, act: 'call', to: completeTo }]
 }
