@@ -82,4 +82,34 @@ describe('evaluatorFor — 아직 만들지 않은 갈래는 던진다', () => {
     } as GameSpec
     expect(() => evaluatorFor(oddball)).toThrow()
   })
+
+  /**
+   * **A-5 로우볼이라는 전제를 못박는다.**
+   *
+   * 라즈 드릴의 문구(「A-5 로우는 스트레이트를 세지 않으므로…」,
+   * `drills/winner/generate.test.ts` 가 그 문장을 단언한다)와 `matchesRazzTarget`
+   * 의 `'straightish'` 목표(연속·동무늬 손을 **일부러** 출제해 그것이 로우를 망치지
+   * 않는다는 것을 가르친다)가 **둘 다 A-5 를 전제**한다. 2-7 로우볼은 스트레이트와
+   * 플러시를 **세므로** 그 교훈이 정확히 뒤집힌다.
+   *
+   * 그 전제를 지키는 것은 `evaluator.ts` 의 `lo.kind !== 'a5'` throw 하나인데 그것을
+   * 못박는 테스트가 없었다 — 위 두 `toThrow` 는 다른 갈래를 잡는다(최종 리뷰 M-N6).
+   * 나중에 2-7 을 붙이는 사람이 이 throw 를 걷어내면 **이 테스트가 빨개져서** 문구와
+   * `straightish` 목표도 같이 고쳐야 한다는 걸 알게 된다.
+   */
+  it('A-5 가 아닌 로우 방식은 던진다 — 2-7 은 스트레이트·플러시를 센다', () => {
+    const twoSeven = {
+      ...GAMES.razz,
+      eval: { ...GAMES.razz.eval, lo: { kind: '27', qualifier: null } },
+    } as GameSpec
+    expect(() => evaluatorFor(twoSeven)).toThrow(/27/)
+  })
+
+  it('로우도 하이도 없는 스터드는 던진다', () => {
+    const noEval = {
+      ...GAMES.razz,
+      eval: { ...GAMES.razz.eval, lo: null },
+    } as GameSpec
+    expect(() => evaluatorFor(noEval)).toThrow()
+  })
 })
