@@ -29,14 +29,23 @@ import type { BettingAction, ForcedBets, HandScript } from './types'
 export const SEAT_COUNT = 6
 
 /**
- * 강제 베팅. **자료에 금액이 없다** — `docs/references/mixgame-facts.md` 는
- * 구조(앤티+브링인 · 5번가부터 빅벳)만 적고 금액을 적지 않는다.
- * 아래 여섯은 **사용자 확인 2026-09-11** 이다. 자료를 받으면 출처를 바꾼다.
+ * 블라인드 종목(노리밋·팟리밋)의 강제 베팅.
  *
- * 스몰벳이 PLO8 의 BB 와 같아 두 종목의 칩 그림이 한 세계로 읽힌다.
+ * **이 둘은 라즈보다 먼저 있던 값이다** — 분기점 `2c58b12` 에 출처 주석 없이 그대로 있다
+ * (`git show 2c58b12:app/src/lib/drills/procedure/deal.ts`). 아래 스터드 넷과 **출처가
+ * 다르니 함께 갈아 끼우지 마라** — 이 둘을 바꾸면 PLO8 의 블라인드가 바뀐다.
  */
 export const SMALL_BLIND = 500
 export const BIG_BLIND = 1000
+
+/**
+ * 스터드(앤티+브링인)의 강제 베팅. **자료에 금액이 없다** —
+ * `docs/references/mixgame-facts.md` 는 구조(앤티+브링인 · 5번가부터 빅벳)만 적고 금액을
+ * 적지 않는다. **아래 넷이 사용자 확인 2026-09-11** 이고, 설계 §7 표도 이 넷이다.
+ * 자료를 받으면 **이 넷의** 출처를 바꾼다.
+ *
+ * 스몰벳이 PLO8 의 BB 와 같아 두 종목의 칩 그림이 한 세계로 읽힌다.
+ */
 export const ANTE = 100
 export const BRING_IN = 500
 export const SMALL_BET = 1000
