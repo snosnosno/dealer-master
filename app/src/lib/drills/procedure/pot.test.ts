@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { GAMES, type GameSpec } from '@/lib/games'
 import { dealHand, SEAT_COUNT } from './deal'
 import { reduce, startProcedure } from './reduce'
-import { firstToActSeat } from './steps'
+import { firstToActSeats } from './steps'
 import type { ProcedureState } from './types'
 
 const SEEDS = ['a1', 'b2', 'c3', 'd4', 'e5', 'f6', 'g7', 'h8', 'i9', 'j0', 'k1', 'l2']
@@ -24,10 +24,11 @@ function playToEnd(spec: GameSpec, seed: string): ProcedureState {
       const street = state.spec.streets[state.steps[state.at].streetIndex]
       state = reduce(state, {
         type: 'seat',
-        seat: firstToActSeat(street.firstToAct, {
+        // 동률이면 집합이 여럿이지만 어느 쪽을 눌러도 맞다 — 완주에는 하나면 된다
+        seat: firstToActSeats(street.firstToAct, {
           buttonSeat: state.script.buttonSeat,
           seats: state.table.seats,
-        }),
+        })[0],
       })
       continue
     }

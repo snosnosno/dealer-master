@@ -8,7 +8,7 @@
  * **틀렸을 때 가리지 않는다.** 무엇이 먼저인지 한 줄로 말해 준다 — 연습이기 때문이다.
  */
 import type { FirstToAct } from '@/lib/games'
-import { firstToActSeat } from './steps'
+import { firstToActSeats } from './steps'
 import type { ProcedureAction, ProcedureState, Step } from './types'
 
 export type Verdict = { ok: true } | { ok: false; hint: string }
@@ -20,11 +20,16 @@ export function judge(state: ProcedureState, action: ProcedureAction): Verdict {
   if (state.phase === 'openSeat') {
     if (action.type !== 'seat') return { ok: false, hint: openHint(state, step) }
     const street = state.spec.streets[step.streetIndex]
-    const expected = firstToActSeat(street.firstToAct, {
+    /*
+     * **정답이 여럿일 수 있다.** 스터드에서 업카드가 동률이면 무늬로 갈라야 하는데 자료에
+     * 그 우열이 없다 — 그때 임의로 한 좌석만 받으면 훈련생이 규칙으로는 구별할 수 없는
+     * 좌석을 눌러 틀리고, 힌트로도 답을 좁힐 수 없다. 그래서 **집합에 들면 맞다.**
+     */
+    const expected = firstToActSeats(street.firstToAct, {
       buttonSeat: state.script.buttonSeat,
       seats: state.table.seats,
     })
-    return action.seat === expected ? { ok: true } : { ok: false, hint: openHint(state, step) }
+    return expected.includes(action.seat) ? { ok: true } : { ok: false, hint: openHint(state, step) }
   }
 
   if (action.type !== 'palette') return { ok: false, hint: denyHint(state, step) }

@@ -23,7 +23,7 @@ import {
   type Rng,
 } from '@/lib/simulator'
 import type { FirstToAct, GameSpec } from '@/lib/games'
-import { firstToActSeat } from './steps'
+import { firstToActSeats } from './steps'
 import type { BettingAction, ForcedBets, HandScript } from './types'
 
 export const SEAT_COUNT = 6
@@ -68,10 +68,16 @@ const MAX_SHUFFLES = 400
  *
  * 동률이면 무늬로 갈라야 하는데 자료에 그 우열이 없다 — mixgame-facts §2 의 7-Card
  * Stud 절이 「동률의 무늬 우열은 7카드 스터드 기준으로 자료에 없다」고 못 박고,
- * 라즈는 그 절을 따른다(§2 Razz). 답을 규칙으로 정당화할 수 없는 문제를 내면
- * 훈련생이 맞는 답을 고르고도 틀린다 —
- * 비교기가 0 을 낼 때 임의로 한 좌석을 고르는 것이 바로 그 거짓말이다
- * (`steps.ts` 의 `firstToActSeat` 가 먼저 만난 좌석을 남기는 자리).
+ * 라즈는 그 절을 따른다(§2 Razz).
+ *
+ * **이 함수는 이름 그대로 첫 스트릿만 본다.** 4번가 이후의 동률은 여기서 걸러지지 않고,
+ * 걸러려 들지도 않는다 — 동률은 실제 게임에서 일어나는 일이고 모든 스트릿에 가드를 걸면
+ * 덱을 몇 번 다시 섞어야 하는지 알 수 없다. 그쪽은 **채점이 받아 준다**:
+ * `steps.ts` 의 `firstToActSeats` 가 동률 좌석 **전부**를 돌려주고 `judge.ts` 가 그 집합에
+ * 들면 맞다고 한다. 규칙으로 정당화할 수 없는 답을 강요하는 자리가 그래서 없다.
+ *
+ * 첫 스트릿만 여전히 거르는 이유: 3번가 브링인은 이 드릴이 가르치는 첫 장면이고,
+ * 대본의 베팅 순서까지 유일하게 정해지는 쪽이 화면에 읽히는 그림이 하나로 남는다.
  *
  * **플랍게임은 이 검사를 통과만 하고 지나간다** — 첫 스트릿에 업카드가 0 장이라
  * 동률이 생길 자리가 없다. 그래서 PLO8 의 덱은 한 번도 다시 섞이지 않는다.
@@ -152,7 +158,7 @@ export function dealHand(spec: GameSpec, seed: string): HandScript {
        *
        * **같은 시드가 여전히 같은 판을 만든다** — `take` 는 `rng` 를 건드리지 않으므로
        * 이 건너뛰기가 난수 흐름에 끼어들지 않는다. 다만 **시드별 폴드 패턴은 달라졌다**:
-       * 살아남은 좌석이 받는 카드가 바뀌고, `firstToActSeat` 가 그 업카드를 읽어 첫
+       * 살아남은 좌석이 받는 카드가 바뀌고, `firstToActSeats` 가 그 업카드를 읽어 첫
        * 순서를 정하므로 라운드의 좌석 순서가 돌아간다. 「카드 → 첫 순서 → 폴드 →
        * 다음 카드」가 한 고리로 물린 것이고, 재현성은 그 고리 밖에서 지켜진다
        * (`deal.test.ts` 의 「같은 시드는 라즈에서도 같은 핸드를 만든다」).
@@ -222,7 +228,7 @@ function roundAmount(
  * 한 라운드의 액션을 만든다. `folded` 를 **제자리에서 갱신한다** — 이 함수는
  * `dealHand` 안에서만 쓰이는 지역 헬퍼이고, 밖으로 나가는 값은 새 배열이다.
  *
- * 첫 액션 좌석은 `firstToActSeat`(`./steps.ts`)에게만 묻는다. 스터드에서는 그것이
+ * 첫 액션 좌석은 `firstToActSeats`(`./steps.ts`)에게만 묻는다. 스터드에서는 그것이
  * 업카드를 읽으므로 `seats` 를 함께 넘긴다 — 이 스트릿의 카드는 `dealHand` 가 이미
  * 얹어 둔 뒤에 이 함수를 부른다.
  *
@@ -252,10 +258,16 @@ function makeRound({
   // 강제 베팅이 걸린 첫 라운드는 늘 콜할 금액이 있다. 나머지는 45% 가 체크로 열린다
   const checkRound = !isForced && rng.next() < CHECK_OPEN_RATE
 
-  const startSeat = firstToActSeat(firstToAct, {
+  /*
+   * **대본은 하나에서 시작해야 한다.** 동률이면 `firstToActSeats` 가 여럿을 돌려주는데,
+   * 여기서는 그중 첫 좌석(가장 작은 좌석 번호)에서 액션을 시작한다. 채점하는 `judge.ts`
+   * 는 반대로 **집합 전체**를 정답으로 받는다 — 대본의 베팅 순서는 채점되지 않으므로,
+   * 이 임의성이 훈련생에게 답으로 닿지 않는다. 두 호출부가 갈리는 곳이 여기다.
+   */
+  const startSeat = firstToActSeats(firstToAct, {
     buttonSeat,
     seats: seats.map((s, i) => ({ hole: s.hole, folded: folded[i] })),
-  })
+  })[0]
   const order: number[] = []
   for (let i = 0; i < SEAT_COUNT; i++) {
     const seat = (startSeat + i) % SEAT_COUNT
