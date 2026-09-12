@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { expectCardsInsideSeatBoxes } from './seat-overflow'
 
 test('홈에서 PLO8 진행절차까지 간다', async ({ page }) => {
   await page.goto('/')
@@ -41,11 +42,15 @@ test('홀카드 4장이 좌석 상자를 넘치지 않는다', async ({ page }) 
   await page.getByRole('button', { name: '카드 딜' }).click()
   await page.waitForTimeout(800)
 
-  // 페이지가 가로로 스크롤되면 무언가 밖으로 나갔다는 뜻이다
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-  )
-  expect(overflow).toBe(false)
+  /*
+   * **문서 스크롤만 재면 제목이 거짓이 된다.** 좌석은 절대 위치라 카드가 상자를 삐져나가도
+   * 문서 폭이 늘지 않는다 — 라즈가 관찰로 확인하고 좌석 상자 잣대로 바꾼 그 공백이다
+   * (최종 리뷰 E-1). 같은 잣대를 `seat-overflow.ts` 하나에 두고 여기서 부른다.
+   *
+   * PLO8 은 프리플랍 한 번에 홀카드 넉 장이 다 나가므로 이 시점이 카드가 최대인 상태다.
+   * 좁은 폭은 `playwright.config.ts` 의 `mobile` 프로젝트(360px)가 함께 돌며 본다.
+   */
+  await expectCardsInsideSeatBoxes(page)
 
   await page.screenshot({ path: `e2e/shots/plo8-procedure-${test.info().project.name}.png` })
 })

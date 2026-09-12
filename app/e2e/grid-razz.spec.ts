@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { expectCardsInsideSeatBoxes } from './seat-overflow'
 
 /**
  * `steps.ts` 의 `stepsFor()` 가 라즈 스펙(3rd 는 번 없음, 4th~7th 는 번 있음)에서
@@ -90,41 +91,11 @@ test('라즈 좌석 일곱 장이 좌석 상자를 넘치지 않는다', async (
   // 지키지 않는다(리뷰 지적). 7번가까지 밟아 좌석마다 카드를 최대로 채운다.
   await playFullHand(page)
 
-  // `scrollWidth` 는 절대좌표 좌석의 넘침을 못 잡는다는 것을 관찰로 확인했다
-  // (수정 라운드 1 보고서 참고) — 참고 지표로만 병행한다. 이것만으로는 판정하지 않는다.
-  const scrollOverflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  )
-  expect(scrollOverflow).toBeLessThanOrEqual(0)
-
-  // 진짜 잣대: 좌석마다 카드 rect 의 합집합이 그 좌석에 배정된 상자(`[data-seat]`)를
-  // 벗어나지 않는가. 상자 자기 자신의 rect 는 `w-full` 이라 자식이 넘쳐도 그대로
-  // 보고되므로(팟 분배 자리도 마찬가지), 상자와 **카드 하나하나의 실제 화면 좌표**를
-  // 따로 재서 비교해야 한다.
-  const EPS = 1 // 서브픽셀 반올림 여유
-  for (let seat = 0; seat < 6; seat++) {
-    const seatBox = page.locator(`[data-seat="${seat}"]`)
-    const boxRect = await seatBox.boundingBox()
-    if (boxRect === null) continue // 화면 밖(표시 안 됨)이면 잴 것이 없다
-
-    const cards = seatBox.locator('[data-face]')
-    const cardCount = await cards.count()
-    if (cardCount === 0) continue // 아직 카드가 없는 좌석(이론상 없지만 방어적으로)
-
-    let minX = Infinity
-    let maxX = -Infinity
-    for (let c = 0; c < cardCount; c++) {
-      const cardRect = await cards.nth(c).boundingBox()
-      if (cardRect === null) continue
-      minX = Math.min(minX, cardRect.x)
-      maxX = Math.max(maxX, cardRect.x + cardRect.width)
-    }
-
-    expect(minX, `좌석 ${seat} 카드가 상자 왼쪽을 벗어남`).toBeGreaterThanOrEqual(boxRect.x - EPS)
-    expect(maxX, `좌석 ${seat} 카드가 상자 오른쪽을 벗어남`).toBeLessThanOrEqual(
-      boxRect.x + boxRect.width + EPS,
-    )
-  }
+  /*
+   * 잣대는 `seat-overflow.ts` 하나에 있다 — PLO8 의 같은 검사가 문서 스크롤만 재고 있어
+   * (최종 리뷰 E-1) 여기 있던 블록을 그리로 옮겨 둘이 같은 것을 보게 했다.
+   */
+  await expectCardsInsideSeatBoxes(page)
 
   await page.screenshot({ path: `e2e/shots/razz-procedure-${test.info().project.name}.png` })
 })
