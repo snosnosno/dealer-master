@@ -195,6 +195,31 @@ describe('라즈 승자 판독', () => {
     expect(runOnly).toBeGreaterThan(0)
   })
 
+  /**
+   * **이긴 손을 「최고 패」라고 부르지 않는다.** A-5 의 최고 로우는 5-4-3-2-A 하나다.
+   * 6-5-4-3-2 를 「최고 패」라 하면 그 판의 1등을 종목의 1등으로 잘못 가르치고,
+   * 2-7 의 최고(7-5-4-3-2)와도 뒤섞인다. 스트레이트를 안 센다는 교훈은 「그냥 6 로우」로 준다.
+   */
+  it('무시된 모양으로 이긴 손은 몇 로우인지 말하고, 휠만 최고 로우라 부른다', () => {
+    let nonWheel = 0
+    for (let s = 0; s < 40; s++) {
+      for (const q of generateWinnerRun(GAMES.razz, `razz-flush-${s}`)) {
+        if (!/세지 않으므로/.test(q.why)) continue
+        const five = (bestFiveLow(q.seats[q.answerLo[0]].hole, null) as LowRank).cards
+        const top = [...five].sort((a, b) => LOW_VALUE[b.rank] - LOW_VALUE[a.rank])[0].rank
+        expect(q.why).not.toContain('최고 패')
+        expect(q.why).toContain(`그냥 ${top} 로우다`)
+        if (top === '5') {
+          expect(q.why).toContain('5-4-3-2-A 는 가장 좋은 로우다')
+        } else {
+          nonWheel++
+          expect(q.why).not.toContain('가장 좋은 로우')
+        }
+      }
+    }
+    expect(nonWheel).toBeGreaterThan(0)
+  })
+
   it('「로우 없음」이 왜 답이 아닌지 문제마다 말한다', () => {
     for (const q of run()) {
       // 자격 조건이 없다는 것이 이 종목을 PLO8 과 가르는 사실이다 — 그것을 말해야 한다

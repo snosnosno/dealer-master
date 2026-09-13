@@ -101,9 +101,12 @@ function razzLowWhy(deal: Deal, answerLo: number[]): string {
   const best = deal.los[answerLo[0]] as LowRank
   const base = `${names(deal.seats, answerLo)}이 ${formatLowCards(best.cards)} 로 가장 낮다.`
 
+  // 「최고 패」라고 부르지 않는다 — 판의 1등일 뿐, A-5 의 최고는 5-4-3-2-A 하나다
   const ignored = ignoredShape(best.cards)
   if (ignored !== null) {
-    return `${base} A-5 로우는 ${ignored} 세지 않으므로 이것이 최고 패다.`
+    const top = formatLowCards(best.cards).split('-')[0]
+    const wheel = top === '5' ? ' 5-4-3-2-A 는 가장 좋은 로우다.' : ''
+    return `${base} A-5 로우는 ${ignored} 세지 않으므로 그냥 ${top} 로우다.${wheel}`
   }
 
   // 이긴 손이 이미 페어면 「상대 페어 때문에」는 거짓 설명이다 — 노페어로 이겼을 때만 말한다
