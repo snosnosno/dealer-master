@@ -13,10 +13,14 @@ export type PaletteAct = 'ante' | 'blinds' | 'burn' | 'deal' | 'draw' | 'betting
 /**
  * `'open'`(첫 순서 지목)은 팔레트에 없다. 딜러가 "이제 라운드를 열겠다"고 선언하는
  * 것이 아니라, 카드가 다 나가면 그 순간이 저절로 온다.
+ *
+ * `'award'`(팟 받을 좌석 지목)도 같다 — 팟 지급을 고르면 손이 열리고, 그다음 누구에게
+ * 줄지를 고른다. 이것이 없으면 팟 지급이 「버튼 한 번」으로 끝나 딜러가 실제로 가리는
+ * 일을 건너뛴다 (사용자 지적 2026-09-13).
  */
-export type StepAct = PaletteAct | 'open'
+export type StepAct = PaletteAct | 'open' | 'award'
 
-/** `streetIndex: -1` 은 스트릿에 속하지 않는다(블라인드·앤티·팟 지급). */
+/** `streetIndex: -1` 은 스트릿에 속하지 않는다(블라인드·앤티·팟 지급·승자 지목). */
 export type Step = { act: StepAct; streetIndex: number }
 
 /**
@@ -76,7 +80,7 @@ export type HandScript = {
   betting: Record<string, BettingAction[]>
 }
 
-export type Phase = 'palette' | 'openSeat' | 'anim' | 'done'
+export type Phase = 'palette' | 'openSeat' | 'awardSeat' | 'anim' | 'done'
 
 export type ProcedureState = {
   spec: GameSpec
@@ -99,4 +103,6 @@ export type ProcedureState = {
 export type ProcedureAction =
   | { type: 'palette'; act: PaletteAct }
   | { type: 'seat'; seat: number }
+  /** 팟을 받을 좌석. 동률이면 여럿, 「로우 없음」이면 `lo` 가 빈 배열이다 */
+  | { type: 'award'; hi: number[]; lo: number[] }
   | { type: 'animEnd' }

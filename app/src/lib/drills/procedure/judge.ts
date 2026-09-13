@@ -8,6 +8,7 @@
  * **틀렸을 때 가리지 않는다.** 무엇이 먼저인지 한 줄로 말해 준다 — 연습이기 때문이다.
  */
 import type { FirstToAct } from '@/lib/games'
+import { awardAnswer, awardAsks, awardMatches } from './award'
 import { firstToActSeats } from './steps'
 import type { ProcedureAction, ProcedureState, Step } from './types'
 
@@ -30,6 +31,13 @@ export function judge(state: ProcedureState, action: ProcedureAction): Verdict {
       seats: state.table.seats,
     })
     return expected.includes(action.seat) ? { ok: true } : { ok: false, hint: openHint(state, step) }
+  }
+
+  if (state.phase === 'awardSeat') {
+    if (action.type !== 'award') return { ok: false, hint: awardHint(state) }
+    return awardMatches(awardAnswer(state.spec, state.table), action)
+      ? { ok: true }
+      : { ok: false, hint: awardHint(state) }
   }
 
   if (action.type !== 'palette') return { ok: false, hint: denyHint(state, step) }
@@ -76,6 +84,22 @@ const FIRST_TO_ACT_HINT: Record<FirstToAct, string> = {
   'lowest-hand': '열린 카드로 만든 로우가 가장 좋은 좌석입니다',
   'lowest-upcard': '업카드가 가장 낮은 좌석입니다',
   'highest-upcard-by-suit': '업카드가 가장 높은 좌석이고, 같으면 무늬로 가릅니다',
+}
+
+/**
+ * 팟을 누구에게 주는지 **무엇을 봐야 하는지** 한 줄. 답을 말하지 않는다.
+ * 종목 이름이 아니라 묻는 것(`asks`)으로 갈린다.
+ */
+function awardHint(state: ProcedureState): string {
+  const asks = awardAsks(state.spec)
+  const tie = '같은 손이면 모두 고릅니다.'
+  if (asks.hi && asks.lo) {
+    return `하이와 로우를 따로 가립니다 — 로우 자격이 없으면 「로우 없음」입니다. ${tie}`
+  }
+  if (asks.lo) {
+    return `살아 있는 손 중 로우가 가장 좋은 좌석입니다 — A-5 로우는 스트레이트·플러시를 세지 않습니다. ${tie}`
+  }
+  return `살아 있는 손 중 하이가 가장 높은 좌석입니다. ${tie}`
 }
 
 function openHint(state: ProcedureState, step: Step): string {

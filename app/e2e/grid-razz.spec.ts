@@ -100,6 +100,39 @@ test('라즈 좌석 일곱 장이 좌석 상자를 넘치지 않는다', async (
   await page.screenshot({ path: `e2e/shots/razz-procedure-${test.info().project.name}.png` })
 })
 
+test('라즈 팟 지급은 받을 좌석을 골라야 끝난다', async ({ page }) => {
+  await page.goto('/games/razz/procedure')
+  await page.waitForTimeout(600) // 시드 마운트 대기(ProcedureScreen)
+  await playFullHand(page)
+
+  // 팟 지급을 눌렀다고 끝나지 않는다 — 받을 좌석을 묻는다 (사용자 지적 2026-09-13)
+  await expect(page.getByText('팟을 받을 좌석을 고르세요')).toBeVisible()
+  await expect(page.getByText('한 핸드 완주')).toHaveCount(0)
+  // 라즈는 하이가 없다 — 로우 줄만 있다
+  await expect(page.locator('button[aria-label^="하이 "]')).toHaveCount(0)
+  await page.screenshot({ path: `e2e/shots/razz-award-ask-${test.info().project.name}.png`, fullPage: true })
+
+  // 정답을 스크립트가 모른다 — 살아 있는 좌석을 하나씩 줘 본다(브루트포스)
+  const submit = page.getByRole('button', { name: '팟 지급', exact: true })
+  let wrongTries = 0
+  for (let n = 1; n <= 6 && (await page.getByText('한 핸드 완주').count()) === 0; n++) {
+    const seat = page.locator(`button[aria-label="로우 ${n}번"]`)
+    if (await seat.isDisabled()) continue
+    await seat.click()
+    await submit.click()
+    await page.waitForTimeout(150)
+    if ((await page.getByText('한 핸드 완주').count()) > 0) break
+    wrongTries++
+    await expect(page.getByText(/아직 아닙니다/)).toBeVisible()
+    await seat.click() // 선택을 풀고 다음 좌석으로
+  }
+
+  await expect(page.getByText('한 핸드 완주')).toBeVisible()
+  await expect(page.getByText(/^팟 지급 [\d,]+ — 로우 \d번/)).toBeVisible()
+  await page.screenshot({ path: `e2e/shots/razz-award-${test.info().project.name}.png` })
+  expect(wrongTries).toBeLessThan(6)
+})
+
 test('라즈 승자 판독은 하이 줄 없이 로우만 묻는다', async ({ page }) => {
   await page.goto('/games/razz/winner')
   await expect(page.getByText(/1 \/ 10/)).toBeVisible()

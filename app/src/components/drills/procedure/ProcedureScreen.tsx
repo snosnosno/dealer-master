@@ -11,7 +11,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { PokerTable } from '@/components/table/PokerTable'
+import { AwardPanel } from './AwardPanel'
 import { Palette } from './Palette'
+import { awardAsks } from '@/lib/drills/procedure/award'
 import { reduce, startProcedure } from '@/lib/drills/procedure/reduce'
 import type { PaletteAct } from '@/lib/drills/procedure/types'
 import type { GameSpec } from '@/lib/games'
@@ -94,6 +96,10 @@ function ProcedureRun({
     setState((s) => reduce(s, { type: 'seat', seat }))
   }, [])
 
+  const award = useCallback((hi: number[], lo: number[]) => {
+    setState((s) => reduce(s, { type: 'award', hi, lo }))
+  }, [])
+
   return (
     <>
       <div className="mb-2 flex items-center gap-3 text-xs text-zinc-500">
@@ -137,7 +143,9 @@ function ProcedureRun({
         </div>
       ) : (
         <>
-          {state.phase === 'openSeat' ? (
+          {state.phase === 'awardSeat' ? (
+            <AwardPanel asks={awardAsks(spec)} seats={state.table.seats} onSubmit={award} />
+          ) : state.phase === 'openSeat' ? (
             <div className="mt-3 rounded-xl border border-dm-teal-600 bg-dm-teal-50 p-4 dark:bg-zinc-900">
               <p className="text-sm font-bold text-dm-teal-800 dark:text-dm-teal-100">
                 이번 라운드의 첫 순서를 지목하세요

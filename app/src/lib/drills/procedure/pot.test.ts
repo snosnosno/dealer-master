@@ -7,8 +7,8 @@
 import { describe, expect, it } from 'vitest'
 import { GAMES, type GameSpec } from '@/lib/games'
 import { dealHand, SEAT_COUNT } from './deal'
-import { reduce, startProcedure } from './reduce'
-import { firstToActSeats } from './steps'
+import { startProcedure } from './reduce'
+import { stepCorrectly } from './testkit'
 import type { ProcedureState } from './types'
 
 const SEEDS = ['a1', 'b2', 'c3', 'd4', 'e5', 'f6', 'g7', 'h8', 'i9', 'j0', 'k1', 'l2']
@@ -16,25 +16,7 @@ const SEEDS = ['a1', 'b2', 'c3', 'd4', 'e5', 'f6', 'g7', 'h8', 'i9', 'j0', 'k1',
 function playToEnd(spec: GameSpec, seed: string): ProcedureState {
   let state = startProcedure(spec, seed)
   for (let guard = 0; guard < 200 && state.phase !== 'done'; guard++) {
-    if (state.phase === 'anim') {
-      state = reduce(state, { type: 'animEnd' })
-      continue
-    }
-    if (state.phase === 'openSeat') {
-      const street = state.spec.streets[state.steps[state.at].streetIndex]
-      state = reduce(state, {
-        type: 'seat',
-        // 동률이면 집합이 여럿이지만 어느 쪽을 눌러도 맞다 — 완주에는 하나면 된다
-        seat: firstToActSeats(street.firstToAct, {
-          buttonSeat: state.script.buttonSeat,
-          seats: state.table.seats,
-        })[0],
-      })
-      continue
-    }
-    const act = state.steps[state.at].act
-    if (act === 'open') throw new Error('open 은 팔레트가 아니다')
-    state = reduce(state, { type: 'palette', act })
+    state = stepCorrectly(state)
   }
   if (state.phase !== 'done') throw new Error(`완주하지 못함: ${seed}`)
   return state

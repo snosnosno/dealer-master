@@ -11,6 +11,7 @@
  */
 import type { SeatState, TableView } from '@/lib/simulator'
 import type { GameSpec } from '@/lib/games'
+import { awardAnswer, awardAsks } from './award'
 import { dealHand, SEAT_COUNT } from './deal'
 import { judge } from './judge'
 import { stepsFor } from './steps'
@@ -84,7 +85,9 @@ export function reduce(state: ProcedureState, action: ProcedureAction): Procedur
 
 function phaseFor(step: Step | undefined): Phase {
   if (step === undefined) return 'done'
-  return step.act === 'open' ? 'openSeat' : 'palette'
+  if (step.act === 'open') return 'openSeat'
+  if (step.act === 'award') return 'awardSeat'
+  return 'palette'
 }
 
 const num = (v: number) => v.toLocaleString('ko-KR')
@@ -252,11 +255,28 @@ function applyStep(
     }
 
     case 'payout':
-      // 승자를 묻지 않는다 — 보드보기·팟 분배 드릴의 몫이다
+      // 손을 연다. 누구에게 줄지는 다음 스텝(`award`)에서 고른다
       return {
         table: { ...table, seats: table.seats.map((s) => ({ ...s, revealed: !s.folded })) },
         burnCount: state.burnCount,
-        log: [`팟 지급 — ${table.pot.toLocaleString('ko-KR')}`],
+        log: ['쇼다운 — 살아 있는 손을 엽니다'],
       }
+
+    case 'award': {
+      // 판정은 이미 통과했다 — 여기서는 누가 받았는지만 남긴다. 칩 나누기는 팟 분배 드릴의 몫이다
+      const answer = awardAnswer(spec, table)
+      const asks = awardAsks(spec)
+      const who = (list: number[]) =>
+        list.length === 0 ? '없음' : list.map((i) => table.seats[i].name).join(' · ')
+      const parts = [
+        ...(asks.hi ? [`하이 ${who(answer.hi)}`] : []),
+        ...(asks.lo ? [`로우 ${who(answer.lo)}`] : []),
+      ]
+      return {
+        table,
+        burnCount: state.burnCount,
+        log: [`팟 지급 ${num(table.pot)} — ${parts.join(' / ')}`],
+      }
+    }
   }
 }

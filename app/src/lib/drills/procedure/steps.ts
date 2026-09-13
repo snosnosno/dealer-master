@@ -32,6 +32,7 @@ export function stepsFor(spec: GameSpec): Step[] {
   })
 
   steps.push({ act: 'payout', streetIndex: -1 })
+  steps.push({ act: 'award', streetIndex: -1 })
   return steps
 }
 

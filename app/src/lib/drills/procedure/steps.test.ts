@@ -14,13 +14,14 @@ describe('PALETTE', () => {
 describe('stepsFor(plo8)', () => {
   const steps = stepsFor(GAMES.plo8)
 
-  it('17스텝이다', () => {
-    expect(steps).toHaveLength(17)
+  it('18스텝이다', () => {
+    expect(steps).toHaveLength(18)
   })
 
-  it('블라인드로 시작하고 팟 지급으로 끝난다', () => {
+  it('블라인드로 시작하고 팟 지급 → 승자 지목으로 끝난다', () => {
     expect(steps[0]).toEqual({ act: 'blinds', streetIndex: -1 })
     expect(steps[16]).toEqual({ act: 'payout', streetIndex: -1 })
+    expect(steps[17]).toEqual({ act: 'award', streetIndex: -1 })
   })
 
   it('프리플랍은 번카드가 없고 플랍부터 있다', () => {

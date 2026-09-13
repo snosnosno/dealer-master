@@ -55,8 +55,8 @@ describe('라즈가 격자에 붙는다', () => {
     expect(drills).toHaveLength(5)
   })
 
-  it('진행절차 대본이 스펙만으로 21스텝을 낸다', () => {
-    expect(stepsFor(GAMES.razz)).toHaveLength(21)
+  it('진행절차 대본이 스펙만으로 22스텝을 낸다', () => {
+    expect(stepsFor(GAMES.razz)).toHaveLength(22)
   })
 
   it('앤티 종목이라 대본이 블라인드가 아니라 앤티로 열린다', () => {

@@ -4,6 +4,7 @@ import { GAMES } from '@/lib/games'
 import { dealHand } from './deal'
 import { firstToActSeats, stepsFor } from './steps'
 import { reduce, startProcedure } from './reduce'
+import { stepCorrectly } from './testkit'
 import type { ProcedureState } from './types'
 
 const start = () => startProcedure(GAMES.plo8, 'seed-1')
@@ -14,22 +15,6 @@ const start = () => startProcedure(GAMES.plo8, 'seed-1')
  */
 const firstToActSeatsFirst = (...args: Parameters<typeof firstToActSeats>) =>
   firstToActSeats(...args)[0]
-
-/** 지금 상태가 요구하는 올바른 입력 하나를 만들어 넣는다. */
-function stepCorrectly(state: ProcedureState): ProcedureState {
-  if (state.phase === 'anim') return reduce(state, { type: 'animEnd' })
-  if (state.phase === 'openSeat') {
-    const street = state.spec.streets[state.steps[state.at].streetIndex]
-    const seat = firstToActSeatsFirst(street.firstToAct, {
-      buttonSeat: state.script.buttonSeat,
-      seats: state.table.seats,
-    })
-    return reduce(state, { type: 'seat', seat })
-  }
-  const act = state.steps[state.at].act
-  if (act === 'open') throw new Error('open 은 팔레트가 아니다')
-  return reduce(state, { type: 'palette', act })
-}
 
 describe('startProcedure', () => {
   it('팔레트를 기다리며 시작하고 막힘이 0 이다', () => {
@@ -335,5 +320,3 @@ describe('첫 순서 동률 — 집합에 들면 맞다', () => {
     }
   })
 })
-
-export { stepCorrectly }
