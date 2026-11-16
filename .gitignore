@@ -47,3 +47,6 @@ next-env.d.ts
 
 # worktrees
 .claude/worktrees/
+
+# ECC 설치 상태 (머신별 절대경로 포함 — 재설치 시 재생성됨)
+.claude/ecc/
