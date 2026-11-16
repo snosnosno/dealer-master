@@ -187,9 +187,47 @@ button { font-family: inherit; }
 /* 말풍선 · 떠오르는 글자 · 딜러 피로 */
 .bubble {
   position: absolute; transform: translate(-50%, -100%); pointer-events: none;
-  background: #fff; color: #1b1612; border-radius: 10px; padding: 3px 8px; font-size: 11.5px; font-weight: 700;
-  white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.35);
+  background: #fff; color: #1b1612; border-radius: 9px; padding: 2px 7px; font-size: 10.5px; font-weight: 700;
+  white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 2px 6px rgba(0,0,0,.35);
 }
+/* 잡담은 반투명하게 — 판정 · 탈락 같은 중요한 말이 위에 선다 */
+.bubble.amb { opacity: .78; font-weight: 600; z-index: 0; }
+.bubble:not(.amb) { z-index: 1; }
+
+/* 첫날 팁 */
+#tip { position: fixed; left: 50%; transform: translateX(-50%); top: calc(118px + env(safe-area-inset-top, 0px)); z-index: 14; width: min(560px, calc(100% - 32px)); pointer-events: none; }
+.tipbox { background: #1d3a5f; color: #fff; border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.55; font-weight: 600; box-shadow: var(--shadow); }
+
+/* 타이틀 */
+.titlecard { text-align: center; padding: 6px 0 10px; }
+.titlecard h1 { font-size: 34px; margin: 6px 0 4px; letter-spacing: -.02em; font-weight: 900; color: var(--felt); text-wrap: balance; }
+.titlecard .sub { color: var(--ink-2); margin: 0; }
+.howto { list-style: none; padding: 0; margin: 10px 0 12px; display: grid; gap: 6px; }
+.howto li { background: var(--surface-2); border-radius: 9px; padding: 8px 12px; font-size: 13px; color: var(--ink-2); }
+.howto li b { color: var(--ink); }
+.titlebtns { display: flex; gap: 8px; flex-wrap: wrap; }
+.titlebtns .cta { flex: 1; min-width: 180px; }
+
+/* 목표 · 등급 · 별 · 직원 */
+.goalbox { background: var(--amber-bg); color: var(--amber-ink); border-radius: 10px; padding: 8px 12px; font-size: 13px; margin-bottom: 10px; }
+.goalbox ol { margin: 4px 0 0; padding-left: 20px; color: var(--ink); }
+.rank { font-weight: 800; color: var(--felt); }
+.stars { text-align: center; font-size: 44px; letter-spacing: 6px; margin: 4px 0 0; }
+.stars span { color: var(--line-strong); display: inline-block; }
+.stars span.on { color: #EF9F27; animation: pop .5s both; }
+@keyframes pop { 0% { transform: scale(0); } 70% { transform: scale(1.3); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .stars span.on { animation: none; } }
+.rankup { text-align: center; background: var(--ok-bg); color: var(--ok); border-radius: 10px; padding: 8px; font-weight: 800; margin: 6px 0; }
+.goals { list-style: none; padding: 0; margin: 0 0 8px; }
+.goals li { padding: 4px 0; font-weight: 700; }
+.goals li.ok { color: var(--ok); }
+.goals li.no { color: var(--ink-3); }
+.role { font-size: 10.5px; font-weight: 800; padding: 1px 7px; border-radius: 99px; background: var(--surface-2); color: var(--ink-2); margin-left: 4px; }
+.role.r-dealer { background: #1c1c1c; color: #fff; }
+.role.r-server { background: #E6B94A; color: #2a1800; }
+.role.r-counter { background: #2C4A7A; color: #fff; }
+.role.r-cleaner { background: #6FA8A0; color: #08201c; }
+.role.r-floor { background: #2E6E52; color: #fff; }
 .bubble::after { content: ''; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%); border: 5px solid transparent; border-top-color: #fff; border-bottom: 0; }
 .bubble.me { background: #EF9F27; color: #2a1800; }
 .bubble.me::after { border-top-color: #EF9F27; }
@@ -253,6 +291,7 @@ button { font-family: inherit; }
 <div id="modal"></div>
 <div id="toast"></div>
 <div id="goal"></div>
+<div id="tip"></div>
 <script src="vendor/three.min.js"></script>
 <script src="game.js"></script>
 </body>
