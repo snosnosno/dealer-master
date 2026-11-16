@@ -24,7 +24,7 @@ var N = 6;
 var START_BANK = 1500000;
 var STOCK_COST = 2000;
 
-var WAGE = { dealer: 150000, staff: 120000, counter: 110000, cleaner: 100000, ops: 200000 };
+var WAGE = { dealer: 150000, staff: 120000, counter: 110000, cleaner: 100000, ops: 120000 };
 var FEES = [20000, 30000, 50000];
 var STACKS = [
   { chips: 20000, ko: '얕게 20,000', bust: 1.3, sat: -0.1 },
@@ -502,14 +502,31 @@ var G = {
   tasks: [], spills: [], queue: [], log: [], nameIx: 0,
   stats: null, nextArrival: 2, nextSpill: 30, winner: null, winnerAt: null, finalized: false,
   counterProg: 0, stock: 0, announced: {}, chipIssueAt: null, finalDone: false,
-  roster: [], staffSeq: 10, cands: [], goals: [], tips: {}, talkOn: true, servers: [], floorStaff: null
+  roster: [], staffSeq: 10, cands: [], goals: [], tips: {}, talkOn: true, servers: [], floorStaff: null,
+  weekLog: [], debtDays: 0
 };
 window.__pub = G;   // 자동 점검용
 
 function gameMin() { return OPEN_MIN + G.simT * (CLOSE_MIN - OPEN_MIN) / DAY_SEC; }
 function levelMin() { return LEVEL_LEN[G.cfg.level]; }
 function level() { return Math.min(BLINDS.length - 1, Math.floor((gameMin() - OPEN_MIN) / levelMin())); }
-function regOpen() { return gameMin() < REG_CLOSE_MIN; }
+/* 주간 캠페인 — 1일차가 월요일. 요일마다 대회 성격이 다르고 일요일은 휴무 · 주간 정산 */
+var WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
+var SEASON_WEEKS = 8, WEEKLY_RENT = 900000, SEASON_GOAL_BANK = 5000000, SEASON_GOAL_RANK = '홀덤 명소';
+function dayInfo(day) {
+  var d = day || G.day, wd = (d - 1) % 7, week = Math.floor((d - 1) / 7) + 1;
+  var base = { wd: wd, week: week, wk: WEEKDAYS[wd], name: '데일리', short: '데일리', arrivalK: 1, feeMul: 1, stack: null, regClose: 23 * 60, repMul: 1,
+    desc: '평일 데일리 토너먼트' };
+  if (wd === 4) return Object.assign(base, { name: '금요 딥스택', short: '딥스택', arrivalK: 1.35, stack: 2, desc: '스타팅 50,000 고정 · 손님 +35% · 오래 간다' });
+  if (wd === 5) return Object.assign(base, { name: '토요 메인 이벤트', short: '메인 이벤트', arrivalK: 1.6, feeMul: 2, regClose: 24 * 60, repMul: 1.5,
+    desc: '참가비 2배 · 손님 +60% · 레지 마감 24:00 · 평판이 1.5배로 움직인다' });
+  if (wd === 6) return Object.assign(base, { name: '휴무', short: '휴무', desc: '주간 정산 · 임대료' });
+  return base;
+}
+function fee() { return G.cfg.fee * dayInfo().feeMul; }
+function stackIdx() { var i = dayInfo(); return i.stack !== null ? i.stack : G.cfg.stack; }
+function regCloseMin() { return dayInfo().regClose; }
+function regOpen() { return gameMin() < regCloseMin(); }
 function tableCount() { return G.owned.table3 ? 3 : 2; }
 function dealerCount() { return G.roster.filter(function (s) { return s.role === 'dealer'; }).length; }
 
@@ -765,7 +782,7 @@ function spawnCustomer() {
   var type = pickType();
   var c = makeActor(makePerson(CUST_TYPES[type].color), 'cust', nextName());
   c.id = G.customers.length; c.type = type; c.alive = true; c.state = 'arrive';
-  c.sat = 70 + (STACKS[G.cfg.stack].sat * 50); c.table = null; c.seat = null; c.barSpot = null;
+  c.sat = 70 + (STACKS[stackIdx()].sat * 50); c.table = null; c.seat = null; c.barSpot = null;
   c.entries = 0; c.lastDrink = -99; c.leaveAt = 0; c.nextTalk = G.simT + 8 + Math.random() * 20;
   c.mesh.position.copy(SPOTS.outside);
   G.customers.push(c);
@@ -809,8 +826,8 @@ function register(c) {
   c.entries++;
   G.stats.entries++;
   if (c.entries === 1) G.stats.unique++;
-  G.dayRevenue += G.cfg.fee;
-  floatText(V(8.2, 2.4).setY(1.8), '+' + won(G.cfg.fee), 'money');
+  G.dayRevenue += fee();
+  floatText(V(8.2, 2.4).setY(1.8), '+' + won(fee()), 'money');
   floatText(c.mesh.position.clone().setY(2.0), '🎟️ #' + G.stats.entries, 'good');
   say(c, c.entries > 1 ? '🎟️ 다시 간다!' : '🎟️ 등록 완료!', 1.6);
   var cols = [0xd9dedb, 0x2e6e52, 0xb23a2e, 0x2c4a7a];
@@ -822,7 +839,7 @@ function register(c) {
   }
   pulse('entries'); pulse('money');
   SFX.cash();
-  log(c.name + '(' + CUST_TYPES[c.type].ko + ') ' + (c.entries > 1 ? '리엔트리' : '등록') + ' — 참가비 ' + won(G.cfg.fee));
+  log(c.name + '(' + CUST_TYPES[c.type].ko + ') ' + (c.entries > 1 ? '리엔트리' : '등록') + ' — 참가비 ' + won(fee()));
   toBar(c, 'wait');
 }
 
@@ -951,7 +968,7 @@ function tickTable(t, dt) {
 function endHand(t) {
   t.hands++;
   t.handT = 0;
-  var lv = level(), p = Math.min(0.14, 0.025 + lv * 0.007) * STACKS[G.cfg.stack].bust * (regOpen() ? 1 : 2.6);   // 마감 뒤엔 결판을 향해 빨라진다
+  var lv = level(), p = Math.min(0.14, 0.025 + lv * 0.007) * STACKS[stackIdx()].bust * (regOpen() ? 1 : 2.6);   // 마감 뒤엔 결판을 향해 빨라진다
   var occs = [];
   for (var i = 0; i < N; i++) if (occ(t, i)) occs.push(i);
   var busted = [];
@@ -1108,21 +1125,21 @@ function checkAnnouncements() {
       tip('ann', '📢 블라인드가 올랐다! 8초 안에 맞게 안내하면 정시 안내 보너스. 구조표에서 지금 시각의 줄을 읽는다. 플로어 보조나 자동 방송 시스템에 맡길 수도 있다.');
     }
   }
-  if (gameMin() >= REG_CLOSE_MIN - 30 && !G.announced.regwarn) {
+  if (gameMin() >= regCloseMin() - 30 && !G.announced.regwarn) {
     G.announced.regwarn = true;
     addTask({ kind: 'announce', type: 'regwarn', limit: ANNOUNCE_LIMIT });
   }
   if (!regOpen() && !G.announced.regclose) {
     G.announced.regclose = true;
     addTask({ kind: 'announce', type: 'regclose', limit: ANNOUNCE_LIMIT + 10 });
-    toast('23:00 — 레지 마감. 아나운스하세요');
+    toast(clock(regCloseMin()) + ' — 레지 마감. 아나운스하세요');
   }
 }
 
 function annMissed(task) {
   removeTask(task);
   G.stats.annMiss++;
-  G.rep = clamp(G.rep - 1.5, 0, 100);
+  G.rep = clamp(G.rep - 0.8, 0, 100);
   var c = pick(G.customers.filter(function (x) { return x.alive && x.state === 'seated'; }));
   if (c) say(c, task.type === 'level' ? '지금 블라인드 몇이에요?' : '마감 언제예요?', 3);
   log('아나운스를 놓쳤다', 'bad');
@@ -1337,7 +1354,7 @@ function tickOrders(dt) {
 /* 플로어 보조 — 12초 넘게 남은 아나운스 · 밸런싱 · 청소를 맡는다. 판정 호출은 하지 않는다 */
 var ANN_LINE = {
   level: function (k) { var b = BLINDS[k.lv]; return '레벨 ' + (k.lv + 1) + ' — ' + won(b[0]) + '/' + won(b[1]); },
-  regwarn: function () { return '23:00 레지 마감합니다'; },
+  regwarn: function () { return clock(regCloseMin()) + ' 레지 마감합니다'; },
   regclose: function () { return '레지 마감합니다!'; },
   final: function (k) { return '파이널 테이블 — ' + k.n + '명!'; }
 };
@@ -1434,7 +1451,7 @@ function simulate(dt) {
       spawnCustomer();
       var feeK = G.cfg.fee === 20000 ? 0.75 : (G.cfg.fee === 50000 ? 1.6 : 1);
       var repK = clamp(1.6 - G.rep / 100, 0.55, 1.4) * (G.owned.interior ? 0.87 : 1);
-      G.nextArrival = (5 + Math.random() * 6) * feeK * repK * (tableCount() === 3 ? 0.78 : 1);
+      G.nextArrival = (5 + Math.random() * 6) * feeK * repK * (tableCount() === 3 ? 0.78 : 1) / dayInfo().arrivalK;
     }
   }
   stepPlayerKeys(dt);
@@ -1514,7 +1531,8 @@ function flashClock() {
 function renderHud() {
   var hud = $('#hud');
   if (!hud._built) {
-    hud.innerHTML = '<span class="title">홀덤펍 점장</span>' +
+    hud.innerHTML = '' +
+      '<span class="kv daytag">' + dayInfo().week + '주 ' + dayInfo().wk + ' · ' + dayInfo().short + '</span>' +
       '<span class="kv"><b data-h="clock"></b></span>' +
       '<span class="kv" data-h="lvbox">⏱ 다음 레벨 <b data-h="next"></b></span>' +
       '<span class="kv m-hide">엔트리 <b data-h="entries"></b></span>' +
@@ -1922,11 +1940,12 @@ function openAnnounce(task) {
     why = '지금 막 레벨 ' + (task.lv + 1) + '이 시작됐다. 블라인드는 ' + won(cur[0]) + ' / ' + won(cur[1]) + '. 한 칸 앞서거나 뒤처진 숫자를 부르면 손님이 틀린 금액으로 베팅한다.';
   } else if (task.type === 'regwarn') {
     title = '레지 마감 30분 전';
-    var o2 = ['30분 뒤 23:00에 등록과 리엔트리를 마감합니다', '지금 등록과 리엔트리를 마감합니다', '자정에 등록과 리엔트리를 마감합니다'];
+    var rc = regCloseMin();
+    var o2 = ['30분 뒤 ' + clock(rc) + '에 등록과 리엔트리를 마감합니다', '지금 등록과 리엔트리를 마감합니다', '30분 뒤 ' + clock(rc + 60) + '에 등록과 리엔트리를 마감합니다'];
     choices = shuffle(o2.slice()); correct = choices.indexOf(o2[0]);
-    why = '오늘 구조의 레지 마감은 23:00 이다. 30분 전에 미리 알리면 탈락한 손님이 리엔트리를 결정할 시간을 갖는다.';
+    why = '오늘(' + dayInfo().name + ') 레지 마감은 ' + clock(rc) + ' 이다. 30분 전에 미리 알리면 탈락한 손님이 리엔트리를 결정할 시간을 갖는다.';
   } else if (task.type === 'regclose') {
-    var E = G.stats.entries, S = STACKS[G.cfg.stack].chips, U = G.stats.unique;
+    var E = G.stats.entries, S = STACKS[stackIdx()].chips, U = G.stats.unique;
     var remaining = G.customers.filter(function (c) { return c.alive && c.table !== null; }).length || 1;
     title = '레지 마감 — 총 칩을 알린다';
     extra = '<p>오늘 엔트리 <b>' + E + '</b>건 (처음 온 사람 ' + U + '명 + 리엔트리 ' + (E - U) + '건) · 스타팅 스택 <b>' + won(S) + '</b> · 남은 사람 ' + remaining + '명</p>';
@@ -1998,7 +2017,7 @@ var SAVE_KEY = 'pubsim.save.v1';
 function saveGame() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      day: G.day, rep: G.rep, bank: G.bank, owned: G.owned, roster: G.roster, staffSeq: G.staffSeq,
+      day: G.day, rep: G.rep, bank: G.bank, owned: G.owned, roster: G.roster, staffSeq: G.staffSeq, weekLog: G.weekLog, debtDays: G.debtDays,
       cfg: { fee: G.cfg.fee, stack: G.cfg.stack, level: G.cfg.level, price: G.cfg.price, stock: G.cfg.stock, assign: G.cfg.assign }
     }));
   } catch (e) { /* 저장이 막힌 브라우저 — 이어하기만 안 될 뿐이다 */ }
@@ -2009,7 +2028,7 @@ function loadSave() {
 function resetGame() {
   G.day = 1; G.rep = 50; G.bank = START_BANK; G.owned = {}; G.roster = startRoster(); G.staffSeq = 10;
   G.cfg = { fee: 30000, stack: 1, level: 1, price: 1, stock: 60, chipOk: null, assign: [1, 2, null], train: null };
-  G.goalsDay = null; G.candDay = null; G.tips = {};
+  G.goalsDay = null; G.candDay = null; G.tips = {}; G.weekLog = []; G.debtDays = 0;
   applyDecor();
 }
 
@@ -2031,7 +2050,7 @@ function titleScreen() {
     '</ul>' +
     '<p class="note">매출은 참가비와 음료뿐이다. 우승 상품은 트로피와 다음 대회 시드권 — 칩 환전과 현금 시상은 없다. 판정 정답은 딜러마스터 TDA 케이스 문서를 따르며 원문 대조 전이다.</p>' +
     '<div class="titlebtns">' +
-    (sv ? '<button class="cta" data-cont="1">이어하기 — ' + sv.day + '일차 · ' + rankOf(sv.rep) + '</button>' : '') +
+    (sv ? '<button class="cta" data-cont="1">이어하기 — ' + dayInfo(sv.day).week + '주차 ' + dayInfo(sv.day).wk + '요일 · ' + rankOf(sv.rep) + '</button>' : '') +
     '<button class="cta' + (sv ? ' ghost' : '') + '" data-go="1">' + (sv ? '새로 시작' : '오픈 준비') + '</button></div>');
   $('[data-go]').onclick = function () { audioOn(); resetGame(); prepScreen('shop'); };
   var c = $('[data-cont]');
@@ -2039,9 +2058,10 @@ function titleScreen() {
     audioOn();
     resetGame();
     G.day = sv.day; G.rep = sv.rep; G.bank = sv.bank; G.owned = sv.owned || {}; G.roster = sv.roster || startRoster(); G.staffSeq = sv.staffSeq || 50;
+    G.weekLog = sv.weekLog || []; G.debtDays = sv.debtDays || 0;
     Object.keys(sv.cfg || {}).forEach(function (k) { G.cfg[k] = sv.cfg[k]; });
     applyDecor();
-    prepScreen('shop');
+    if (dayInfo().wd === 6) weeklyScreen(); else prepScreen('shop');
   };
 }
 
@@ -2080,8 +2100,17 @@ function prepScreen(tab) {
   // 해고된 딜러가 배치에 남아 있으면 비운다
   cfg.assign = cfg.assign.map(function (id) { return G.roster.some(function (s) { return s.id === id && s.role === 'dealer'; }) ? id : null; });
   var tabs = [['shop', '상점'], ['staff', '직원'], ['chips', '칩 · 구조'], ['drinks', '음료'], ['dealers', '딜러 배치']];
-  var h = '<div class="kicker">' + G.day + '일차 · 17:30 · 오픈 준비</div><h2>오늘 밤을 준비한다</h2>' +
+  var info = dayInfo(), first = G.day - info.wd;
+  var cal = '<div class="cal">' + WEEKDAYS.map(function (wd, i) {
+    var di = dayInfo(first + i), past = i < info.wd, today = i === info.wd;
+    var logd = G.weekLog.filter(function (x) { return x.day === first + i; })[0];
+    return '<div class="cd' + (today ? ' today' : '') + (past ? ' past' : '') + (i >= 4 ? ' ev' + i : '') + '"><b>' + wd + '</b><span>' + di.short + '</span>' +
+      (logd ? '<em>' + '★'.repeat(logd.stars) + '</em>' : '') + '</div>';
+  }).join('') + '</div>';
+  var h = '<div class="kicker">' + info.week + '주차 ' + info.wk + '요일 · 17:30 · 오픈 준비</div><h2>' + info.name + '</h2>' +
+    '<p class="note" style="margin-top:-4px">' + info.desc + '</p>' + cal +
     '<div class="bankline">자금 <b>' + won(G.bank) + '원</b> · 평판 <b>' + Math.round(G.rep) + '</b> · <span class="rank">' + rankOf(G.rep) + '</span> · 오늘 인건비 <b>' + won(wagesTotal()) + '</b></div>' +
+    seasonBar() +
     '<div class="goalbox"><b>🎯 오늘의 목표</b> (하나에 +' + won(GOAL_REWARD) + '원 · 평판 +2)<ol>' + G.goals.map(function (g) { return '<li>' + goalText(g) + '</li>'; }).join('') + '</ol></div>' +
     '<div class="tabs">' + tabs.map(function (x) { return '<button data-tab="' + x[0] + '" class="' + (G.prepTab === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>';
 
@@ -2103,15 +2132,16 @@ function prepScreen(tab) {
       }).join('') + (G.cands.length ? '' : '<p class="note">오늘은 더 찾아온 사람이 없다.</p>') + '</div>' +
       '<p class="note">일당은 출근한 날마다 나간다. <b>2일차부터 출근율만큼만 나온다</b> — 노쇼하면 영업 중 🧑‍💼 로 대타를 부른다. 직원은 하루 일할 때마다 능력이 1씩 오른다. 플로어 보조는 아나운스 · 밸런싱 · 청소를 대신하지만 <b>판정 호출은 점장 몫</b>이다.</p>';
   } else if (G.prepTab === 'chips') {
-    h += '<h3>스타팅 스택</h3><div class="seg">' + STACKS.map(function (s, i) {
-      return '<button data-stack="' + i + '" class="' + (cfg.stack === i ? 'on' : '') + '">' + s.ko + '<br><small>' + (i === 0 ? '빨리 끝남 · 만족 ↓' : (i === 2 ? '오래 감 · 만족 ↑' : '보통')) + '</small></button>';
+    var lockStack = info.stack !== null;
+    h += '<h3>스타팅 스택' + (lockStack ? ' — 오늘은 ' + STACKS[info.stack].ko + ' 고정' : '') + '</h3><div class="seg">' + STACKS.map(function (s, i) {
+      return '<button data-stack="' + i + '"' + (lockStack ? ' disabled' : '') + ' class="' + (stackIdx() === i ? 'on' : '') + '">' + s.ko + '<br><small>' + (i === 0 ? '빨리 끝남 · 만족 ↓' : (i === 2 ? '오래 감 · 만족 ↑' : '보통')) + '</small></button>';
     }).join('') + '</div>' +
       '<h3>레벨 시간</h3><div class="seg">' + LEVEL_LEN.map(function (m, i) {
         return '<button data-lvl="' + i + '" class="' + (cfg.level === i ? 'on' : '') + '">' + m + '분</button>';
       }).join('') + '</div>' +
       '<h3>참가비</h3><div class="seg">' + FEES.map(function (f) {
         var hint = f === 20000 ? '손님 ↑ · 객단가 ↓' : (f === 30000 ? '보통' : '손님 ↓ · 리엔트리 ↓');
-        return '<button data-fee="' + f + '" class="' + (cfg.fee === f ? 'on' : '') + '">' + won(f) + '원<br><small>' + hint + '</small></button>';
+        return '<button data-fee="' + f + '" class="' + (cfg.fee === f ? 'on' : '') + '">' + won(f * info.feeMul) + '원<br><small>' + hint + '</small></button>';
       }).join('') + '</div>' +
       '<h3>칩 세팅</h3><p class="note">테이블마다 스타팅 칩 세트를 깐다. 세트 구성이 틀리면 영업 중에 항의가 터진다.</p>' +
       (cfg.chipOk === null ? '<button class="cta" data-chipq="1">칩 세트 확인하기</button>' :
@@ -2194,7 +2224,7 @@ function buy(id) {
 
 /* 칩 세팅 — 스타팅 스택 칩 세트 구성 확인 */
 function chipQuiz() {
-  var S = STACKS[G.cfg.stack].chips;
+  var S = STACKS[stackIdx()].chips;
   var a = Math.floor(S / 2 / 5000), r = S - a * 5000;
   var b = Math.floor(r * 0.6 / 1000), r2 = r - b * 1000;
   var c = Math.floor(r2 * 0.75 / 500), d = (r2 - c * 500) / 100;
@@ -2277,7 +2307,7 @@ function openDay() {
   G.absent.forEach(function (st) { log('📵 ' + st.name + '(' + ROLES[st.role].ko + ') 노쇼 — 연락이 안 된다', 'bad'); });
   G.phase = 'open';
   $('#hud')._built = false;
-  log(G.day + '일차 영업 시작 — 참가비 ' + won(G.cfg.fee) + ' · 스타팅 ' + won(STACKS[G.cfg.stack].chips) + ' · 레벨 ' + levelMin() + '분', 'hi');
+  log(dayInfo().week + '주차 ' + dayInfo().wk + '요일 ' + dayInfo().name + ' 시작 — 참가비 ' + won(fee()) + ' · 스타팅 ' + won(STACKS[stackIdx()].chips) + ' · 레벨 ' + levelMin() + '분', 'hi');
   if (G.absent.length) {
     toast('📵 노쇼 — ' + G.absent.map(function (x) { return x.name + '(' + ROLES[x.role].ko + ')'; }).join(' · ') + (msgs.length ? ' · ' + msgs.join(' · ') : '') + ' — 🧑‍💼 로 대타를 부를 수 있다');
     SFX.bad();
@@ -2296,14 +2326,14 @@ function closeDay() {
   G.customers.forEach(function (c) { if (c.alive) { G.stats.satSum += c.sat; G.stats.satN++; } });
   G.tasks = []; G.tables.forEach(function (t) { t.call = null; t.def.alarm.visible = false; });
   renderTasks();
-  var s = G.stats, fee = G.cfg.fee;
-  var right = s.entries * fee;
-  var vals = [right, s.unique * fee === right ? right + fee : s.unique * fee, (s.entries + 1) * fee];
+  var s = G.stats, feeT = fee();
+  var right = s.entries * feeT;
+  var vals = [right, s.unique * feeT === right ? right + feeT : s.unique * feeT, (s.entries + 1) * feeT];
   var opts = vals.map(function (v) { return won(v) + '원'; });
   var order = shuffle([0, 1, 2]);
   G.current = { kind: 'settle', correct: order.indexOf(0) };
   showModal('<div class="kicker">' + clock(gameMin()) + ' · 마감</div><h2>레지 정산 — 참가비 합계</h2>' +
-    '<p>오늘 엔트리 <b>' + s.entries + '</b>건 (처음 온 사람 ' + s.unique + '명 + 리엔트리 ' + (s.entries - s.unique) + '건) · 참가비 ' + won(fee) + '원. 카운터 정산 금액은?</p>' +
+    '<p>오늘 엔트리 <b>' + s.entries + '</b>건 (처음 온 사람 ' + s.unique + '명 + 리엔트리 ' + (s.entries - s.unique) + '건) · 참가비 ' + won(feeT) + '원. 카운터 정산 금액은?</p>' +
     '<div class="choices">' + order.map(function (k) { return '<button class="choice" data-st="' + k + '">' + opts[k] + '</button>'; }).join('') + '</div>');
   document.querySelectorAll('[data-st]').forEach(function (b) {
     b.onclick = function () { report(+b.getAttribute('data-st') === 0); };
@@ -2312,7 +2342,7 @@ function closeDay() {
 
 function report(settleOk) {
   var s = G.stats;
-  var feeRev = s.entries * G.cfg.fee, drinkRev = s.drinks * PRICES[G.cfg.price].p;
+  var feeRev = s.entries * fee(), drinkRev = s.drinks * PRICES[G.cfg.price].p;
   var present = G.roster.filter(function (x) { return G.absent.indexOf(x) < 0; });
   var wages = present.concat(G.temps).reduce(function (t, x) { return t + x.wage; }, 0);
   var stockCost = G.cfg.stock * STOCK_COST;
@@ -2326,7 +2356,10 @@ function report(settleOk) {
   var net = feeRev + drinkRev - wages - WAGE.ops - stockCost - settleLoss + bonus;
   G.bank += net + stockCost;   // 재고비는 오픈 때 이미 냈다
   var rankBefore = rankOf(G.rep);
-  G.rep = clamp(G.rep + (avgSat - 60) / 8 + stars * 2, 0, 100);
+  var repDay = (G.rep - s.repStart) + (avgSat - 60) / 8 + stars * 2;   // 오늘 하루 평판 변화 전체
+  G.rep = clamp(s.repStart + repDay * dayInfo().repMul, 0, 100);
+  G.weekLog.push({ day: G.day, name: dayInfo().name, wk: dayInfo().wk, net: net, stars: stars, entries: s.entries, rep: Math.round(G.rep) });
+  G.debtDays = G.bank < 0 ? (G.debtDays || 0) + 1 : 0;
   var rankAfter = rankOf(G.rep);
   // 직원 성장 — 오늘 일한 사람은 능력 +1
   var grown = [];
@@ -2349,11 +2382,11 @@ function report(settleOk) {
   if (!reviews.length) reviews.push('“무난한 하루였다.” ★★★');
 
   var rows = [
-    ['참가비 ' + s.entries + '건 × ' + won(G.cfg.fee), feeRev],
+    ['참가비 ' + s.entries + '건 × ' + won(fee()), feeRev],
     ['음료 ' + s.drinks + '잔 × ' + won(PRICES[G.cfg.price].p), drinkRev],
     ['목표 보상 ' + stars + '개', bonus],
     ['인건비 (출근 ' + present.length + '명' + (G.temps.length ? ' · 대타 ' + G.temps.length : '') + ')', -wages],
-    ['운영비 (임대 · 전기 · 기타)', -WAGE.ops],
+    ['운영비 (전기 · 재료 · 기타 — 임대료는 일요일에)', -WAGE.ops],
     ['음료 재고 ' + G.cfg.stock + '개', -stockCost]
   ];
   if (settleLoss) rows.push(['정산 오차 확인 비용', -settleLoss]);
@@ -2374,13 +2407,71 @@ function report(settleOk) {
     (grown.length ? '<p class="note">직원 성장 — ' + grown.join(' · ') + ' 능력 +1</p>' : '') +
     (G.absent.length ? '<p class="note">📵 노쇼 — ' + G.absent.map(function (x) { return x.name; }).join(' · ') + ' (일당 없음)</p>' : '') +
     '<h3>후기</h3><p>' + reviews.join('<br>') + '</p>' +
-    '<button class="cta" data-next-day="1">다음 날 영업 준비</button> <button class="cta ghost" data-restart="1">타이틀로</button>';
+    (G.debtDays ? '<p class="warn">⚠️ 자금 마이너스 ' + G.debtDays + '일째 — 사흘 연속이면 폐업이다</p>' : '') +
+    '<button class="cta" data-next-day="1">' + (G.debtDays >= 3 ? '…' : (dayInfo(G.day + 1).wd === 6 ? '🗓️ 일요일 — 주간 정산' : '다음 날 영업 준비')) + '</button> <button class="cta ghost" data-restart="1">타이틀로</button>';
   showModal(h, true);
   if (stars === 3 || rankAfter !== rankBefore && G.rep > s.repStart) { SFX.win(); confetti(V(0, 0)); } else if (stars) SFX.good();
   G.day++; G.cfg.train = null; G.cfg.chipOk = null;
   saveGame();
-  $('[data-next-day]').onclick = function () { prepScreen('shop'); };
+  $('[data-next-day]').onclick = function () {
+    if (G.debtDays >= 3) { bankrupt(); return; }
+    if (dayInfo().wd === 6) weeklyScreen(); else prepScreen('shop');
+  };
   $('[data-restart]').onclick = function () { titleScreen(); };
+}
+
+/* 일요일 — 주간 정산 · 임대료 · 시즌 진행 */
+function weeklyScreen() {
+  var info = dayInfo(), w = info.week;
+  G.bank -= WEEKLY_RENT;
+  var sum = G.weekLog.reduce(function (t, d) { return t + d.net; }, 0);
+  var stars = G.weekLog.reduce(function (t, d) { return t + d.stars; }, 0);
+  var entries = G.weekLog.reduce(function (t, d) { return t + d.entries; }, 0);
+  var best = G.weekLog.slice().sort(function (a, b) { return b.net - a.net; })[0];
+  var rows = G.weekLog.map(function (d) {
+    return '<tr><td>' + d.wk + ' · ' + d.name + ' ' + '★'.repeat(d.stars) + '<span class="dim">' + '★'.repeat(3 - d.stars) + '</span></td><td>' + (d.net < 0 ? '−' : '') + won(Math.abs(d.net)) + '</td></tr>';
+  }).join('');
+  var seasonDone = w >= SEASON_WEEKS;
+  var cleared = G.rep >= 85 && G.bank >= SEASON_GOAL_BANK;
+  var h = '<div class="kicker">' + w + '주차 일요일 · 휴무</div><h2>🗓️ 주간 정산</h2>' +
+    '<table class="rows">' + rows +
+    '<tr><td>임대료 (주간)</td><td>−' + won(WEEKLY_RENT) + '</td></tr>' +
+    '<tr class="total"><td>이번 주 합계</td><td>' + (sum - WEEKLY_RENT < 0 ? '−' : '') + won(Math.abs(sum - WEEKLY_RENT)) + '</td></tr>' +
+    '<tr><td>자금</td><td>' + won(G.bank) + '</td></tr></table>' +
+    '<p>이번 주 별 <b>' + stars + '</b>/' + G.weekLog.length * 3 + ' · 엔트리 ' + entries + '건' + (best ? ' · 최고의 날 ' + best.wk + '요일 ' + best.name : '') + '</p>' +
+    seasonBar() +
+    (G.bank < 0 ? '<p class="warn">⚠️ 임대료를 내고 자금이 마이너스다. 다음 주에 사흘 연속 적자면 폐업.</p>' : '') +
+    '<button class="cta" data-week="1">' + (seasonDone ? '시즌 결과 보기' : (w + 1) + '주차 시작 — 월요일') + '</button>';
+  showModal(h, true);
+  SFX.cash();
+  G.weekLog = [];
+  G.day++;   // 월요일로
+  saveGame();
+  $('[data-week]').onclick = function () { if (seasonDone) seasonEnd(cleared); else prepScreen('shop'); };
+}
+function seasonBar() {
+  var info = dayInfo(), w = Math.min(SEASON_WEEKS, info.week);
+  return '<div class="season"><b>🏁 시즌 ' + w + '/' + SEASON_WEEKS + '주</b> — 목표: <b>' + SEASON_GOAL_RANK + '</b>(평판 85) + 자금 <b>' + won(SEASON_GOAL_BANK) + '원</b>' +
+    '<div class="sbar"><i style="width:' + Math.round(w / SEASON_WEEKS * 100) + '%"></i></div>' +
+    '<span class="note">지금 평판 ' + Math.round(G.rep) + ' (' + rankOf(G.rep) + ') · 자금 ' + won(G.bank) + '원</span></div>';
+}
+function seasonEnd(cleared) {
+  showModal('<div class="titlecard"><div class="kicker">시즌 ' + SEASON_WEEKS + '주 끝</div><h1>' + (cleared ? '🏆 시즌 클리어!' : '시즌 종료') + '</h1>' +
+    '<p class="sub">' + (cleared ? '당신의 펍은 이 동네의 홀덤 명소가 됐다.' : '목표에는 닿지 못했다 — 하지만 펍은 계속된다.') + '</p></div>' +
+    '<p>평판 <b>' + Math.round(G.rep) + '</b> (' + rankOf(G.rep) + ') · 자금 <b>' + won(G.bank) + '원</b> · 직원 ' + G.roster.length + '명</p>' +
+    '<div class="titlebtns"><button class="cta" data-more="1">계속 운영하기</button><button class="cta ghost" data-new="1">새 시즌 — 처음부터</button></div>', true);
+  if (cleared) { SFX.win(); confetti(V(0, 0)); }
+  $('[data-more]').onclick = function () { prepScreen('shop'); };
+  $('[data-new]').onclick = function () { resetGame(); prepScreen('shop'); };
+}
+function bankrupt() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 무시 */ }
+  showModal('<div class="titlecard"><div class="kicker">' + dayInfo().week + '주차</div><h1>💸 폐업</h1>' +
+    '<p class="sub">자금이 사흘 연속 마이너스였다. 펍 문을 닫는다.</p></div>' +
+    '<p class="note">인건비 · 재고 · 임대료가 매출을 넘지 않게 — 직원 수와 일당, 참가비, 음료 재고를 다시 맞춰 보자.</p>' +
+    '<div class="titlebtns"><button class="cta" data-new="1">처음부터 다시</button></div>', true);
+  SFX.bad();
+  $('[data-new]').onclick = function () { resetGame(); prepScreen('shop'); };
 }
 
 // ── 시작 ────────────────────────────────────────────
