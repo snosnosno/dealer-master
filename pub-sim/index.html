@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>홀덤펍 점장</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700;800&display=swap">
+<style>
+:root {
+  --ground: #EFF3F1; --surface: #FFFFFF; --surface-2: #E4ECE8;
+  --ink: #0E1F1A; --ink-2: #4B5F58; --ink-3: #7C8E87;
+  --line: #D2DED8; --line-strong: #B6C7C0;
+  --felt: #0F6E56; --felt-ink: #E1F5EE;
+  --amber: #EF9F27; --amber-ink: #854F0B; --amber-bg: #FAEEDA;
+  --red: #B23A2E; --red-bg: #FBEBE8; --ok: #0F6E56; --ok-bg: #E1F5EE;
+  --shadow: 0 1px 2px rgba(4,52,44,.08), 0 10px 28px rgba(4,52,44,.14);
+  --sans: 'Pretendard Variable', Pretendard, 'Noto Sans KR', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0A1310; --surface: #111E19; --surface-2: #18291F;
+    --ink: #E6F0EC; --ink-2: #9CB2AA; --ink-3: #6E837C;
+    --line: #24372F; --line-strong: #354A41;
+    --amber-bg: #35270F; --amber-ink: #F0C078; --red-bg: #2E1512; --ok-bg: #0E2B23; --ok: #1D9E75;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #0A1310; --surface: #111E19; --surface-2: #18291F;
+  --ink: #E6F0EC; --ink-2: #9CB2AA; --ink-3: #6E837C;
+  --line: #24372F; --line-strong: #354A41;
+  --amber-bg: #35270F; --amber-ink: #F0C078; --red-bg: #2E1512; --ok-bg: #0E2B23; --ok: #1D9E75;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body { background: #1b1612; color: var(--ink); font-family: var(--sans); font-size: 14px; -webkit-font-smoothing: antialiased; }
+button { font-family: inherit; }
+#scene { position: fixed; inset: 0; touch-action: none; }
+#scene canvas { display: block; }
+.hud:empty, .ticker:empty, .calls:empty { display: none; }
+
+/* 상단 HUD */
+.hud {
+  position: fixed; top: 10px; left: 10px; right: 10px; z-index: 10;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 8px 12px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: var(--shadow);
+}
+.hud .title { font-weight: 900; font-size: 15px; }
+.hud .kv { font-family: var(--mono); font-size: 12px; font-weight: 800; color: var(--ink-3); white-space: nowrap; }
+.hud .kv b { color: var(--ink); font-size: 14px; }
+.hud .sp { flex: 1; }
+.hbtn {
+  font-size: 12px; font-weight: 800; padding: 6px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--ink-2);
+}
+.hbtn.on { background: var(--felt); color: #fff; border-color: var(--felt); }
+.rep { display: inline-block; width: 60px; height: 7px; border-radius: 9px; background: var(--surface-2); vertical-align: middle; overflow: hidden; }
+.rep i { display: block; height: 100%; background: var(--amber); }
+
+/* 호출 목록 */
+.calls {
+  position: fixed; right: 10px; top: 70px; width: 270px; z-index: 10;
+  display: flex; flex-direction: column; gap: 6px; max-height: calc(100% - 180px); overflow-y: auto;
+}
+.call {
+  background: var(--surface); border: 1.5px solid var(--red); border-radius: 10px; padding: 8px 10px;
+  box-shadow: var(--shadow); cursor: pointer; text-align: left; color: var(--ink);
+}
+.call .t { font-size: 11px; font-weight: 800; color: var(--red); }
+.call .d { font-size: 13px; font-weight: 800; margin-top: 2px; }
+.call .bar { height: 4px; border-radius: 9px; background: var(--surface-2); margin-top: 6px; overflow: hidden; }
+.call .bar i { display: block; height: 100%; background: var(--red); }
+
+/* 하단 로그 */
+.ticker {
+  position: fixed; left: 10px; bottom: 10px; z-index: 10; width: 340px; max-width: calc(100% - 20px);
+  background: rgba(17,30,25,.82); color: #d9e7e1; border-radius: 10px; padding: 8px 10px;
+  font-size: 12px; line-height: 1.55; max-height: 132px; overflow: hidden;
+}
+.ticker div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ticker .hi { color: #fff; font-weight: 800; }
+.ticker .bad { color: #ff9b8c; font-weight: 800; }
+.ticker .good { color: #8fe0bd; font-weight: 800; }
+
+/* 3D 위 라벨 */
+.labels { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+.tlabel {
+  position: absolute; transform: translate(-50%, -100%); pointer-events: auto; cursor: pointer;
+  background: rgba(17,30,25,.86); color: #e6f0ec; border-radius: 9px; padding: 4px 9px;
+  font-size: 11.5px; font-weight: 800; white-space: nowrap; text-align: center;
+}
+.tlabel small { display: block; font-weight: 600; opacity: .75; font-size: 10.5px; }
+.tlabel.alert { background: var(--red); color: #fff; animation: pulse 1s infinite; }
+@keyframes pulse { 50% { transform: translate(-50%, -100%) scale(1.07); } }
+.plabel {
+  position: absolute; transform: translate(-50%, -100%); font-size: 10px; font-weight: 800;
+  color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.9); white-space: nowrap;
+}
+
+/* 모달 */
+.modal-bg {
+  position: fixed; inset: 0; z-index: 20; background: rgba(8,14,12,.55);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.modal {
+  background: var(--surface); color: var(--ink); border-radius: 14px; box-shadow: var(--shadow);
+  width: 100%; max-width: 560px; max-height: calc(100% - 20px); overflow-y: auto; padding: 18px;
+}
+.modal.wide { max-width: 760px; }
+.kicker { font-size: 11px; font-weight: 800; color: var(--ink-3); letter-spacing: .02em; }
+.kicker.red { color: var(--red); }
+.modal h2 { margin: 4px 0 8px; font-size: 18px; letter-spacing: -.01em; }
+.modal h3 { margin: 14px 0 6px; font-size: 13.5px; }
+.modal p { margin: 0 0 10px; color: var(--ink-2); line-height: 1.6; }
+.acts { margin: 0 0 12px; padding: 8px 12px; background: var(--surface-2); border-radius: 9px; font-size: 13px; line-height: 1.7; }
+.acts ol { margin: 0; padding-left: 18px; }
+.choices { display: flex; flex-direction: column; gap: 6px; }
+.choice {
+  text-align: left; padding: 10px 12px; border-radius: 9px; cursor: pointer;
+  border: 1.5px solid var(--line-strong); background: var(--surface); color: var(--ink); font-size: 13.5px; font-weight: 700;
+}
+.choice:hover { border-color: var(--amber); background: var(--amber-bg); }
+.choice.right { border-color: var(--ok); background: var(--ok-bg); }
+.choice.wrong { border-color: var(--red); background: var(--red-bg); }
+.choice.sel { border-color: var(--felt); background: var(--ok-bg); }
+.cta {
+  margin-top: 12px; padding: 10px 16px; border-radius: 9px; border: none; cursor: pointer;
+  background: var(--felt); color: #fff; font-weight: 800; font-size: 14px;
+}
+.cta.ghost { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line-strong); }
+.cta[disabled] { opacity: .4; cursor: default; }
+.verdict { font-size: 16px; font-weight: 900; margin: 6px 0; }
+.verdict.ok { color: var(--ok); }
+.verdict.no { color: var(--red); }
+.cite { font-size: 12px; color: var(--ink-2); padding: 8px 10px; border-radius: 8px; background: var(--surface-2); line-height: 1.5; }
+.unverified { display: inline-block; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 99px; background: var(--amber-bg); color: var(--amber-ink); margin-left: 4px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.card {
+  border: 1.5px solid var(--line-strong); border-radius: 10px; padding: 10px; background: var(--surface);
+}
+.card .nm { font-weight: 900; }
+.card .st { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); line-height: 1.6; margin: 4px 0 8px; }
+.seg { display: flex; gap: 4px; flex-wrap: wrap; }
+.seg button {
+  flex: 1; padding: 6px 4px; font-size: 12px; font-weight: 800; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--ink-2);
+}
+.seg button.on { background: var(--felt); color: #fff; border-color: var(--felt); }
+.note { font-size: 12px; color: var(--ink-3); line-height: 1.55; }
+.rows { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rows td { padding: 5px 0; border-bottom: 1px solid var(--line); }
+.rows td:last-child { text-align: right; font-family: var(--mono); font-weight: 800; }
+.rows tr.total td { font-weight: 900; border-bottom: none; font-size: 14px; }
+
+/* 좌석 지도 (버튼 판정) */
+.minimap { position: relative; width: 100%; aspect-ratio: 16 / 8.5; margin: 8px 0; }
+.minimap .felt {
+  position: absolute; left: 14%; right: 14%; top: 16%; bottom: 16%;
+  background: radial-gradient(ellipse, #0F6E56, #085041); border: 6px solid #04342C; border-radius: 50%;
+}
+.mseat {
+  position: absolute; transform: translate(-50%, -50%); width: 92px; padding: 5px 6px; border-radius: 9px;
+  background: var(--surface); border: 1.5px solid var(--line-strong); cursor: pointer; font-size: 11.5px; text-align: center;
+  color: var(--ink);
+}
+.mseat.empty { border-style: dashed; color: var(--ink-3); }
+.mseat.busted { border-color: var(--red); color: var(--red); }
+.mseat.picked { border-color: var(--amber); background: var(--amber-bg); }
+.mseat b { display: block; font-size: 12px; }
+.mseat .tg { font-family: var(--mono); font-size: 9.5px; color: var(--ink-3); }
+.mdealer { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); font-size: 10px; font-weight: 800; color: var(--ink-3); }
+.picks { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.picks span { font-size: 12px; font-weight: 800; padding: 5px 10px; border-radius: 8px; border: 1.5px solid var(--line-strong); background: var(--surface-2); color: var(--ink-2); }
+.picks span.now { border-color: var(--amber); background: var(--amber-bg); color: var(--amber-ink); }
+
+.toast {
+  position: fixed; left: 50%; top: 74px; transform: translateX(-50%); z-index: 15;
+  background: var(--surface); color: var(--ink); border: 1.5px solid var(--amber); border-radius: 10px;
+  padding: 8px 14px; font-weight: 800; box-shadow: var(--shadow); font-size: 13px; transition: opacity .3s;
+}
+
+@media (max-width: 720px) {
+  .hud { padding: 6px 8px; gap: 6px; }
+  .hud .title { display: none; }
+  .hud .m-hide { display: none; }
+  .hbtn { padding: 5px 8px; }
+  .calls { top: auto; bottom: 10px; right: 10px; left: 10px; width: auto; max-height: 30%; }
+  .ticker { display: none; }
+  .grid3 { grid-template-columns: 1fr; }
+  .mseat { width: 74px; font-size: 10.5px; }
+  .modal { padding: 14px; }
+}
+</style>
+</head>
+<body>
+<div id="scene"></div>
+<div class="labels" id="labels"></div>
+<div class="hud" id="hud"></div>
+<div class="calls" id="calls"></div>
+<div class="ticker" id="ticker"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+<script src="vendor/three.min.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
