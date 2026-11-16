@@ -103,6 +103,24 @@ var TRAIN = {
   v: { ko: '응대', desc: '손님 응대 퀴즈 · 단계마다 테이블 만족이 서서히 오른다' }
 };
 function trainOf(st) { if (!st.train) st.train = { j: 0, s: 0, v: 0 }; return st.train; }
+/* 교육 말고도 오르는 길 — 실전 경험치(100 이면 한 단계) · 멘토 · 세미나 */
+var XP_LV = 100, SEMINAR_COST = 300000;
+function xpOf(st) { if (!st.xp) st.xp = { j: 0, s: 0, v: 0 }; return st.xp; }
+/* 경험치를 더하고, 100 을 넘으면 단계를 올린다. 올랐으면 true */
+function addXP(st, k, n) {
+  if (!st || st.role !== 'dealer' || st.temp) return false;
+  var tr = trainOf(st), xp = xpOf(st);
+  if (tr[k] >= 3) { xp[k] = 0; return false; }
+  xp[k] += n;
+  if (xp[k] < XP_LV) return false;
+  tr[k]++; xp[k] = tr[k] >= 3 ? 0 : xp[k] - XP_LV;   // 넘친 경험은 다음 단계로 이어진다
+  (G.grownToday = G.grownToday || []).push(st.name + ' ' + TRAIN[k].ko + ' ' + tr[k] + '단계' + (k === 'j' && tr[k] === 2 ? ' 🃏' : ''));
+  toast('🎓 ' + st.name + ' — ' + TRAIN[k].ko + ' ' + tr[k] + '단계! (실전 경험)');
+  return true;
+}
+/* 난이도 — 1일차 0 에서 6주(42일)에 걸쳐 1 까지 조금씩 오른다 */
+function diffK() { return Math.min(1, Math.max(0, (G.day - 1) / 42)); }
+function diffLv() { return 1 + Math.min(5, Math.floor(diffK() * 5 + 1e-9)); }
 function mixOk(st) { return trainOf(st).j >= 2; }
 /* 사기가 60 아래면 정확도 · 속도가 떨어진다 */
 function moralePen(st) { var m = st && st.morale != null ? st.morale : 70; return m < 60 ? 60 - m : 0; }
@@ -1104,6 +1122,7 @@ function newDay() {
     balanced: 0, balanceMiss: 0, queueLeave: 0, annByStaff: 0, regVisits: 0, depositRev: 0,
     events: [], fines: 0, mixFee: 0
   };
+  G.grownToday = [];
   G.evPlan = planEvents(); G.groupArr = []; G.groupBoost = 0; G.blackout = false;
   if (LIGHT.hemi) { LIGHT.hemi.intensity = 0.55; LIGHT.sun.intensity = 0.85; decor.breakerLamp.visible = false; }
   G.regulars.forEach(function (r) { r.inHouse = false; r.reserved = false; });
@@ -1258,6 +1277,7 @@ function stepPlayerKeys(dt) {
 // ═══════════════════════════════════════════════════
 function pickType() {
   if (G.owned.mix && chance(0.12)) return 'pro';   // 믹스 테이블이 있으면 고수가 더 온다
+  if (chance(0.12 * diffK())) return 'rude';         // 주가 갈수록 까다로운 손님이 는다
   var r = Math.random(), acc = 0, k;
   for (k in CUST_TYPES) { acc += CUST_TYPES[k].w; if (r < acc) return k; }
   return 'rookie';
@@ -1321,7 +1341,7 @@ function tickCounter(dt) {
   if (head.group && G.groupBoost > G.simT) rate *= 2;   // 단체를 맞았다 — 한꺼번에 등록
   G.counterProg += dt * rate;
   if (G.queue.length >= 3) tip('queue', '등록 줄이 길어진다 — 카운터 뒤로 걸어가면 빨리 처리된다. 카운터 직원을 채용해도 된다.');
-  G.queue.forEach(function (c, i) { if (i > 1) c.sat = clamp(c.sat - 0.25 * dt, 0, 100); });
+  G.queue.forEach(function (c, i) { if (i > 1) c.sat = clamp(c.sat - 0.25 * dt * (1 + 0.5 * diffK()), 0, 100); });
   if (G.queue.length >= 4 && chance(dt * 0.15)) say(pick(G.queue.slice(2)), '등록 왜 이렇게 느려요', 2.5);
   if (G.counterProg >= (head.resv ? 1.6 : 3.2)) {
     G.counterProg = 0;
@@ -1374,6 +1394,7 @@ function leave(c, why) {
   c.state = 'leaving';
   G.stats.satSum += c.sat; G.stats.satN++;
   regDone(c); vipDone(c);
+  if (c.dealerSt && c.sat >= 75) addXP(c.dealerSt, 'v', 3);   // 만족하고 간 손님 — 그 테이블 딜러의 응대 경험
   walkTo(c, [SPOTS.door, SPOTS.outside], function () { c.alive = false; scene.remove(c.mesh); });
   if (why) log(c.name + ' 퇴장 — ' + why, /화|지쳐|길다/.test(why) ? 'bad' : '');
 }
@@ -1397,6 +1418,7 @@ function liveTables() { return G.tables.filter(function (t) { return !t.broken &
 function seatCustomer(c, t, s) {
   t.seats[s] = c.id;
   t.changed = true;
+  c.dealerSt = t.dealer !== null && G.dealers[t.dealer] ? G.dealers[t.dealer].staff : null;   // 응대 경험치를 줄 딜러
   if (isMix(t) && !c.mixPaid) {   // 믹스 테이블 — 앉을 때 믹스 참가비
     c.mixPaid = true;
     G.dayRevenue += MIX_FEE; G.stats.mixFee += MIX_FEE;
@@ -1542,8 +1564,9 @@ function flushSuit(cards) {
 
 function endHand(t) {
   t.hands++;
+  if (t.dealer !== null) addXP(G.dealers[t.dealer].staff, 's', 1);   // 핸드를 돌릴수록 손이 빨라진다
   t.handT = 0;
-  var lv = level(), p = Math.min(0.14, 0.025 + lv * 0.007) * STACKS[stackIdx()].bust * (regOpen() ? 1 : 2.6);   // 마감 뒤엔 결판을 향해 빨라진다
+  var lv = level(), p = Math.min(0.14, 0.025 + lv * 0.007) * STACKS[stackIdx()].bust * (regOpen() ? 1 : 3.2);   // 마감 뒤엔 결판을 향해 빨라진다
   var occs = [];
   for (var i = 0; i < N; i++) if (occ(t, i) && t.cards && t.cards.holes[i]) occs.push(i);
   if (!occs.length) { startHand(t); return; }
@@ -1553,7 +1576,7 @@ function endHand(t) {
   var winners = sd.his.length ? sd.his : [contenders[0]];
   var losers = contenders.filter(function (s) { return winners.indexOf(s) < 0 && sd.los.indexOf(s) < 0; });
   // 탈락은 진 사람 중에서 — 전체 탈락률이 예전과 비슷하도록 확률을 키운다
-  var pl = Math.min(0.75, p * occs.length / Math.max(1, losers.length));
+  var pl = Math.min(0.9, p * occs.length / Math.max(1, losers.length));
   var busted = [];
   losers.forEach(function (s) { if (busted.length < occs.length - 1 && chance(pl)) busted.push(s); });
   t.bustedLast = busted.map(function (s) { return { seat: s, name: G.customers[t.seats[s]].name }; });
@@ -1595,12 +1618,12 @@ function startHand(t) {
   dealReal(t);
   var d = G.dealers[t.dealer];
   var miss = 1 - effAcc(d) / 100;
-  var mixK = isMix(t) && !mixOk(d.staff) ? 2 : 1;   // 믹스 자격 없는 딜러 — 사고 2배
-  if (changed && !pos.draw && prev && seated(t) >= 4 && chance((0.1 + miss * 1.0) * mixK)) {
+  var mixK = (isMix(t) && !mixOk(d.staff) ? 2 : 1) * (1 + 0.5 * diffK());   // 믹스 자격 없는 딜러 — 사고 2배 · 주가 갈수록 사고 +50% 까지
+  if (changed && !pos.draw && prev && seated(t) >= 4 && chance(Math.min(0.85, (0.1 + miss * 1.0) * mixK))) {
     createCall(t, 'pos', { prev: prev, pos: pos, busted: t.bustedLast.slice(), snap: snapSeats(t) });
     return;
   }
-  if (chance((0.06 + miss * 0.4) * mixK)) {
+  if (chance(Math.min(0.85, (0.06 + miss * 0.4) * mixK))) {
     /* 믹스(팟 리밋) 테이블은 레이즈 금액 판정을 내지 않는다 — 원문 대조 전 */
     var type = isMix(t) ? pick(['btn', 'cnt']) : pick(['btn', 'cnt', 'under', 'under']);
     if (type === 'btn' && seated(t) < 4) type = 'cnt';
@@ -1697,6 +1720,7 @@ function resolveCall(task, result) {
   }
   if (task.misdeal) { t.handT = 0; if (t.pos) dealReal(t); }   // 미스딜 — 다시 딜한다
   var dl = t.dealer !== null ? G.dealers[t.dealer] : null;   // 멘탈 약함 — 자기 테이블이 틀리면 흔들린다
+  if (dl && result !== 'missed') addXP(dl.staff, 'j', result === 'right' ? 20 : 5);   // 옆에서 판정을 보고 배운다
   if (dl && result === 'wrong' && hasT(dl.staff, 'fragile')) { addMorale(dl.staff, -8); say(dl, '🥲 제 탓 같아요…', 2.2); }
 }
 
@@ -1834,7 +1858,11 @@ function addMorale(st, n) { if (st) st.morale = clamp(morale(st) + n, 0, 100); }
 function planEvents() {
   var info = dayInfo(), n, pool;
   if (G.day === 1) { n = 1; pool = EV_EASY.slice(); }
-  else { n = 1 + (chance(0.5) ? 1 : 0) + (info.wd === 5 ? 1 : 0); pool = EV_ALL.slice(); }
+  else {
+    var dk = diffK();   // 주가 갈수록 돌발 상황이 잦아진다 — 6주차면 하루 최대 5건
+    n = 1 + (chance(0.5) ? 1 : 0) + (info.wd === 5 ? 1 : 0) + (chance(dk * 0.8) ? 1 : 0) + (dk > 0.6 && chance(0.5) ? 1 : 0);
+    pool = EV_ALL.slice();
+  }
   return shuffle(pool).slice(0, n).map(function (type) {
     var lo = type === 'group' ? 30 : 45, hi = type === 'group' ? 170 : 290;
     return { type: type, at: lo + Math.random() * (hi - lo), tries: 0 };
@@ -2365,7 +2393,7 @@ function simulate(dt) {
   G.customers.forEach(function (c) {
     if (!c.alive) return;
     stepActor(c, dt);
-    var decay = G.owned.interior ? 0.7 : 1;
+    var decay = (G.owned.interior ? 0.7 : 1) * (1 + 0.5 * diffK());   // 주가 갈수록 손님 인내심이 짧아진다
     if (c.state === 'bar-wait') c.sat = clamp(c.sat - 0.3 * dt * decay, 0, 100);
     if (c.state === 'seated' && G.tables[c.table] && G.tables[c.table].call) c.sat = clamp(c.sat - 1.2 * dt * decay, 0, 100);
     if (G.blackout && c.state !== 'leaving') c.sat = clamp(c.sat - 0.4 * dt, 0, 100);
@@ -3032,7 +3060,7 @@ function resetGame() {
 function titleScreen() {
   G.phase = 'title';
   var sv = loadSave();
-  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 12판</div>' +
+  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 13판</div>' +
     '<h1>홀덤펍 점장</h1>' +
     '<p class="sub">오늘 밤, 당신의 펍에서 데일리 토너먼트가 열린다.</p></div>' +
     '<ul class="howto">' +
@@ -3131,7 +3159,7 @@ function prepScreen(tab) {
   var h = '<div class="kicker">' + info.week + '주차 ' + info.wk + '요일 · 17:30 · 오픈 준비</div><h2>' + info.name + '</h2>' +
     '<p class="note" style="margin-top:-4px">' + info.desc + '</p>' + cal +
     '<div class="bankline">자금 <b>' + won(G.bank) + '원</b> · 평판 <b>' + Math.round(G.rep) + '</b> · <span class="rank">' + rankOf(G.rep) + '</span> · 오늘 인건비 <b>' + won(wagesTotal()) + '</b></div>' +
-    seasonBar() + raiseBox() +
+    seasonBar() + diffBox() + raiseBox() +
     '<div class="goalbox"><b>🎯 오늘의 목표</b> (하나에 +' + won(GOAL_REWARD) + '원 · 평판 +2)<ol>' + G.goals.map(function (g) { return '<li>' + goalText(g) + '</li>'; }).join('') + '</ol></div>' +
     '<div class="tabs">' + tabs.map(function (x) { return '<button data-tab="' + x[0] + '" class="' + (G.prepTab === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>';
 
@@ -3228,12 +3256,16 @@ function prepScreen(tab) {
       return '<div class="card"><div class="nm">딜러 ' + d.name + ' ' + traitTag(d) + '</div><div class="st">정확도 ' + d.skill + '<br>속도 ' + Math.round(d.speed * 100) + '<br>사기 ' + Math.round(morale(d)) +
         (mixOk(d) ? '<br>🃏 믹스 자격' : '') + '</div><div class="seg">' + segs.join('') + '</div>' +
         '<div class="trtree">' + Object.keys(TRAIN).map(function (k) {
-          var lv = tr[k], max = lv >= 3;
+          var lv = tr[k], max = lv >= 3, xp = xpOf(d)[k];
           return '<button class="cta ghost" data-train="' + d.id + ':' + k + '"' + (cfg.train !== null || max ? ' disabled' : '') + ' title="' + TRAIN[k].desc + '">' +
-            TRAIN[k].ko + ' <b>' + '●'.repeat(lv) + '○'.repeat(3 - lv) + '</b>' + (cfg.train === d.id + ':' + k ? ' ✓' : '') + '</button>';
-        }).join('') + '</div></div>';
-    }).join('') + '</div><p class="note">휴식 딜러가 있어야 영업 중에 교대할 수 있다. 교대 직후 45초 동안 진행 속도가 오른다. ' +
-      '<b>교육은 하루 한 번</b> — 판정(정확도 +3) · 속도(진행 +5%) · 응대(테이블 만족) 중 하나, 3문제 중 2개 이상 맞히면 한 단계 오른다. <b>판정 2단계면 믹스게임 자격</b>.' +
+            TRAIN[k].ko + ' <b>' + '●'.repeat(lv) + '○'.repeat(3 - lv) + '</b>' + (cfg.train === d.id + ':' + k ? ' ✓' : '') +
+            (max ? '' : '<i class="xpbar"><u style="width:' + Math.round(xp) + '%"></u></i>') + '</button>';
+        }).join('') + '</div>' +
+        '<div class="grow2"><button class="cta ghost" data-mentor="' + d.id + '"' + (mentorsFor(d).length ? '' : ' disabled') + '>🤝 멘토 ' + (mentorOk(d) || '없음') + '</button>' +
+        '<button class="cta ghost" data-sem="' + d.id + '"' + (d.semWeek === info.week || G.bank < SEMINAR_COST || !semBranch(d) ? ' disabled' : '') + '>📚 세미나 ' + (d.semWeek === info.week ? '이번 주 다녀옴' : won(SEMINAR_COST)) + '</button></div></div>';
+    }).join('') + '</div><p class="note">휴식 딜러가 있어야 영업 중에 교대할 수 있다. 교대 직후 45초 동안 진행 속도가 오른다.<br>' +
+      '<b>단계를 올리는 길은 넷</b> — ① <b>교육</b>(하루 한 번 · 3문제 중 2개면 +1) ② <b>실전</b>(막대가 차면 +1 — 자기 테이블 판정을 점장이 맞히면 판정(틀려도 조금), 핸드를 돌리면 속도, 만족하고 간 손님은 응대) ' +
+      '③ <b>멘토</b>(2단계 이상 선배를 붙이면 같이 일한 날 경험 +35, 선배 사기 +2) ④ <b>세미나</b>(' + won(SEMINAR_COST) + ' · 한 사람 주 1회 · 가장 낮은 갈래 바로 +1). <b>판정 2단계면 믹스게임 자격</b>.' +
       (G.owned.mix ? ' <b>2번 = PLO8 믹스 테이블</b> — 믹스 자격 없는 딜러를 앉히면 사고가 2배.' : '') +
       (ds.length < tn ? ' <b>딜러가 테이블 수보다 적다 — 직원 탭에서 채용하세요.</b>' : '') + '</p>';
   }
@@ -3318,6 +3350,24 @@ function prepScreen(tab) {
       prepScreen();
     };
   });
+  document.querySelectorAll('[data-mentor]').forEach(function (b) {
+    b.onclick = function () {   // 누를 때마다 다음 선배 → … → 없음
+      var d = G.roster.filter(function (x) { return x.id === +b.getAttribute('data-mentor'); })[0];
+      var ms = mentorsFor(d), i = ms.map(function (m) { return m.id; }).indexOf(d.mentor);
+      d.mentor = i + 1 < ms.length ? ms[i + 1].id : null;
+      prepScreen('dealers');
+    };
+  });
+  document.querySelectorAll('[data-sem]').forEach(function (b) {
+    b.onclick = function () {
+      var d = G.roster.filter(function (x) { return x.id === +b.getAttribute('data-sem'); })[0], k = d && semBranch(d);
+      if (!k || G.bank < SEMINAR_COST || d.semWeek === dayInfo().week) return;
+      G.bank -= SEMINAR_COST; d.semWeek = dayInfo().week;
+      trainOf(d)[k]++; xpOf(d)[k] = 0;
+      toast('📚 ' + d.name + ' 세미나 — ' + TRAIN[k].ko + ' ' + trainOf(d)[k] + '단계' + (k === 'j' && trainOf(d).j === 2 ? ' · 🃏 믹스 자격' : '')); SFX.win();
+      prepScreen('dealers');
+    };
+  });
   document.querySelectorAll('[data-train]').forEach(function (b) {
     b.onclick = function () { var p = b.getAttribute('data-train').split(':'); if (cfg.train === null) trainDealer(+p[0], p[1]); };
   });
@@ -3362,6 +3412,21 @@ function chipQuiz() {
   });
 }
 
+/* 멘토 — 어떤 갈래든 2단계 이상이고 후배보다 높은 선배 딜러 */
+function mentorBranch(m, st) {
+  var tm = trainOf(m), ts = trainOf(st);
+  return Object.keys(TRAIN).filter(function (k) { return tm[k] >= 2 && tm[k] > ts[k] && ts[k] < 3; })
+    .sort(function (a, b) { return (tm[b] - ts[b]) - (tm[a] - ts[a]); })[0] || null;
+}
+function mentorsFor(st) { return G.roster.filter(function (m) { return m !== st && m.role === 'dealer' && mentorBranch(m, st); }); }
+/* 지금도 자격이 있는 멘토 이름 — 후배가 따라잡았으면 없음 */
+function mentorOk(st) { var m = G.roster.filter(function (x) { return x.id === st.mentor; })[0]; return m && mentorBranch(m, st) ? m.name : null; }
+function mentorName(st) { var m = G.roster.filter(function (x) { return x.id === st.mentor; })[0]; return m ? m.name : null; }
+/* 세미나 — 가장 낮은 갈래(3단계 미만) */
+function semBranch(st) {
+  var tr = trainOf(st);
+  return Object.keys(TRAIN).filter(function (k) { return tr[k] < 3; }).sort(function (a, b) { return tr[a] - tr[b]; })[0] || null;
+}
 /* 응대 교육 — 규정이 아니라 접객 원칙이다 (TDA 조항을 출제하지 않는다) */
 var SERVICE_QS = [
   { q: '손님이 "딜러님 너무 느려요" 하고 짜증을 낸다.', a: ['"죄송합니다, 빠르게 하겠습니다" 하고 실수 없이 속도를 낸다', '"규정대로 하는 중입니다"라고 맞받는다', '못 들은 척하고 그대로 한다'], why: '사과 한마디와 눈에 보이는 개선이 테이블 분위기를 지킨다. 맞받으면 다른 손님까지 불편해진다.' },
@@ -3537,6 +3602,15 @@ function report(settleOk) {
     st.days++;
     if (st.skill < 95) { st.skill++; grown.push(st.name); }
   });
+  // 멘토 — 같이 일한 날 후배에게 경험 +35, 선배 사기 +2
+  var mentored = [];
+  present.forEach(function (st) {
+    if (st.role !== 'dealer' || !st.mentor) return;
+    var m = present.filter(function (x) { return x.id === st.mentor; })[0], k = m && mentorBranch(m, st);
+    if (!k) return;
+    addXP(st, k, 35); addMorale(m, 2);
+    mentored.push(m.name + ' → ' + st.name + ' ' + TRAIN[k].ko);
+  });
   // 사기 20 아래 — 마감 때 그만둔다
   var quit = G.roster.filter(function (st) { return morale(st) < 20; });
   G.roster = G.roster.filter(function (st) { return quit.indexOf(st) < 0; });
@@ -3584,6 +3658,8 @@ function report(settleOk) {
     '<h3>손님</h3><p>평균 만족도 ' + Math.round(avgSat) + ' · 줄이 길어 돌아간 손님 ' + (s.lost + s.queueLeave) + '명 · 평판 ' + Math.round(s.repStart) + ' → <b>' + Math.round(G.rep) + '</b> (' + rankAfter + ')</p>' +
     '<p>' + (G.winner ? '🏆 우승 ' + G.winner.name + ' — 트로피와 다음 대회 시드권' : '마감까지 결판이 나지 않았다 — 남은 사람들은 다음 대회 시드권') + '</p>' +
     (grown.length ? '<p class="note">직원 성장 — ' + grown.join(' · ') + ' 능력 +1</p>' : '') +
+    (G.grownToday.length ? '<p>🎓 단계 상승 — ' + G.grownToday.join(' · ') + '</p>' : '') +
+    (mentored.length ? '<p class="note">🤝 멘토링 — ' + mentored.join(' · ') + '</p>' : '') +
     (quit.length ? '<p class="warn">😞 그만뒀다 — ' + quit.map(function (x) { return x.name + '(' + ROLES[x.role].ko + ')'; }).join(' · ') + '. 사기가 바닥이었다</p>' : '') +
     (lowM.length ? '<p class="warn">⚠️ 사기가 낮다 — ' + lowM.map(function (x) { return x.name + ' ' + Math.round(morale(x)); }).join(' · ') + ' (20 아래면 그만둔다)</p>' : '') +
     (G.resv ? '<p>📋 예약 ' + G.resv.total + '건 — 도착 ' + G.resv.arrived + ' · 노쇼 ' + G.resv.noshow + (G.cfg.resDeposit ? ' (보증금 받음)' : ' (보증금 없음)') + '</p>' : '') +
@@ -3635,6 +3711,15 @@ function weeklyScreen() {
   saveGame();
   $('[data-week]').onclick = function () { if (seasonDone) seasonEnd(cleared); else prepScreen('shop'); };
 }
+/* 난이도 — 오픈 준비에 막대, 월요일엔 무엇이 어려워졌는지 */
+function diffBox() {
+  var lv = diffLv(), k = diffK(), info = dayInfo();
+  var bar = '<span class="dbars">' + [1, 2, 3, 4, 5, 6].map(function (i) { return '<i class="' + (i <= lv ? 'on' : '') + '"></i>'; }).join('') + '</span>';
+  var monday = info.wd === 0 && G.day > 1;
+  return '<div class="diffbox' + (monday ? ' up' : '') + '"><b>📈 난이도 ' + lv + '/6</b> ' + bar +
+    (monday ? '<div>' + info.week + '주차 — 손님이 조금 더 까다롭다. 돌발 상황 · 판정 사고가 잦아지고 기다림을 덜 참는다.</div>' : '') +
+    '<div class="note">진상 손님 +' + Math.round(12 * k) + '%p · 판정 사고 +' + Math.round(50 * k) + '% · 손님 인내심 −' + Math.round(100 * (1 - 1 / (1 + 0.5 * k))) + '% · 돌발 상황 ' + (G.day === 1 ? '1건(첫날)' : '최대 ' + (3 + (k > 0 ? 1 : 0) + (k > 0.6 ? 1 : 0)) + '건') + '</div></div>';
+}
 function seasonBar() {
   var info = dayInfo(), w = Math.min(SEASON_WEEKS, info.week);
   return '<div class="season"><b>🏁 시즌 ' + w + '/' + SEASON_WEEKS + '주</b> — 목표: <b>' + SEASON_GOAL_RANK + '</b>(평판 85) + 자금 <b>' + won(SEASON_GOAL_BANK) + '원</b>' +
@@ -3664,6 +3749,7 @@ function bankrupt() {
 G.saveGameNow = function () { saveGame(); };   // 자동 점검용
 G.placeAt = placeAtForTest;                    // 자동 점검용
 G.__music = MUSIC;   // 자동 점검용
+G.__plan = planEvents; G.__type = pickType; G.__diff = diffK;   // 자동 점검용
 G.__eval = { best: best, eval5: eval5, plohi: bestPLOHigh, plolo: bestPLOLow, name: handName };   // 자동 점검용
 G.roster = startRoster();
 G.regulars = makeRegulars();

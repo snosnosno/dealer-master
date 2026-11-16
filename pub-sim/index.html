@@ -314,6 +314,18 @@ button { font-family: inherit; }
 .pchip[disabled] { opacity: .45; cursor: default; }
 .pbar .cta { width: 100%; margin-top: 8px; }
 
+/* 성장 — 실전 경험 막대 · 멘토 · 세미나 / 난이도 */
+.xpbar { display: block; height: 4px; border-radius: 9px; background: var(--surface-2); overflow: hidden; margin-top: 4px; }
+.xpbar u { display: block; height: 100%; background: var(--felt); text-decoration: none; }
+.grow2 { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.grow2 .cta { margin: 0; padding: 6px 8px; font-size: 12px; text-align: left; }
+.diffbox { background: var(--surface-2); border-radius: 10px; padding: 8px 12px; font-size: 13px; margin-bottom: 10px; line-height: 1.5; }
+.diffbox.up { background: var(--amber-bg); color: var(--amber-ink); border: 1.5px solid var(--amber); }
+.diffbox.up .note { color: var(--amber-ink); }
+.dbars { display: inline-flex; gap: 3px; vertical-align: middle; margin-left: 4px; }
+.dbars i { width: 14px; height: 7px; border-radius: 3px; background: var(--line-strong); }
+.dbars i.on { background: var(--red); }
+
 /* 직원 깊이 — 특성 · 사기 · 인상 요청 · 교육 트리 */
 .trait { font-size: 10.5px; font-weight: 800; padding: 1px 7px; border-radius: 99px; background: var(--amber-bg); color: var(--amber-ink); white-space: nowrap; }
 .trait.mix { background: var(--ok-bg); color: var(--ok); }
