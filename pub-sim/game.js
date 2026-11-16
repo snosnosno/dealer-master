@@ -532,8 +532,9 @@ function initScene() {
     for (var s = 0; s < N; s++) {
       var cp = seatPos({ cx: 0, cz: 0 }, s, -0.42);
       var cg = new THREE.Group();
+      cg.userData.backMat = mat(0xf5f5f0);   // 쇼다운에서 잠깐 앞면으로 바꿨다가 되돌린다
       for (var c2 = 0; c2 < 2; c2++) {
-        var card = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.01, 0.23), mat(0xf5f5f0));
+        var card = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.01, 0.23), cg.userData.backMat);
         card.position.set(c2 * 0.12 - 0.06, 0, 0);
         cg.add(card);
       }
@@ -1555,6 +1556,34 @@ function showdown(t, contenders) {
   });
   return { hi: hi, his: his, lo: lo, los: los };
 }
+/* 쇼다운 연출 — 큰 족보(트리플 이상) · 찹 · 로우는 테이블 위에 큰 글자로, 홀덤은 이긴 홀카드를 잠깐 뒤집는다.
+   폰에서 보드가 작아도 무슨 일이 났는지 읽힌다 */
+function showdownFx(t, ws, sd, chop) {
+  var big = sd.hi && sd.hi[0] >= 3, low = sd.lo && sd.los.length;
+  var name = G.customers[t.seats[ws]].name;
+  if (big || chop || low) {
+    var cat = sd.hi ? sd.hi[0] : 0;
+    var label = (cat === 5 || cat === 8 ? flushSuit(t.cards.board) + ' ' : '') + (sd.hi ? CAT[cat] : '') + ' — ' + name + (chop ? ' (찹)' : '') +
+      (low ? ' · 🌙 로우 ' + G.customers[t.seats[sd.los[0]]].name : '');
+    floatText(V(t.def.cx, t.def.cz).setY(2.6), label, cat >= 6 ? 'hand big' : 'hand');
+    FX.floats[FX.floats.length - 1].life = 2.6;   // 큰 족보는 조금 더 오래 떠 있는다
+    G.stats.bigHands = (G.stats.bigHands || 0) + (cat >= 6 ? 1 : 0);
+    if (cat >= 6) { tone(784, 0.12, 'triangle', 0.06); tone(1175, 0.18, 'triangle', 0.06, 0.1); }
+  }
+  if (isMix(t) || !t.cards.holes[ws]) return;
+  // 좌석 카드는 곧 다음 핸드로 다시 날아가므로 건드리지 않고, 앞면 두 장을 따로 2.5초 띄운다
+  var hole = t.cards.holes[ws], cp = seatPos({ cx: 0, cz: 0 }, ws, -0.15), g = new THREE.Group();
+  if (!SHOW_GEO) SHOW_GEO = new THREE.PlaneGeometry(0.3, 0.42);
+  hole.forEach(function (c, i) {
+    var m = new THREE.Mesh(SHOW_GEO, new THREE.MeshBasicMaterial({ map: cardTex(c) }));
+    m.rotation.x = -Math.PI / 2; m.position.set(i * 0.34 - 0.17, 0, 0); g.add(m);
+  });
+  g.position.set(cp.x, 0.95, cp.z); g.rotation.y = -SEAT_ANG[ws] * Math.PI / 180 + Math.PI / 2;
+  g.userData.show = true;
+  t.def.group.add(g);
+  setTimeout(function () { t.def.group.remove(g); g.children.forEach(function (m) { m.material.dispose(); }); }, 2500);   // 재질만 버린다 — 텍스처는 CARD_TEX 캐시
+}
+var SHOW_GEO = null;
 function flushSuit(cards) {
   var cnt = [0, 0, 0, 0];
   cards.forEach(function (c) { cnt[c.s]++; });
@@ -1592,6 +1621,7 @@ function endHand(t) {
   } else if (winners.length > 1) say(wc, '찹! 반반이네요 🤝', 1.8);
   else if (chance(0.3)) say(wc, pick(['나이스!', '팟 가져갑니다~', '이게 되네 ㅋㅋ']), 1.8);
   if (sd.lo && sd.los.length && sd.los[0] !== ws && chance(0.5)) say(G.customers[t.seats[sd.los[0]]], '로우 반 가져갑니다 🌙', 1.8);
+  showdownFx(t, ws, sd, winners.length > 1);
   SFX.chips();
   if (busted.length) chipBurst(V(t.def.cx, t.def.cz), 12);
   busted.forEach(function (s) { bust(t, s); });
@@ -2513,8 +2543,10 @@ function renderHud() {
       '<button class="hbtn" data-music="1" title="배경음악 · 웅성거림">🎵</button>' +
       '<button class="hbtn" data-mute="1" title="효과음">🔊</button>' +
       '<button class="hbtn" data-pause="1">❚❚</button>' +
-      [1, 2, 4].map(function (s) { return '<button class="hbtn" data-speed="' + s + '">' + s + '×</button>'; }).join('');
+      [1, 2, 4].map(function (s) { return '<button class="hbtn m-hide" data-speed="' + s + '">' + s + '×</button>'; }).join('') +
+      '<button class="hbtn m-only" data-speedcycle="1" title="배속">1×</button>';   // 폰에서는 배속 버튼 하나 — 누를 때마다 1 → 2 → 4
     hud.querySelectorAll('[data-speed]').forEach(function (b) { b.onclick = function () { G.speed = +b.getAttribute('data-speed'); G.paused = false; }; });
+    hud.querySelector('[data-speedcycle]').onclick = function () { G.speed = G.speed >= 4 ? 1 : G.speed * 2; G.paused = false; };
     hud.querySelector('[data-pause]').onclick = function () { G.paused = !G.paused; };
     hud.querySelector('[data-follow]').onclick = function () { cam.follow = !cam.follow; if (cam.follow) cam.dist = Math.min(cam.dist, 16); else fitCamera(); };
     hud.querySelector('[data-mute]').onclick = function () { MUTED = !MUTED; toast(MUTED ? '효과음 끔' : '효과음 켬'); };
@@ -2523,7 +2555,8 @@ function renderHud() {
     hud.querySelector('[data-callstaff]').onclick = function () { audioOn(); openHire(); };
     hud.querySelector('[data-goals]').onclick = function () {
       var s = G.stats;
-      toast('🎯 ' + G.goals.map(function (g) { var d = goalDef(g); return goalText(g) + (d.now ? ' (' + d.now(s) + ')' : ''); }).join(' · '));
+      toast('🎯 ' + G.goals.map(function (g) { var d = goalDef(g); return goalText(g) + (d.now ? ' (' + d.now(s) + ')' : ''); }).join(' · ') +
+        (G.weekCh ? ' / 🗓️ 이번 주 ' + G.weekCh.list.filter(function (c) { return !wcDef(c).low && wcDone(c); }).length + '/' + G.weekCh.list.filter(function (c) { return !wcDef(c).low; }).length + ' 달성' : ''));
     };
     hud._built = true;
   }
@@ -2543,6 +2576,9 @@ function renderHud() {
   hud.querySelector('[data-h="repbar"]').style.width = G.rep + '%';
   hud.querySelectorAll('[data-speed]').forEach(function (b) { b.classList.toggle('on', G.speed === +b.getAttribute('data-speed') && !G.paused); });
   hud.querySelector('[data-pause]').classList.toggle('on', G.paused);
+  var sc = hud.querySelector('[data-speedcycle]'), sct = (G.speed > 4 ? 4 : G.speed) + '×';
+  if (sc.textContent !== sct) sc.textContent = sct;
+  sc.classList.toggle('on', !G.paused);
   hud.querySelector('[data-follow]').classList.toggle('on', cam.follow);
   hud.querySelector('[data-mute]').textContent = MUTED ? '🔇' : '🔊';
   hud.querySelector('[data-music]').classList.toggle('on', MUSIC.on);
@@ -2654,10 +2690,10 @@ function renderOverlay() {
   FX.floats = FX.floats.filter(function (f) {
     var age = t - f.t0;
     if (!f.el) { f.el = document.createElement('div'); f.el.className = 'float ' + f.cls; f.el.textContent = f.text; host.appendChild(f.el); }
-    if (age > 1.6) { f.el.remove(); return false; }
+    if (age > (f.life || 1.6)) { f.el.remove(); return false; }
     var p = project(f.pos.clone().setY(f.pos.y + age * 0.8));
     f.el.style.left = p.x + 'px'; f.el.style.top = p.y + 'px';
-    f.el.style.opacity = String(1 - age / 1.6);
+    f.el.style.opacity = String(1 - age / (f.life || 1.6));
     return true;
   });
   // 등록 진행 막대
@@ -3038,7 +3074,7 @@ function saveGame() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       day: G.day, rep: G.rep, bank: G.bank, owned: G.owned, roster: G.roster, staffSeq: G.staffSeq, weekLog: G.weekLog, debtDays: G.debtDays, regulars: G.regulars,
-      theme: G.theme, themes: G.themes, decorInv: G.decorInv, placed: G.placed, wins: G.wins,
+      theme: G.theme, themes: G.themes, decorInv: G.decorInv, placed: G.placed, wins: G.wins, weekCh: G.weekCh,
       cfg: { fee: G.cfg.fee, stack: G.cfg.stack, level: G.cfg.level, price: G.cfg.price, stock: G.cfg.stock, assign: G.cfg.assign, resCap: G.cfg.resCap, resDeposit: G.cfg.resDeposit }
     }));
   } catch (e) { /* 저장이 막힌 브라우저 — 이어하기만 안 될 뿐이다 */ }
@@ -3050,7 +3086,7 @@ function resetGame() {
   G.day = 1; G.rep = 50; G.bank = START_BANK; G.owned = {}; G.roster = startRoster(); G.staffSeq = 10;
   G.cfg = { fee: 30000, stack: 1, level: 1, price: 1, stock: 60, chipOk: null, assign: [1, 2, null], train: null, resCap: 1, resDeposit: true };
   G.goalsDay = null; G.candDay = null; G.tips = {}; G.praiseDay = null; G.raiseDayChecked = null; G.raiseReq = null;
-  G.theme = 'classic'; G.themes = { classic: true }; G.decorInv = {}; G.placed = []; G.wins = 0; G.weekLog = []; G.debtDays = 0; G.regulars = makeRegulars();
+  G.theme = 'classic'; G.themes = { classic: true }; G.decorInv = {}; G.placed = []; G.wins = 0; G.weekLog = []; G.debtDays = 0; G.regulars = makeRegulars(); G.weekCh = null;
   applyDecor();
 }
 
@@ -3060,7 +3096,7 @@ function resetGame() {
 function titleScreen() {
   G.phase = 'title';
   var sv = loadSave();
-  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 13판</div>' +
+  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 14판</div>' +
     '<h1>홀덤펍 점장</h1>' +
     '<p class="sub">오늘 밤, 당신의 펍에서 데일리 토너먼트가 열린다.</p></div>' +
     '<ul class="howto">' +
@@ -3081,6 +3117,7 @@ function titleScreen() {
     resetGame();
     G.day = sv.day; G.rep = sv.rep; G.bank = sv.bank; G.owned = sv.owned || {}; G.roster = sv.roster || startRoster(); G.staffSeq = sv.staffSeq || 50;
     G.weekLog = sv.weekLog || []; G.debtDays = sv.debtDays || 0; G.regulars = sv.regulars || makeRegulars();
+    G.weekCh = sv.weekCh && sv.weekCh.list && sv.weekCh.list.every(function (c) { return wcDef(c); }) ? sv.weekCh : null;
     G.theme = THEMES[sv.theme] ? sv.theme : 'classic'; G.themes = sv.themes || { classic: true }; G.decorInv = sv.decorInv || {};
     var cnt = {};
     G.placed = (sv.placed || []).filter(function (p) {   // 망가진 저장 — 좌표가 이상하거나 산 것보다 많이 놓인 것은 버린다
@@ -3159,7 +3196,7 @@ function prepScreen(tab) {
   var h = '<div class="kicker">' + info.week + '주차 ' + info.wk + '요일 · 17:30 · 오픈 준비</div><h2>' + info.name + '</h2>' +
     '<p class="note" style="margin-top:-4px">' + info.desc + '</p>' + cal +
     '<div class="bankline">자금 <b>' + won(G.bank) + '원</b> · 평판 <b>' + Math.round(G.rep) + '</b> · <span class="rank">' + rankOf(G.rep) + '</span> · 오늘 인건비 <b>' + won(wagesTotal()) + '</b></div>' +
-    seasonBar() + diffBox() + raiseBox() +
+    seasonBar() + diffBox() + weekBox() + raiseBox() +
     '<div class="goalbox"><b>🎯 오늘의 목표</b> (하나에 +' + won(GOAL_REWARD) + '원 · 평판 +2)<ol>' + G.goals.map(function (g) { return '<li>' + goalText(g) + '</li>'; }).join('') + '</ol></div>' +
     '<div class="tabs">' + tabs.map(function (x) { return '<button data-tab="' + x[0] + '" class="' + (G.prepTab === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>';
 
@@ -3593,7 +3630,8 @@ function report(settleOk) {
   var rankBefore = rankOf(G.rep);
   var repDay = (G.rep - s.repStart) + (avgSat - 60) / 8 + stars * 2;   // 오늘 하루 평판 변화 전체
   G.rep = clamp(s.repStart + repDay * dayInfo().repMul, 0, 100);
-  G.weekLog.push({ day: G.day, name: dayInfo().name, wk: dayInfo().wk, net: net, stars: stars, entries: s.entries, rep: Math.round(G.rep) });
+  G.weekLog.push({ day: G.day, name: dayInfo().name, wk: dayInfo().wk, net: net, stars: stars, entries: s.entries, rep: Math.round(G.rep),
+    err: s.wrong + s.missed, drinks: s.drinks, win: !!G.winner, evOk: s.events.filter(function (e) { return e.ok === true; }).length });
   G.debtDays = G.bank < 0 ? (G.debtDays || 0) + 1 : 0;
   var rankAfter = rankOf(G.rep);
   // 직원 성장 — 오늘 일한 사람은 능력 +1
@@ -3681,9 +3719,48 @@ function report(settleOk) {
 }
 
 /* 일요일 — 주간 정산 · 임대료 · 시즌 진행 */
+/* 주간 도전 — 월요일에 셋이 정해지고 일요일 정산 때 보상. 목표는 주차마다 오른다 */
+var WEEK_CH = [
+  { id: 'entries', ko: function (n) { return '엔트리 ' + n + '건'; }, make: function (w) { return 110 + w * 15; }, val: function (L) { return sumL(L, 'entries'); } },
+  { id: 'stars', ko: function (n) { return '별 ' + n + '개'; }, make: function (w) { return 9 + Math.min(5, w); }, val: function (L) { return sumL(L, 'stars'); } },
+  { id: 'noerr', ko: function (n) { return '판정 실수(틀림 · 못 감) ' + n + '건 이하'; }, make: function (w) { return Math.max(2, 9 - w); }, val: function (L) { return sumL(L, 'err'); }, low: true },
+  { id: 'drinks', ko: function (n) { return '음료 ' + n + '잔'; }, make: function (w) { return 140 + w * 20; }, val: function (L) { return sumL(L, 'drinks'); } },
+  { id: 'winners', ko: function (n) { return '우승자 ' + n + '번 배출'; }, make: function (w) { return Math.min(6, 4 + Math.floor(w / 3)); }, val: function (L) { return L.filter(function (d) { return d.win; }).length; } },
+  { id: 'events', ko: function (n) { return '돌발 상황 ' + n + '건 깔끔하게'; }, make: function (w) { return 3 + w; }, val: function (L) { return sumL(L, 'evOk'); } },
+  { id: 'profit', ko: function (n) { return '순이익 ' + won(n) + '원 (임대료 전)'; }, make: function (w) { return 700000 + w * 200000; }, val: function (L) { return sumL(L, 'net'); } }
+];
+var WEEK_CH_REWARD = 300000;
+function sumL(L, k) { return L.reduce(function (t, d) { return t + (d[k] || 0); }, 0); }
+function weekChallenges() {
+  var w = dayInfo().week;
+  if (!G.weekCh || G.weekCh.week !== w) {
+    G.weekCh = { week: w, list: shuffle(WEEK_CH.slice()).slice(0, 3).map(function (c) { return { id: c.id, n: c.make(w) }; }) };
+    saveGame();   // 새로고침해도 이번 주 도전이 다시 뽑히지 않게
+  }
+  return G.weekCh;
+}
+function wcDef(c) { return WEEK_CH.filter(function (x) { return x.id === c.id; })[0]; }
+function wcDone(c) { var d = wcDef(c), v = d.val(G.weekLog); return d.low ? v <= c.n : v >= c.n; }
+function wcText(c, withNow) {
+  var d = wcDef(c), v = d.val(G.weekLog);
+  return d.ko(c.n) + (withNow ? ' — 지금 ' + (c.id === 'profit' ? won(v) : v) : '');
+}
+function weekBox() {
+  if (dayInfo().wd === 6) return '';
+  var ch = weekChallenges();
+  return '<div class="weekch"><b>🗓️ ' + ch.week + '주차 도전</b> (일요일 정산 — 하나에 +' + won(WEEK_CH_REWARD) + '원 · 평판 +2, 셋 다면 🎁 장식)<ol>' +
+    ch.list.map(function (c) { var low = wcDef(c).low; return '<li class="' + (!low && wcDone(c) ? 'done' : '') + '">' + wcText(c, true) + (!low && wcDone(c) ? ' ✓' : '') + '</li>'; }).join('') +
+    '</ol>' + (ch.list.some(function (c) { return wcDef(c).low; }) ? '<div class="note">「이하」 도전은 일요일에 판정한다</div>' : '') + '</div>';
+}
 function weeklyScreen() {
   var info = dayInfo(), w = info.week;
   G.bank -= WEEKLY_RENT;
+  // 주간 도전 정산
+  var ch = G.weekCh && G.weekCh.week === w ? G.weekCh : null, chDone = ch ? ch.list.map(wcDone) : [], chN = chDone.filter(Boolean).length, gift = null;
+  if (ch) {
+    G.bank += chN * WEEK_CH_REWARD; G.rep = clamp(G.rep + chN * 2, 0, 100);
+    if (chN === 3) { gift = w >= 3 ? 'sofa' : 'plant'; G.decorInv[gift] = decorCount(gift) + 1; }
+  }
   G.roster.forEach(function (st) { addMorale(st, 6); });   // 일요일 휴무 — 쉬고 오면 사기 +6
   var sum = G.weekLog.reduce(function (t, d) { return t + d.net; }, 0);
   var stars = G.weekLog.reduce(function (t, d) { return t + d.stars; }, 0);
@@ -3701,12 +3778,15 @@ function weeklyScreen() {
     '<tr><td>자금</td><td>' + won(G.bank) + '</td></tr></table>' +
     '<p>이번 주 별 <b>' + stars + '</b>/' + G.weekLog.length * 3 + ' · 엔트리 ' + entries + '건' + (best ? ' · 최고의 날 ' + best.wk + '요일 ' + best.name : '') + '</p>' +
     '<p class="note">🛌 휴무 — 직원 모두 사기 +6</p>' +
+    (ch ? '<h3>🗓️ 이번 주 도전 ' + chN + '/3</h3><ul class="goals">' + ch.list.map(function (c, i) { return '<li class="' + (chDone[i] ? 'ok' : 'no') + '">' + (chDone[i] ? '✓ ' : '✗ ') + wcText(c, true) + '</li>'; }).join('') + '</ul>' +
+      '<p>' + (chN ? '보상 +' + won(chN * WEEK_CH_REWARD) + '원 · 평판 +' + chN * 2 : '보상 없음') + (gift ? ' · 🎁 ' + DECOR_ITEMS[gift].ic + ' ' + DECOR_ITEMS[gift].ko + ' 하나 — 꾸미기 탭에서 놓는다' : '') + '</p>' : '') +
     seasonBar() +
     (G.bank < 0 ? '<p class="warn">⚠️ 임대료를 내고 자금이 마이너스다. 다음 주에 사흘 연속 적자면 폐업.</p>' : '') +
     '<button class="cta" data-week="1">' + (seasonDone ? '시즌 결과 보기' : (w + 1) + '주차 시작 — 월요일') + '</button>';
   showModal(h, true);
   SFX.cash();
-  G.weekLog = [];
+  if (chN === 3) { SFX.win(); confetti(V(0, 0)); }
+  G.weekLog = []; G.weekCh = null;
   G.day++;   // 월요일로
   saveGame();
   $('[data-week]').onclick = function () { if (seasonDone) seasonEnd(cleared); else prepScreen('shop'); };
@@ -3750,6 +3830,7 @@ G.saveGameNow = function () { saveGame(); };   // 자동 점검용
 G.placeAt = placeAtForTest;                    // 자동 점검용
 G.__music = MUSIC;   // 자동 점검용
 G.__plan = planEvents; G.__type = pickType; G.__diff = diffK;   // 자동 점검용
+G.__weekly = weeklyScreen;   // 자동 점검용
 G.__eval = { best: best, eval5: eval5, plohi: bestPLOHigh, plolo: bestPLOLow, name: handName };   // 자동 점검용
 G.roster = startRoster();
 G.regulars = makeRegulars();
