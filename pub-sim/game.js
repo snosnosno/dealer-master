@@ -50,7 +50,7 @@ var SHOP = [
 ];
 
 var CUST_TYPES = {
-  regular: { ko: '단골', color: 0x3B6FB6, w: 0.3, reentry: 0.6, drink: 1.3,
+  regular: { ko: '친근', color: 0x3B6FB6, w: 0.3, reentry: 0.6, drink: 1.3,
     talk: ['오늘 카드 잘 붙네', '사장님 저 왔어요~', '여기 분위기 좋아', '한 잔 더 해야지'] },
   rookie: { ko: '초보', color: 0x3E9B5F, w: 0.35, reentry: 0.35, drink: 1.0,
     talk: ['이거 콜해도 되나…', '블라인드 언제 올라요?', '처음 와 봤어요', '와 칩 예쁘다'] },
@@ -503,7 +503,7 @@ var G = {
   stats: null, nextArrival: 2, nextSpill: 30, winner: null, winnerAt: null, finalized: false,
   counterProg: 0, stock: 0, announced: {}, chipIssueAt: null, finalDone: false,
   roster: [], staffSeq: 10, cands: [], goals: [], tips: {}, talkOn: true, servers: [], floorStaff: null,
-  weekLog: [], debtDays: 0
+  weekLog: [], debtDays: 0, regulars: [], regDelta: [], friends: [], resv: null
 };
 window.__pub = G;   // 자동 점검용
 
@@ -540,6 +540,30 @@ function toast(t) {
   el.innerHTML = '<div class="toast">' + t + '</div>';
   clearTimeout(toast.h);
   toast.h = setTimeout(function () { el.innerHTML = ''; }, 2600);
+}
+/* 단골 — 이름 · 성격 · 좋아하는 음료 · 방문 · 호감. 날을 넘어 이어진다 */
+var REG_NAMES = ['강민수', '이서윤', '박지훈', '최유나', '정도현', '한소희', '오세훈', '윤채령', '임동현', '장예슬', '신태양', '문하린'];
+var FAV = ['🍺', '🥤', '☕', '🍷', '🧃'];
+function makeRegulars() {
+  return REG_NAMES.map(function (n, i) {
+    return { id: i, name: n, type: pickType(), fav: pick(FAV), visits: 0, aff: 45 + rnd(15), gone: false, lastDay: 0 };
+  });
+}
+function pickRegular() {
+  var pool = G.regulars.filter(function (r) { return !r.gone && !r.inHouse && !r.reserved && r.lastDay !== G.day; });
+  if (!pool.length || !chance(0.32 + G.rep / 500)) return null;
+  var tot = pool.reduce(function (t, r) { return t + r.aff; }, 0), x = Math.random() * tot;
+  for (var i = 0; i < pool.length; i++) { x -= pool[i].aff; if (x <= 0) return pool[i]; }
+  return pool[0];
+}
+function regDone(c) {
+  if (!c.reg || c.regDone) return;
+  c.regDone = true;
+  var r = c.reg, d = clamp(Math.round((c.sat - 60) / 4), -10, 10);
+  r.inHouse = false; r.visits++; r.lastDay = G.day;
+  r.aff = clamp(r.aff + d, 0, 100);
+  G.regDelta.push({ name: r.name, d: d });
+  if (r.aff < 15 && !r.gone) { r.gone = true; log('💔 단골 ' + r.name + ' — 발길을 끊었다', 'bad'); }
 }
 function nextName() {
   for (var k = 0; k < NAMES.length; k++) {
@@ -620,8 +644,10 @@ function newDay() {
   G.stats = {
     entries: 0, unique: 0, drinks: 0, noStock: 0, right: 0, wrong: 0, missed: 0, lost: 0, angry: 0,
     satSum: 0, satN: 0, repStart: G.rep, ann: 0, annMiss: 0, annWrong: 0, cleaned: 0, spillSec: 0,
-    balanced: 0, balanceMiss: 0, queueLeave: 0, annByStaff: 0
+    balanced: 0, balanceMiss: 0, queueLeave: 0, annByStaff: 0, regVisits: 0, depositRev: 0
   };
+  G.regulars.forEach(function (r) { r.inHouse = false; r.reserved = false; });
+  G.regDelta = []; G.friends = []; G.resv = null;
   G.chipIssueAt = G.cfg.chipOk === false ? 60 + Math.random() * 120 : null;
 
   applyDecor();
@@ -778,26 +804,40 @@ function freeBarSpot() {
   return -1;
 }
 
-function spawnCustomer() {
-  var type = pickType();
-  var c = makeActor(makePerson(CUST_TYPES[type].color), 'cust', nextName());
+function spawnCustomer(opt) {
+  opt = opt || {};
+  var r = opt.reg !== undefined ? opt.reg : (opt.resv || opt.friend ? null : pickRegular());
+  var type = r ? r.type : pickType();
+  var c = makeActor(makePerson(CUST_TYPES[type].color, null, r ? 0xD8B35A : null), 'cust', r ? r.name : nextName());
   c.id = G.customers.length; c.type = type; c.alive = true; c.state = 'arrive';
   c.sat = 70 + (STACKS[stackIdx()].sat * 50); c.table = null; c.seat = null; c.barSpot = null;
   c.entries = 0; c.lastDrink = -99; c.leaveAt = 0; c.nextTalk = G.simT + 8 + Math.random() * 20;
+  c.reg = r || null; c.resv = !!opt.resv;
   c.mesh.position.copy(SPOTS.outside);
   G.customers.push(c);
-  joinQueue(c);
+  if (r) {
+    r.inHouse = true; r.lastDay = G.day;
+    c.sat = clamp(c.sat + (r.aff - 50) / 5, 0, 100);
+    G.stats.regVisits++;
+    say(c, '👋 사장님 저 왔어요! (' + (r.visits + 1) + '번째)', 2.6);
+    if (r.aff >= 80 && chance(0.45)) { G.friends.push({ at: G.simT + 2.5, by: r.name }); r.aff = clamp(r.aff + 2, 0, 100); }
+  }
+  if (c.resv) say(c, '📋 예약했어요!', 2.2);
+  if (opt.friend) say(c, '😊 ' + opt.friend + ' 친구예요', 2.4);
+  joinQueue(c, c.resv);
 }
-function joinQueue(c) {
+function joinQueue(c, priority) {
   if (G.queue.length >= QUEUE.length) {
     G.stats.lost++;
     leave(c, '등록 줄이 너무 길다');
     say(c, '줄이 왜 이렇게 길어…', 2.5);
     return;
   }
-  G.queue.push(c);
+  /* 예약 손님은 지금 처리 중인 사람 바로 뒤로 들어간다 — 「예약 확인」 */
+  if (priority && G.queue.length) G.queue.splice(1, 0, c); else G.queue.push(c);
   c.state = 'queue';
-  walkTo(c, [SPOTS.door, QUEUE[G.queue.length - 1]]);
+  walkTo(c, [SPOTS.door, QUEUE[G.queue.indexOf(c)]]);
+  if (priority) advanceQueue();
 }
 function advanceQueue() {
   G.queue.forEach(function (c, i) { if (c.state === 'queue') walkTo(c, [QUEUE[i]]); });
@@ -813,7 +853,7 @@ function tickCounter(dt) {
   if (G.queue.length >= 3) tip('queue', '등록 줄이 길어진다 — 카운터 뒤로 걸어가면 빨리 처리된다. 카운터 직원을 채용해도 된다.');
   G.queue.forEach(function (c, i) { if (i > 1) c.sat = clamp(c.sat - 0.25 * dt, 0, 100); });
   if (G.queue.length >= 4 && chance(dt * 0.15)) say(pick(G.queue.slice(2)), '등록 왜 이렇게 느려요', 2.5);
-  if (G.counterProg >= 3.2) {
+  if (G.counterProg >= (head.resv ? 1.6 : 3.2)) {
     G.counterProg = 0;
     G.queue.shift();
     advanceQueue();
@@ -863,6 +903,7 @@ function leave(c, why) {
   c.barSpot = null; c.table = null; c.seat = null;
   c.state = 'leaving';
   G.stats.satSum += c.sat; G.stats.satN++;
+  regDone(c);
   walkTo(c, [SPOTS.door, SPOTS.outside], function () { c.alive = false; scene.remove(c.mesh); });
   if (why) log(c.name + ' 퇴장 — ' + why, /화|지쳐|길다/.test(why) ? 'bad' : '');
 }
@@ -892,10 +933,23 @@ function seatCustomer(c, t, s) {
     faceTo(c, V(t.def.cx, t.def.cz));
   });
 }
+function heldSeats() {
+  var R = G.resv;
+  if (!R || !R.open) return 0;
+  return R.arrivals.length + R.noshow;   // 아직 안 온 예약 (노쇼할 사람 포함 — 아직 모른다)
+}
 function seatWaiting() {
-  G.customers.filter(function (c) { return c.alive && c.state === 'bar-wait'; }).forEach(function (c) {
+  var free = liveTables().filter(function (t) { return !t.call; }).reduce(function (n, t) { return n + safeSeats(t).length; }, 0);
+  var held = heldSeats();
+  G.customers.filter(function (c) { return c.alive && c.state === 'bar-wait'; })
+    .sort(function (a, b) { return (b.resv ? 1 : 0) - (a.resv ? 1 : 0); }).forEach(function (c) {
+    if (!c.resv && free - held <= 0) {
+      if (held && chance(0.004)) say(c, '저 자리 비어 있는데요? 🤨', 2.2);
+      return;
+    }
     var open = liveTables().filter(function (t) { return !t.call && safeSeats(t).length; });
     if (!open.length) return;
+    free--;
     open.sort(function (a, b) { return seated(a) - seated(b); });
     var t = open[0];
     seatCustomer(c, t, pick(safeSeats(t)));
@@ -1309,10 +1363,12 @@ function tickServer(s, dt) {
       if (c.alive && c.state !== 'leaving') {
         var price = PRICES[G.cfg.price].p;
         G.dayRevenue += price; G.stats.drinks++;
+        var quick = c.order && G.simT - c.order < 10;
         c.lastDrink = G.simT; c.order = null; c.orderTaken = false; c.sat = clamp(c.sat + 4, 0, 100);
+        if (c.reg && quick) { c.reg.aff = clamp(c.reg.aff + 3, 0, 100); c.sat = clamp(c.sat + 4, 0, 100); }
         placeGlass(c);
         floatText(c.mesh.position.clone().setY(1.7), '+' + won(price), 'money');
-        say(c, pick(['🍺 감사합니다', '🥤 땡큐!', '☕ 굿']), 1.5);
+        say(c, c.reg && quick ? c.reg.fav + ' 역시 내 취향! 💛' : pick(['🍺 감사합니다', '🥤 땡큐!', '☕ 굿']), 1.6);
         pulse('money');
         SFX.cash();
       } else G.stock++;
@@ -1340,7 +1396,7 @@ function tickOrders(dt) {
     if (!c.alive || !/^(seated|bar-wait|bar-drink)$/.test(c.state)) return;
     if (!c.order && G.simT - c.lastDrink > 35 && chance(dt * 0.035 * k * CUST_TYPES[c.type].drink)) {
       c.order = G.simT; c.orderTaken = false;
-      say(c, '🙋 주문이요!', 2);
+      say(c, c.reg ? '🙋 ' + c.reg.fav + ' 주세요!' : '🙋 주문이요!', 2);
       if (G.stats.drinks === 0) tip('order', '🙋 손님이 음료를 주문했다. 홀 서버가 바에서 받아 가져간다. 주문이 밀리면 홀 서버를 한 명 더 채용하자.');
     }
     if (c.order && G.simT - c.order > 15) {
@@ -1488,6 +1544,26 @@ function simulate(dt) {
     if (c) say(c, '칩이 스타팅보다 모자라요!', 3);
     toast('칩 세팅 오류 — 스타팅 스택이 틀렸다는 항의. 평판 −2');
     log('칩 세팅 오류가 드러났다', 'bad');
+  }
+  G.friends = G.friends.filter(function (f) { if (G.simT < f.at) return true; spawnCustomer({ friend: f.by }); return false; });
+  var R = G.resv;
+  if (R) {
+    R.arrivals = R.arrivals.filter(function (a) {
+      if (G.simT < a.at) return true;
+      R.arrived++; spawnCustomer({ resv: true, reg: a.reg });
+      return false;
+    });
+    if (R.open && gameMin() >= 19.5 * 60) {
+      R.open = false;
+      if (R.noshow) {
+        var dep = G.cfg.resDeposit ? R.noshow * DEPOSIT : 0;
+        G.dayRevenue += dep; G.stats.depositRev = dep;
+        toast('📵 예약 노쇼 ' + R.noshow + '명 — 잡아 둔 자리를 연다' + (dep ? ' · 보증금 +' + won(dep) : ''));
+        log('예약 노쇼 ' + R.noshow + '명' + (dep ? ' — 보증금 ' + won(dep) + ' 수입' : ' — 보증금이 없어 손해만'), 'bad');
+        if (dep) { floatText(V(8.2, 2.4).setY(1.8), '+' + won(dep), 'money'); pulse('money'); }
+        SFX.bad();
+      } else { toast('📋 예약 손님 전원 도착!'); SFX.good(); }
+    }
   }
   G.pending = G.pending.filter(function (p) {
     if (G.simT < p.at) return true;
@@ -2002,6 +2078,7 @@ var GOAL_POOL = [
   { id: 'queue', ko: function () { return '줄이 길어 돌아간 손님 0'; }, test: function (s) { return s.lost + s.queueLeave === 0; } }
 ];
 var GOAL_REWARD = 100000;
+var DEPOSIT = 10000, RES_CAPS = [10, 16, 22];
 function pickGoals() {
   if (G.goalsDay === G.day) return;
   G.goalsDay = G.day;
@@ -2017,8 +2094,8 @@ var SAVE_KEY = 'pubsim.save.v1';
 function saveGame() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      day: G.day, rep: G.rep, bank: G.bank, owned: G.owned, roster: G.roster, staffSeq: G.staffSeq, weekLog: G.weekLog, debtDays: G.debtDays,
-      cfg: { fee: G.cfg.fee, stack: G.cfg.stack, level: G.cfg.level, price: G.cfg.price, stock: G.cfg.stock, assign: G.cfg.assign }
+      day: G.day, rep: G.rep, bank: G.bank, owned: G.owned, roster: G.roster, staffSeq: G.staffSeq, weekLog: G.weekLog, debtDays: G.debtDays, regulars: G.regulars,
+      cfg: { fee: G.cfg.fee, stack: G.cfg.stack, level: G.cfg.level, price: G.cfg.price, stock: G.cfg.stock, assign: G.cfg.assign, resCap: G.cfg.resCap, resDeposit: G.cfg.resDeposit }
     }));
   } catch (e) { /* 저장이 막힌 브라우저 — 이어하기만 안 될 뿐이다 */ }
 }
@@ -2027,8 +2104,8 @@ function loadSave() {
 }
 function resetGame() {
   G.day = 1; G.rep = 50; G.bank = START_BANK; G.owned = {}; G.roster = startRoster(); G.staffSeq = 10;
-  G.cfg = { fee: 30000, stack: 1, level: 1, price: 1, stock: 60, chipOk: null, assign: [1, 2, null], train: null };
-  G.goalsDay = null; G.candDay = null; G.tips = {}; G.weekLog = []; G.debtDays = 0;
+  G.cfg = { fee: 30000, stack: 1, level: 1, price: 1, stock: 60, chipOk: null, assign: [1, 2, null], train: null, resCap: 1, resDeposit: true };
+  G.goalsDay = null; G.candDay = null; G.tips = {}; G.weekLog = []; G.debtDays = 0; G.regulars = makeRegulars();
   applyDecor();
 }
 
@@ -2058,7 +2135,7 @@ function titleScreen() {
     audioOn();
     resetGame();
     G.day = sv.day; G.rep = sv.rep; G.bank = sv.bank; G.owned = sv.owned || {}; G.roster = sv.roster || startRoster(); G.staffSeq = sv.staffSeq || 50;
-    G.weekLog = sv.weekLog || []; G.debtDays = sv.debtDays || 0;
+    G.weekLog = sv.weekLog || []; G.debtDays = sv.debtDays || 0; G.regulars = sv.regulars || makeRegulars();
     Object.keys(sv.cfg || {}).forEach(function (k) { G.cfg[k] = sv.cfg[k]; });
     applyDecor();
     if (dayInfo().wd === 6) weeklyScreen(); else prepScreen('shop');
@@ -2099,7 +2176,7 @@ function prepScreen(tab) {
   var cfg = G.cfg;
   // 해고된 딜러가 배치에 남아 있으면 비운다
   cfg.assign = cfg.assign.map(function (id) { return G.roster.some(function (s) { return s.id === id && s.role === 'dealer'; }) ? id : null; });
-  var tabs = [['shop', '상점'], ['staff', '직원'], ['chips', '칩 · 구조'], ['drinks', '음료'], ['dealers', '딜러 배치']];
+  var tabs = [['shop', '상점'], ['staff', '직원'], ['chips', '칩 · 구조'], ['drinks', '음료'], ['dealers', '딜러 배치'], ['resv', '예약'], ['regs', '단골']];
   var info = dayInfo(), first = G.day - info.wd;
   var cal = '<div class="cal">' + WEEKDAYS.map(function (wd, i) {
     var di = dayInfo(first + i), past = i < info.wd, today = i === info.wd;
@@ -2146,6 +2223,27 @@ function prepScreen(tab) {
       '<h3>칩 세팅</h3><p class="note">테이블마다 스타팅 칩 세트를 깐다. 세트 구성이 틀리면 영업 중에 항의가 터진다.</p>' +
       (cfg.chipOk === null ? '<button class="cta" data-chipq="1">칩 세트 확인하기</button>' :
         '<p><b>' + (cfg.chipOk ? '✓ 칩 세팅 완료' : '✗ 칩 세팅 오류 — 영업 중 항의가 생길 수 있다') + '</b></p>');
+  } else if (G.prepTab === 'resv') {
+    if (info.wd === 4 || info.wd === 5) {
+      var e = expectedResv();
+      h += '<p>' + info.name + '은 <b>사전 예약</b>을 받는다. 예약 손님은 18~19시에 와서 줄 앞쪽으로 들어가고 빨리 등록된다. ' +
+        '대신 <b>19:30 까지 예약 수만큼 자리를 비워 둔다</b> — 그동안 예약 없이 온 손님은 못 앉는다.</p>' +
+        '<h3>예약 상한</h3><div class="seg">' + RES_CAPS.map(function (n, i) { return '<button data-rescap="' + i + '" class="' + (cfg.resCap === i ? 'on' : '') + '">' + n + '건</button>'; }).join('') + '</div>' +
+        '<h3>보증금 (' + won(DEPOSIT) + '원)</h3><div class="seg">' +
+        '<button data-resdep="1" class="' + (cfg.resDeposit ? 'on' : '') + '">받는다<br><small>노쇼 8% · 예약 −25%</small></button>' +
+        '<button data-resdep="0" class="' + (!cfg.resDeposit ? 'on' : '') + '">안 받는다<br><small>노쇼 25%</small></button></div>' +
+        '<p class="note" style="margin-top:8px">예상 — 예약 <b>' + e.req + '건</b> · 노쇼 약 <b>' + Math.round(e.req * e.rate) + '명</b>. 노쇼한 자리는 19:30 까지 비어 있다. 보증금을 받았다면 노쇼분은 매출이 된다.</p>';
+    } else {
+      h += '<p>평일에는 예약을 받지 않는다. <b>금 · 토</b> 대회만 사전 예약을 연다.</p><p class="note">이번 주 금요일까지 ' + (4 - info.wd) + '일.</p>';
+    }
+  } else if (G.prepTab === 'regs') {
+    var regs = G.regulars.slice().sort(function (a, b) { return (a.gone ? 1 : 0) - (b.gone ? 1 : 0) || b.aff - a.aff; });
+    h += '<p class="note">단골은 발밑에 <b>금색 고리</b>가 있다. 만족하고 가면 호감이 오르고, 호감이 높으면 친구를 데려온다. 좋아하는 음료를 10초 안에 내면 더 좋아한다. 호감이 바닥나면 발길을 끊는다.</p>' +
+      '<div class="shop">' + regs.map(function (r) {
+        return '<div class="item' + (r.gone ? ' gone' : '') + '"><div><b>' + r.name + '</b> <span class="role">' + CUST_TYPES[r.type].ko + '</span> ' + r.fav +
+          '<div class="note">방문 ' + r.visits + '회' + (r.gone ? ' · 💔 발길을 끊었다' : '') + '</div></div>' +
+          '<div class="aff"><i style="width:' + r.aff + '%"></i></div></div>';
+      }).join('') + '</div>';
   } else if (G.prepTab === 'drinks') {
     h += '<h3>음료 가격</h3><div class="seg">' + PRICES.map(function (p, i) {
       return '<button data-price="' + i + '" class="' + (cfg.price === i ? 'on' : '') + '">' + won(p.p) + '원<br><small>' + (i === 0 ? '많이 팔림' : (i === 2 ? '덜 팔림' : '보통')) + '</small></button>';
@@ -2199,6 +2297,8 @@ function prepScreen(tab) {
   document.querySelectorAll('[data-price]').forEach(function (b) { b.onclick = function () { cfg.price = +b.getAttribute('data-price'); prepScreen(); }; });
   document.querySelectorAll('[data-stock]').forEach(function (b) { b.onclick = function () { cfg.stock = +b.getAttribute('data-stock'); prepScreen(); }; });
   var cq = $('[data-chipq]'); if (cq) cq.onclick = chipQuiz;
+  document.querySelectorAll('[data-rescap]').forEach(function (b) { b.onclick = function () { cfg.resCap = +b.getAttribute('data-rescap'); prepScreen(); }; });
+  document.querySelectorAll('[data-resdep]').forEach(function (b) { b.onclick = function () { cfg.resDeposit = b.getAttribute('data-resdep') === '1'; prepScreen(); }; });
   document.querySelectorAll('[data-as]').forEach(function (b) {
     b.onclick = function () {
       var p = b.getAttribute('data-as').split(':'), id = +p[0];
@@ -2287,6 +2387,25 @@ function trainDealer(staffId) {
   ask();
 }
 
+function info0() { return dayInfo(); }
+/* 금 · 토 사전 예약 — 보증금을 받으면 노쇼는 줄지만 예약 신청도 준다 */
+function expectedResv() {
+  var cap = RES_CAPS[G.cfg.resCap];
+  var req = Math.round(cap * clamp(0.55 + G.rep / 180, 0.5, 1) * (G.cfg.resDeposit ? 0.75 : 1));
+  return { req: req, rate: G.cfg.resDeposit ? 0.08 : 0.25 };
+}
+function openReservations() {
+  var e = expectedResv(), R = { total: e.req, arrivals: [], noshow: 0, arrived: 0, open: true };
+  var pool = G.regulars.filter(function (r) { return !r.gone; });
+  for (var i = 0; i < e.req; i++) {
+    var reg = pool.length && chance(0.35) ? pool.splice(rnd(pool.length), 1)[0] : null;
+    if (reg) reg.reserved = true;   // 예약한 단골은 예약 없이 따로 오지 않는다
+    if (chance(e.rate)) { R.noshow++; if (reg) { reg.aff = clamp(reg.aff - 2, 0, 100); } continue; }
+    R.arrivals.push({ at: 2 + Math.random() * 42, reg: reg });
+  }
+  G.resv = R;
+  log('📋 사전 예약 ' + R.total + '건 — 19:30 까지 ' + R.total + '석을 잡아 둔다', 'hi');
+}
 function openDay() {
   closeModal();
   G.bank -= G.cfg.stock * STOCK_COST;
@@ -2304,6 +2423,7 @@ function openDay() {
     }
     assignDealer(t, d);
   });
+  if (info0().wd === 4 || info0().wd === 5) openReservations();
   G.absent.forEach(function (st) { log('📵 ' + st.name + '(' + ROLES[st.role].ko + ') 노쇼 — 연락이 안 된다', 'bad'); });
   G.phase = 'open';
   $('#hud')._built = false;
@@ -2323,7 +2443,7 @@ function closeDay() {
   if (G.finalized) return;
   G.finalized = true;
   G.phase = 'closed';
-  G.customers.forEach(function (c) { if (c.alive) { G.stats.satSum += c.sat; G.stats.satN++; } });
+  G.customers.forEach(function (c) { if (c.alive) { G.stats.satSum += c.sat; G.stats.satN++; regDone(c); } });
   G.tasks = []; G.tables.forEach(function (t) { t.call = null; t.def.alarm.visible = false; });
   renderTasks();
   var s = G.stats, feeT = fee();
@@ -2353,7 +2473,7 @@ function report(settleOk) {
   var done = G.goals.map(function (g) { return goalDef(g).test(s, g.n, ctx); });
   var stars = done.filter(Boolean).length;
   var bonus = stars * GOAL_REWARD;
-  var net = feeRev + drinkRev - wages - WAGE.ops - stockCost - settleLoss + bonus;
+  var net = (s.depositRev || 0) + feeRev + drinkRev - wages - WAGE.ops - stockCost - settleLoss + bonus;
   G.bank += net + stockCost;   // 재고비는 오픈 때 이미 냈다
   var rankBefore = rankOf(G.rep);
   var repDay = (G.rep - s.repStart) + (avgSat - 60) / 8 + stars * 2;   // 오늘 하루 평판 변화 전체
@@ -2384,11 +2504,13 @@ function report(settleOk) {
   var rows = [
     ['참가비 ' + s.entries + '건 × ' + won(fee()), feeRev],
     ['음료 ' + s.drinks + '잔 × ' + won(PRICES[G.cfg.price].p), drinkRev],
+    ['예약 보증금 (노쇼 ' + (G.resv ? G.resv.noshow : 0) + '명분)', s.depositRev || 0],
     ['목표 보상 ' + stars + '개', bonus],
     ['인건비 (출근 ' + present.length + '명' + (G.temps.length ? ' · 대타 ' + G.temps.length : '') + ')', -wages],
     ['운영비 (전기 · 재료 · 기타 — 임대료는 일요일에)', -WAGE.ops],
     ['음료 재고 ' + G.cfg.stock + '개', -stockCost]
   ];
+  rows = rows.filter(function (r) { return r[1] !== 0 || !/보증금/.test(r[0]); });
   if (settleLoss) rows.push(['정산 오차 확인 비용', -settleLoss]);
   var starHTML = '<div class="stars">' + [0, 1, 2].map(function (i) { return '<span class="' + (i < stars ? 'on' : '') + '" style="animation-delay:' + (i * 0.25) + 's">★</span>'; }).join('') + '</div>';
   var h = '<div class="kicker">' + G.day + '일차 마감 · ' + clock(gameMin()) + '</div>' + starHTML +
@@ -2405,6 +2527,8 @@ function report(settleOk) {
     '<h3>손님</h3><p>평균 만족도 ' + Math.round(avgSat) + ' · 줄이 길어 돌아간 손님 ' + (s.lost + s.queueLeave) + '명 · 평판 ' + Math.round(s.repStart) + ' → <b>' + Math.round(G.rep) + '</b> (' + rankAfter + ')</p>' +
     '<p>' + (G.winner ? '🏆 우승 ' + G.winner.name + ' — 트로피와 다음 대회 시드권' : '마감까지 결판이 나지 않았다 — 남은 사람들은 다음 대회 시드권') + '</p>' +
     (grown.length ? '<p class="note">직원 성장 — ' + grown.join(' · ') + ' 능력 +1</p>' : '') +
+    (G.resv ? '<p>📋 예약 ' + G.resv.total + '건 — 도착 ' + G.resv.arrived + ' · 노쇼 ' + G.resv.noshow + (G.cfg.resDeposit ? ' (보증금 받음)' : ' (보증금 없음)') + '</p>' : '') +
+    (G.regDelta.length ? '<p>⭐ 단골 ' + G.regDelta.length + '명 — ' + G.regDelta.map(function (x) { return x.name + ' ' + (x.d >= 0 ? '+' : '') + x.d + '♥'; }).join(' · ') + '</p>' : '') +
     (G.absent.length ? '<p class="note">📵 노쇼 — ' + G.absent.map(function (x) { return x.name; }).join(' · ') + ' (일당 없음)</p>' : '') +
     '<h3>후기</h3><p>' + reviews.join('<br>') + '</p>' +
     (G.debtDays ? '<p class="warn">⚠️ 자금 마이너스 ' + G.debtDays + '일째 — 사흘 연속이면 폐업이다</p>' : '') +
@@ -2476,6 +2600,8 @@ function bankrupt() {
 
 // ── 시작 ────────────────────────────────────────────
 G.roster = startRoster();
+G.regulars = makeRegulars();
+G.cfg.resCap = 1; G.cfg.resDeposit = true;
 initScene();
 newDay();
 titleScreen();

@@ -243,6 +243,11 @@ button { font-family: inherit; }
 .rows .dim { color: var(--line-strong); }
 .hud .daytag { color: var(--felt); font-family: var(--sans); }
 
+/* 단골 */
+.aff { width: 90px; height: 8px; border-radius: 9px; background: var(--surface-2); overflow: hidden; flex: none; }
+.aff i { display: block; height: 100%; background: linear-gradient(90deg, #EF9F27, #E5402F); }
+.shop .item.gone { opacity: .5; }
+
 /* 첫날 팁 */
 #tip { position: fixed; left: 50%; transform: translateX(-50%); top: calc(118px + env(safe-area-inset-top, 0px)); z-index: 14; width: min(560px, calc(100% - 32px)); pointer-events: none; }
 .tipbox { background: #1d3a5f; color: #fff; border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.55; font-weight: 600; box-shadow: var(--shadow); }
