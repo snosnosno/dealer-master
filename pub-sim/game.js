@@ -295,6 +295,7 @@ function initScene() {
       cg.position.set(cp.x, 0.885, cp.z);
       cg.rotation.y = -SEAT_ANG[s] * Math.PI / 180 + Math.PI / 2;
       cg.visible = false;
+      cg.userData.home = cg.position.clone();
       g.add(cg); t.cards.push(cg);
     }
     var chips = new THREE.Group();
@@ -306,6 +307,7 @@ function initScene() {
       }
     });
     g.add(chips);
+    t.pot = chips;
     g.position.set(t.cx, 0, t.cz);
     scene.add(g);
     t.group = g;
@@ -531,7 +533,12 @@ function nextName() {
 }
 
 // ── 효과 — 떠오르는 글자 · 칩 튐 · 꽃가루 ───────────
-var FX = { floats: [], parts: [] };
+var FX = { floats: [], parts: [], moves: [] };
+/* 물체를 from → to 로 dur 초에 옮긴다. arc 만큼 포물선. 끝나면 done */
+function moveTo(obj, from, to, dur, delay, done, arc) {
+  obj.position.copy(from);
+  FX.moves.push({ o: obj, a: from.clone(), b: to.clone(), dur: dur, delay: delay || 0, t: 0, done: done, arc: arc || 0 });
+}
 function floatText(pos, text, cls) {
   FX.floats.push({ pos: pos.clone(), text: text, cls: cls || '', t0: now(), el: null });
 }
@@ -554,6 +561,15 @@ function confetti(at) {
   }
 }
 function stepFx(dt) {
+  FX.moves = FX.moves.filter(function (m) {
+    m.t += dt;
+    if (m.t < m.delay) return true;
+    var k = Math.min(1, (m.t - m.delay) / m.dur);
+    m.o.position.lerpVectors(m.a, m.b, k);
+    m.o.position.y += Math.sin(Math.PI * k) * m.arc;
+    if (k >= 1) { if (m.done) m.done(); return false; }
+    return true;
+  });
   FX.parts = FX.parts.filter(function (p) {
     p.t += dt;
     if (!p.spin) p.v.y -= 9 * dt;
@@ -573,14 +589,15 @@ function clearActors() {
   G.servers.concat([G.counterStaff, G.cleaner, G.floorStaff, G.player]).forEach(function (a) { if (a) scene.remove(a.mesh); });
   G.spills.forEach(function (s) { scene.remove(s.mesh); });
   FX.parts.forEach(function (p) { scene.remove(p.m); });
-  FX.parts = []; FX.floats = [];
+  FX.moves = []; FX.parts = []; FX.floats = [];
+  (G.glasses || []).forEach(function (g) { scene.remove(g.mesh); }); G.glasses = [];
 }
 
 function newDay() {
   clearActors();
   G.customers = []; G.tasks = []; G.spills = []; G.queue = []; G.log = [];
   G.simT = 0; G.nextArrival = 2; G.nextSpill = 50 + Math.random() * 20; G.winner = null; G.winnerAt = null;
-  G.finalized = false; G.speed = 1; G.paused = false; G.counterProg = 0; G.announced = {}; G.finalDone = false; G.lastAnnMin = OPEN_MIN;
+  G.finalized = false; G.speed = 1; G.paused = false; G.dispRev = 0; G.counterRate = 0; G.counterProg = 0; G.announced = {}; G.finalDone = false; G.lastAnnMin = OPEN_MIN;
   G.nameIx = rnd(NAMES.length);
   G.stock = G.cfg.stock;
   G.stats = {
@@ -610,6 +627,12 @@ function newDay() {
   G.servers = byRole('server').map(function (st, i) {
     var a = makeActor(makePerson(0xE6B94A), 'staff', st.name);
     a.staff = st; a.busy = false; a.cool = 3 + i * 2; a.home = SPOTS.staffHome.clone().add(V(i * 1.2, 0));
+    var tray = new THREE.Group();
+    var disc = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.02, 16), mat(0x9aa3a8, { metalness: 0.5, roughness: 0.3 }));
+    var gl = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.16, 10), mat(0xD99A2B, { roughness: 0.2 }));
+    gl.position.y = 0.09; tray.add(disc, gl);
+    tray.position.set(0.3, 1.05, 0.1); tray.visible = false;
+    a.mesh.add(tray); a.tray = tray;
     a.mesh.position.copy(a.home);
     return a;
   });
@@ -731,7 +754,7 @@ function tickCounter(dt) {
   if (!G.queue.length) { G.counterProg = 0; return; }
   var head = G.queue[0];
   if (head.mesh.position.distanceTo(QUEUE[0]) > 0.3) return;
-  var rate = playerNear(V(8.2, 1.7), 1.6) ? 1 : (G.counterStaff ? 0.55 + G.counterStaff.staff.skill / 220 : 0.28);
+  var rate = G.counterRate = playerNear(V(8.2, 1.7), 1.6) ? 1 : (G.counterStaff ? 0.55 + G.counterStaff.staff.skill / 220 : 0.28);
   G.counterProg += dt * rate;
   if (G.queue.length >= 3) tip('queue', '등록 줄이 길어진다 — 카운터 뒤로 걸어가면 빨리 처리된다. 카운터 직원을 채용해도 된다.');
   G.queue.forEach(function (c, i) { if (i > 1) c.sat = clamp(c.sat - 0.25 * dt, 0, 100); });
@@ -751,6 +774,16 @@ function register(c) {
   if (c.entries === 1) G.stats.unique++;
   G.dayRevenue += G.cfg.fee;
   floatText(V(8.2, 2.4).setY(1.8), '+' + won(G.cfg.fee), 'money');
+  floatText(c.mesh.position.clone().setY(2.0), '🎟️ #' + G.stats.entries, 'good');
+  say(c, c.entries > 1 ? '🎟️ 다시 간다!' : '🎟️ 등록 완료!', 1.6);
+  var cols = [0xd9dedb, 0x2e6e52, 0xb23a2e, 0x2c4a7a];
+  for (var ci = 0; ci < 5; ci++) {
+    (function (m) {
+      scene.add(m);
+      moveTo(m, V(8.2, 2.4).setY(1.2), c.mesh.position.clone().setY(1.0), 0.45, ci * 0.06, function () { scene.remove(m); }, 0.6);
+    })(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.03, 12), mat(cols[ci % 4])));
+  }
+  pulse('entries'); pulse('money');
   SFX.cash();
   log(c.name + '(' + CUST_TYPES[c.type].ko + ') ' + (c.entries > 1 ? '리엔트리' : '등록') + ' — 참가비 ' + won(G.cfg.fee));
   toBar(c, 'wait');
@@ -874,6 +907,7 @@ function tickTable(t, dt) {
   if (n < 2) { t.pos = null; t.needsDraw = true; t.handT = 0; return; }
   if (!t.pos) startHand(t);
   t.handT += dt * handSpeed(d);
+  if (!t.potMoving) t.def.pot.scale.set(1, 0.5 + 1.6 * Math.min(1, t.handT / 8), 1);
   if (t.handT >= 8) endHand(t);
 }
 
@@ -886,16 +920,29 @@ function endHand(t) {
   var busted = [];
   occs.forEach(function (s) { if (busted.length < occs.length - 1 && chance(p)) busted.push(s); });
   t.bustedLast = busted.map(function (s) { return { seat: s, name: G.customers[t.seats[s]].name }; });
-  if (busted.length) { chipBurst(V(t.def.cx, t.def.cz), 12); SFX.chips(); }
-  else if (chance(0.25) && occs.length) {
-    var w = G.customers[t.seats[pick(occs)]];
-    say(w, pick(['나이스!', '팟 가져갑니다~', '이게 되네 ㅋㅋ', '굿 폴드였다…']), 2);
-    chipBurst(V(t.def.cx, t.def.cz), 5);
+  var alive = occs.filter(function (s) { return busted.indexOf(s) < 0; });
+  if (alive.length) {
+    var ws = pick(alive), pot = t.def.pot, home = V(0, 0);
+    var toward = seatPos({ cx: 0, cz: 0 }, ws, -0.5);
+    t.potMoving = true;
+    moveTo(pot, home, toward, 0.35, 0, function () { pot.position.copy(home); pot.scale.set(1, 0.5, 1); t.potMoving = false; }, 0.1);
+    if (chance(0.3)) say(G.customers[t.seats[ws]], pick(['나이스!', '팟 가져갑니다~', '이게 되네 ㅋㅋ']), 1.8);
+    SFX.chips();
   }
+  if (busted.length) chipBurst(V(t.def.cx, t.def.cz), 12);
   busted.forEach(function (s) { bust(t, s); });
   startHand(t);
 }
 
+function dealCards(t) {
+  var from = V(0, RZ + 0.25).setY(0.95), k = 0;
+  for (var i = 0; i < N; i++) {
+    var s = (t.pos.btn + 1 + i) % N;
+    if (!occ(t, s)) continue;
+    var cg = t.def.cards[s];
+    moveTo(cg, from, cg.userData.home, 0.22, (k++) * 0.05, null, 0.15);
+  }
+}
 function startHand(t) {
   if (seated(t) < 2) { t.pos = null; t.needsDraw = true; return; }
   var prev = t.last;
@@ -903,6 +950,7 @@ function startHand(t) {
   var changed = t.changed;
   t.pos = pos; t.last = { btn: pos.btn, sbSeat: pos.sbSeat, bb: pos.bb };
   t.needsDraw = false; t.changed = false;
+  dealCards(t);
   var d = G.dealers[t.dealer];
   var miss = 1 - effAcc(d) / 100;
   if (changed && !pos.draw && prev && seated(t) >= 4 && chance(0.1 + miss * 1.0)) {
@@ -1011,19 +1059,16 @@ function checkAnnouncements() {
   var lv = level();
   if (lv > 0 && !G.announced['lv' + lv]) {
     G.announced['lv' + lv] = true;
-    /* 마이크는 45분에 한 번쯤 — 그 사이 레벨업은 딜러가 테이블에서 알린다 */
+    /* 레벨마다 바로 — 블라인드 시계가 바뀌는 순간 할 일이 뜬다 */
+    flashClock();
     if (G.owned.mic) {
       var bm = BLINDS[lv];
       SFX.mic();
       floatText(V(6.4, 1.6).setY(2.2), '📢 레벨 ' + (lv + 1) + ' ' + won(bm[0]) + '/' + won(bm[1]), 'good');
-    } else if (gameMin() - (G.lastAnnMin || OPEN_MIN) >= 45) {
-      G.lastAnnMin = gameMin();
+    } else {
       addTask({ kind: 'announce', type: 'level', lv: lv, limit: ANNOUNCE_LIMIT });
       SFX.call();
-      tip('ann', '📢 블라인드가 올랐다. 목록의 아나운스를 누르고 구조표에서 지금 시각의 줄을 읽는다. 자동 방송 시스템을 사면 대신 해 준다.');
-    } else {
-      var b = BLINDS[lv];
-      liveTables().forEach(function (t) { say(G.dealers[t.dealer], '레벨 ' + (lv + 1) + ' — ' + won(b[0]) + '/' + won(b[1]), 2.4); });
+      tip('ann', '📢 블라인드가 올랐다! 8초 안에 맞게 안내하면 정시 안내 보너스. 구조표에서 지금 시각의 줄을 읽는다. 플로어 보조나 자동 방송 시스템에 맡길 수도 있다.');
     }
   }
   if (gameMin() >= REG_CLOSE_MIN - 30 && !G.announced.regwarn) {
@@ -1182,35 +1227,74 @@ function checkBreak() {
 
 // ── 홀 직원 · 음료 ────────────────────────────────────
 function tickStaff(dt) { G.servers.forEach(function (s) { tickServer(s, dt); }); }
+var BAR_PICK = V(-2.9, -5.7);
 function tickServer(s, dt) {
   if (s.busy) return;
   s.cool -= dt;
   if (s.cool > 0) return;
-  var cands = G.customers.filter(function (c) {
-    return c.alive && (c.state === 'seated' || c.state === 'bar-wait' || c.state === 'bar-drink') && G.simT - c.lastDrink > 40;
+  var c = G.customers.filter(function (x) { return x.alive && x.order && !x.orderTaken && x.state !== 'leaving'; })
+    .sort(function (a, b) { return a.order - b.order; })[0];
+  if (!c) { s.cool = 1; return; }
+  c.orderTaken = true; s.busy = true;
+  var skill = s.staff.skill, spd = 2.3 + skill / 45;
+  say(s, '네~ 바로 갈게요!', 1.4);
+  walkTo(s, [BAR_PICK], function () {
+    if (G.stock <= 0) {
+      G.stats.noStock++;
+      say(s, '재고가 없어요… 😥', 1.8);
+      if (c.alive) { c.order = null; c.orderTaken = false; c.lastDrink = G.simT - 15; c.sat = clamp(c.sat - 6, 0, 100); say(c, '음료 다 떨어졌어요? 😑', 2.4); }
+      walkTo(s, [s.home], function () { s.busy = false; s.cool = 1; }, spd);
+      return;
+    }
+    G.stock--;
+    if (G.stock === 5) toast('음료 재고 5개 남음');
+    s.tray.visible = true;
+    tone(1900, 0.05, 'triangle', 0.05);
+    walkTo(s, [c.mesh.position.clone().add(V(0.45, 0.45))], function () {
+      s.tray.visible = false;
+      if (c.alive && c.state !== 'leaving') {
+        var price = PRICES[G.cfg.price].p;
+        G.dayRevenue += price; G.stats.drinks++;
+        c.lastDrink = G.simT; c.order = null; c.orderTaken = false; c.sat = clamp(c.sat + 4, 0, 100);
+        placeGlass(c);
+        floatText(c.mesh.position.clone().setY(1.7), '+' + won(price), 'money');
+        say(c, pick(['🍺 감사합니다', '🥤 땡큐!', '☕ 굿']), 1.5);
+        pulse('money');
+        SFX.cash();
+      } else G.stock++;
+      walkTo(s, [s.home], function () { s.busy = false; s.cool = 1.2; }, spd);
+    }, spd);
+  }, spd);
+}
+/* 받은 잔은 테이블(또는 바) 위에 한동안 놓여 있다 */
+function placeGlass(c) {
+  var g = new THREE.Group();
+  var glass = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.16, 10), mat(pick([0xD99A2B, 0x6B3A1E, 0xC23B3B]), { roughness: 0.2 }));
+  var foam = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.03, 10), mat(0xffffff));
+  foam.position.y = 0.09; g.add(glass, foam);
+  var p = c.mesh.position;
+  if (c.state === 'seated' && G.tables[c.table]) {
+    var t = G.tables[c.table].def, dir = V(t.cx - p.x, t.cz - p.z).normalize();
+    g.position.set(p.x + dir.x * 0.75, 0.96, p.z + dir.z * 0.75);
+  } else g.position.set(p.x, 1.24, -6.35);
+  scene.add(g);
+  G.glasses.push({ mesh: g, until: G.simT + 30 });
+}
+function tickOrders(dt) {
+  var k = PRICES[G.cfg.price].k * (G.owned.coffee ? 1.2 : 1);
+  G.customers.forEach(function (c) {
+    if (!c.alive || !/^(seated|bar-wait|bar-drink)$/.test(c.state)) return;
+    if (!c.order && G.simT - c.lastDrink > 35 && chance(dt * 0.035 * k * CUST_TYPES[c.type].drink)) {
+      c.order = G.simT; c.orderTaken = false;
+      say(c, '🙋 주문이요!', 2);
+      if (G.stats.drinks === 0) tip('order', '🙋 손님이 음료를 주문했다. 홀 서버가 바에서 받아 가져간다. 주문이 밀리면 홀 서버를 한 명 더 채용하자.');
+    }
+    if (c.order && G.simT - c.order > 15) {
+      c.sat = clamp(c.sat - 0.35 * dt, 0, 100);
+      if (chance(dt * 0.05)) say(c, '음료 언제 와요? 😤', 2);
+    }
   });
-  if (!cands.length) { s.cool = 2; return; }
-  var c = pick(cands);
-  s.busy = true;
-  var skill = s.staff.skill;
-  walkTo(s, [c.mesh.position.clone().add(V(0.5, 0.5))], function () {
-    var buyP = (0.55 * CUST_TYPES[c.type].drink + 0.2) * PRICES[G.cfg.price].k * (G.owned.coffee ? 1.2 : 1) * (0.8 + skill / 250);
-    if (c.alive && chance(buyP)) {
-      if (G.stock <= 0) {
-        G.stats.noStock++;
-        c.sat = clamp(c.sat - 5, 0, 100);
-        say(c, '음료 다 떨어졌어요? 😑', 2.4);
-        c.lastDrink = G.simT - 20;
-      } else {
-        G.stock--;
-        G.dayRevenue += PRICES[G.cfg.price].p; G.stats.drinks++; c.lastDrink = G.simT; c.sat = clamp(c.sat + 3, 0, 100);
-        floatText(c.mesh.position.clone().setY(1.7), '+' + won(PRICES[G.cfg.price].p), 'money');
-        say(c, pick(['🍺', '🥤', '☕']), 1.4, true);
-        if (G.stock === 5) toast('음료 재고 5개 남음');
-      }
-    } else if (c.alive) c.lastDrink = G.simT - 20;
-    walkTo(s, [s.home], function () { s.busy = false; s.cool = 1.5; }, 2.2 + skill / 50);
-  }, 2.2 + skill / 50);
+  G.glasses = G.glasses.filter(function (g) { if (G.simT > g.until) { scene.remove(g.mesh); return false; } return true; });
 }
 
 /* 플로어 보조 — 12초 넘게 남은 아나운스 · 밸런싱 · 청소를 맡는다. 판정 호출은 하지 않는다 */
@@ -1236,8 +1320,8 @@ function tickFloor() {
     if (G.tasks.indexOf(task) >= 0) {
       if (task.kind === 'announce') {
         removeTask(task); G.stats.ann++; G.stats.annByStaff++;
-        if (chance(0.55 + f.staff.skill / 250)) { G.rep = clamp(G.rep + 0.3, 0, 100); SFX.mic(); say(f, '📢 ' + ANN_LINE[task.type](task), 2.6); }
-        else { G.stats.annWrong++; G.rep = clamp(G.rep - 1, 0, 100); say(f, '📢 어… 정정하겠습니다', 2.2); }
+        if (chance(0.55 + f.staff.skill / 250)) { G.rep = clamp(G.rep + 0.12, 0, 100); SFX.mic(); say(f, '📢 ' + ANN_LINE[task.type](task), 2.6); }
+        else { G.stats.annWrong++; G.rep = clamp(G.rep - 0.6, 0, 100); say(f, '📢 어… 정정하겠습니다', 2.2); }
       } else if (task.kind === 'balance') doBalance(task, f);
       else { task.spill.cleaning = G.simT + 1.5; say(f, '🧹', 1.5); }
     }
@@ -1333,6 +1417,7 @@ function simulate(dt) {
   if (G.counterStaff) stepActor(G.counterStaff, dt);
   if (G.cleaner) stepActor(G.cleaner, dt);
   if (G.floorStaff) stepActor(G.floorStaff, dt);
+  tickOrders(dt);
   tickStaff(dt);
   tickFloor();
   tickCounter(dt);
@@ -1372,11 +1457,23 @@ function simulate(dt) {
 // ═══════════════════════════════════════════════════
 // 화면 — HUD · 할 일 목록 · 말풍선 · 라벨
 // ═══════════════════════════════════════════════════
+function pulse(key) {
+  var el = document.querySelector('#hud [data-h="' + key + '"]');
+  if (!el) return;
+  el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
+}
+function flashClock() {
+  var el = document.querySelector('#hud [data-h="lvbox"]');
+  if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+  tone(988, 0.12, 'sine', 0.08); tone(1319, 0.18, 'sine', 0.08, 0.12);
+}
 function renderHud() {
   var hud = $('#hud');
   if (!hud._built) {
     hud.innerHTML = '<span class="title">홀덤펍 점장</span>' +
       '<span class="kv"><b data-h="clock"></b></span>' +
+      '<span class="kv" data-h="lvbox">⏱ 다음 레벨 <b data-h="next"></b></span>' +
+      '<span class="kv m-hide">엔트리 <b data-h="entries"></b></span>' +
       '<span class="kv">오늘 매출 <b data-h="money"></b></span>' +
       '<span class="kv">평판 <span class="rep"><i data-h="repbar"></i></span> <b data-h="rep"></b></span>' +
       '<span class="kv">손님 <b data-h="guests"></b></span>' +
@@ -1403,7 +1500,12 @@ function renderHud() {
   var lv = BLINDS[level()];
   var set = function (k, v) { var el = hud.querySelector('[data-h="' + k + '"]'); if (el.textContent !== v) el.textContent = v; };
   set('clock', clock(gameMin()));
-  set('money', won(G.dayRevenue));
+  G.dispRev = G.dispRev === undefined ? G.dayRevenue : G.dispRev + (G.dayRevenue - G.dispRev) * 0.18;
+  if (Math.abs(G.dayRevenue - G.dispRev) < 50) G.dispRev = G.dayRevenue;
+  set('money', won(Math.round(G.dispRev / 100) * 100));
+  set('next', clock(OPEN_MIN + (level() + 1) * levelMin()));
+  set('entries', String(G.stats.entries));
+  $('#vignette').classList.toggle('on', G.tasks.some(function (k) { return k.kind === 'call'; }));
   set('rep', String(Math.round(G.rep)));
   set('guests', String(G.customers.filter(function (c) { return c.alive && c.state !== 'leaving'; }).length));
   set('stock', String(G.stock));
@@ -1433,7 +1535,7 @@ function renderTasks() {
     if (el.querySelector('[data-task="' + k.id + '"]')) return;
     var x = TASK_TXT[k.kind](k);
     var b = document.createElement('button');
-    b.className = 'call ' + k.kind;
+    b.className = 'call ' + k.kind + ' fresh';
     b.setAttribute('data-task', k.id);
     b.innerHTML = '<div class="t">' + x.ic + ' ' + x.t + '</div><div class="d">' + x.d + '</div>' + (k.limit ? '<div class="bar"><i></i></div>' : '');
     b.onclick = function () { audioOn(); doTask(k.id); };
@@ -1457,14 +1559,14 @@ function renderTicker() {
 }
 
 /* 3D 위에 띄우는 것 — 테이블 라벨 · 딜러 피로 막대 · 말풍선 · 떠오르는 글자 */
-var OV = { tables: [], dealers: {}, bubbles: {}, floats: [] };
+var OV = { tables: [], dealers: {}, bubbles: {}, floats: [], orders: {} };
 function project(v) {
   var p = v.clone().project(camera);
   return { x: (p.x + 1) / 2 * window.innerWidth, y: (1 - p.y) / 2 * window.innerHeight, vis: p.z < 1 };
 }
 function renderOverlay() {
   var host = $('#labels');
-  if (G.phase !== 'open') { if (host.childNodes.length) { host.innerHTML = ''; OV = { tables: [], dealers: {}, bubbles: {}, floats: [] }; } return; }
+  if (G.phase !== 'open') { if (host.childNodes.length) { host.innerHTML = ''; OV = { tables: [], dealers: {}, bubbles: {}, floats: [], orders: {} }; } $('#qbar').style.display = 'none'; return; }
   // 테이블 라벨
   G.tables.forEach(function (t, i) {
     var el = OV.tables[i];
@@ -1513,6 +1615,28 @@ function renderOverlay() {
     f.el.style.opacity = String(1 - age / 1.6);
     return true;
   });
+  // 등록 진행 막대
+  var qb = $('#qbar');
+  if (G.queue.length && G.queue[0].mesh.position.distanceTo(QUEUE[0]) < 0.3) {
+    var qp = project(G.queue[0].mesh.position.clone().setY(2.05));
+    qb.style.display = 'block'; qb.style.left = qp.x + 'px'; qb.style.top = qp.y + 'px';
+    qb.querySelector('b').style.width = Math.round(Math.min(1, G.counterProg / 3.2) * 100) + '%';
+    qb.className = G.counterRate >= 0.99 ? 'fast' : (G.counterRate > 0.5 ? 'mid' : 'slow');
+    qb.querySelector('span').textContent = G.counterRate >= 0.99 ? '등록 중 — 점장' : (G.counterRate > 0.5 ? '등록 중 — 카운터 직원' : '등록 중… 느림');
+  } else qb.style.display = 'none';
+  // 주문 표시
+  var seenO = {};
+  G.customers.forEach(function (c) {
+    if (!c.alive || !c.order || c.state === 'leaving') return;
+    seenO[c.uid] = true;
+    var el = OV.orders[c.uid];
+    if (!el) { el = document.createElement('div'); el.className = 'otag'; el.textContent = '🍺'; host.appendChild(el); OV.orders[c.uid] = el; }
+    var p = project(c.mesh.position.clone().setY(1.45));
+    el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
+    el.classList.toggle('late', G.simT - c.order > 15);
+    el.classList.toggle('taken', !!c.orderTaken);
+  });
+  Object.keys(OV.orders).forEach(function (k) { if (!seenO[k]) { OV.orders[k].remove(); delete OV.orders[k]; } });
   // 점장 목적지
   var pm = $('#goal');
   if (G.player && G.player.goal) { pm.textContent = '👟 ' + G.player.goal; pm.style.display = 'block'; } else pm.style.display = 'none';
@@ -1728,8 +1852,10 @@ function openAnnounce(task) {
       var ix = +b.getAttribute('data-an'), ok = ix === correct;
       removeTask(task);
       G.stats.ann++;
-      if (ok) { G.rep = clamp(G.rep + 0.7, 0, 100); SFX.mic(); } else { G.stats.annWrong++; G.rep = clamp(G.rep - 1.5, 0, 100); SFX.bad(); }
-      showModal('<div class="kicker">📢 아나운스</div><div class="verdict ' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓ 또렷한 안내' : '✗ 틀린 안내 — 손님들이 웅성거린다') + '</div>' +
+      var onTime = ok && task.type === 'level' && G.simT - task.t0 <= 8;
+      if (onTime) { G.stats.onTime = (G.stats.onTime || 0) + 1; G.rep = clamp(G.rep + 0.3, 0, 100); }
+      if (ok) { G.rep = clamp(G.rep + 0.25, 0, 100); SFX.mic(); } else { G.stats.annWrong++; G.rep = clamp(G.rep - 1, 0, 100); SFX.bad(); }
+      showModal('<div class="kicker">📢 아나운스</div><div class="verdict ' + (ok ? 'ok' : 'no') + '">' + (ok ? (onTime ? '⏱ 정시 안내! 평판 +0.55' : '✓ 또렷한 안내') : '✗ 틀린 안내 — 손님들이 웅성거린다') + '</div>' +
         '<div class="choices" style="margin-bottom:10px">' + choices.map(function (c, i) {
           return '<div class="choice' + (i === correct ? ' right' : (i === ix ? ' wrong' : '')) + '">“' + c + '”</div>';
         }).join('') + '</div><p>' + why + '</p><button class="cta" data-ok="1">마이크를 내려놓는다</button>');

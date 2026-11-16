@@ -194,6 +194,37 @@ button { font-family: inherit; }
 .bubble.amb { opacity: .78; font-weight: 600; z-index: 0; }
 .bubble:not(.amb) { z-index: 1; }
 
+/* 호출이 있으면 화면 가장자리가 붉게 맥박친다 */
+#vignette { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0; transition: opacity .4s; box-shadow: inset 0 0 90px rgba(229,64,47,.55); }
+#vignette.on { opacity: 1; animation: vig 1.2s ease-in-out infinite; }
+@keyframes vig { 50% { box-shadow: inset 0 0 40px rgba(229,64,47,.25); } }
+
+/* 등록 진행 막대 · 주문 표시 */
+#qbar { display: none; position: fixed; z-index: 6; transform: translate(-50%, -100%); pointer-events: none; text-align: center; }
+#qbar span { display: block; font-size: 10px; font-weight: 800; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.9); white-space: nowrap; }
+#qbar i { display: block; width: 64px; height: 7px; border-radius: 9px; background: rgba(0,0,0,.6); overflow: hidden; margin: 2px auto 0; border: 1px solid rgba(255,255,255,.4); }
+#qbar b { display: block; height: 100%; transition: width .1s linear; }
+#qbar.fast b { background: #3ECF8E; }
+#qbar.mid b { background: #8fd0ff; }
+#qbar.slow b { background: #EF9F27; }
+.otag { position: absolute; transform: translate(-50%, -100%); pointer-events: none; font-size: 15px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.8)); animation: bob 1s ease-in-out infinite; }
+.otag.late { filter: drop-shadow(0 0 4px #ff5a4a); }
+.otag.taken { animation: none; opacity: .55; }
+@keyframes bob { 50% { margin-top: -4px; } }
+
+/* 숫자가 바뀌면 반짝 · 레벨이 바뀌면 시계가 깜빡 · 새 할 일은 튀어나온다 */
+.hud b.pulse { animation: pulse .45s ease-out; display: inline-block; }
+@keyframes pulse { 40% { transform: scale(1.25); color: #EF9F27; } }
+.hud .kv.flash { animation: flash .5s ease-in-out 4; border-radius: 6px; }
+@keyframes flash { 50% { background: #EF9F27; color: #2a1800; } }
+.call.fresh { animation: slidein .35s ease-out; }
+.call.call.fresh { animation: slidein .35s ease-out, shake .4s .35s; }
+@keyframes slidein { from { transform: translateX(40px); opacity: 0; } }
+@keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@media (prefers-reduced-motion: reduce) {
+  #vignette.on, .otag, .hud b.pulse, .hud .kv.flash, .call.fresh { animation: none; }
+}
+
 /* 첫날 팁 */
 #tip { position: fixed; left: 50%; transform: translateX(-50%); top: calc(118px + env(safe-area-inset-top, 0px)); z-index: 14; width: min(560px, calc(100% - 32px)); pointer-events: none; }
 .tipbox { background: #1d3a5f; color: #fff; border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.55; font-weight: 600; box-shadow: var(--shadow); }
@@ -291,6 +322,8 @@ button { font-family: inherit; }
 <div id="modal"></div>
 <div id="toast"></div>
 <div id="goal"></div>
+<div id="vignette"></div>
+<div id="qbar"><span></span><i><b></b></i></div>
 <div id="tip"></div>
 <script src="vendor/three.min.js"></script>
 <script src="game.js"></script>
