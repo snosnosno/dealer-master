@@ -46,8 +46,11 @@ var SHOP = [
   { id: 'mic', ko: '자동 방송 시스템', price: 600000, desc: '블라인드 업 안내를 자동으로 — 레지 마감 · 파이널은 여전히 직접' },
   { id: 'bar', ko: '바 좌석 확장', price: 500000, desc: '대기 · 음료 좌석 7 → 10' },
   { id: 'coffee', ko: '커피 머신', price: 400000, desc: '음료 구매율 +20% — 비싼 가격의 손해를 줄인다' },
-  { id: 'table3', ko: '3번 테이블', price: 1600000, desc: '좌석 +6, 손님 +28%. 딜러가 셋은 있어야 하고, 교대하려면 넷' }
+  { id: 'table3', ko: '3번 테이블', price: 1600000, desc: '좌석 +6, 손님 +28%. 딜러가 셋은 있어야 하고, 교대하려면 넷' },
+  { id: 'mix', ko: '믹스게임 테이블 (PLO8)', price: 1200000, desc: '2번 테이블을 PLO8 로 — 고수 손님 ↑, 앉을 때 믹스 참가비 +1만. 믹스 자격(판정 교육 2단계) 딜러가 없으면 사고 2배' }
 ];
+var MIX_TABLE = 1, MIX_FEE = 10000;
+function isMix(t) { return !!G.owned.mix && t.id === MIX_TABLE; }
 
 var CUST_TYPES = {
   regular: { ko: '친근', color: 0x3B6FB6, w: 0.3, reentry: 0.6, drink: 1.3,
@@ -137,6 +140,114 @@ function clock(min) {
 function seatNo(i) { return (i + 1) + '번'; }
 function now() { return performance.now() / 1000; }
 function V(x, z) { return new THREE.Vector3(x, 0, z); }
+
+// ═══════════════════════════════════════════════════
+// 카드 · 족보 평가기 — 홀덤 테이블 프로토타입(nlh-table.html)에서 옮겼다
+//   카드 { r: 0..12 (2..A), s: 0..3 (♠♥♦♣) }
+// ═══════════════════════════════════════════════════
+var CARD_RANKS = '23456789TJQKA';
+var SUITS = [{ s: '♠', red: false }, { s: '♥', red: true }, { s: '♦', red: true }, { s: '♣', red: false }];
+var CAT = ['하이카드', '원페어', '투페어', '트리플', '스트레이트', '플러시', '풀하우스', '포카드', '스트레이트 플러시'];
+function newDeck() {
+  var d = [], r, s;
+  for (s = 0; s < 4; s++) for (r = 0; r < 13; r++) d.push({ r: r, s: s });
+  return shuffle(d);
+}
+function eval5(cs) {
+  var rs = cs.map(function (c) { return c.r; }).sort(function (a, b) { return b - a; });
+  var flush = cs.every(function (c) { return c.s === cs[0].s; });
+  var cnt = {};
+  rs.forEach(function (r) { cnt[r] = (cnt[r] || 0) + 1; });
+  var g = Object.keys(cnt).map(function (r) { return [cnt[r], +r]; }).sort(function (a, b) { return b[0] - a[0] || b[1] - a[1]; });
+  var u = [];
+  rs.forEach(function (r) { if (u.indexOf(r) < 0) u.push(r); });
+  var sh = -1;
+  if (u.length === 5) {
+    if (u[0] - u[4] === 4) sh = u[0];
+    else if (u[0] === 12 && u[1] === 3) sh = 3;   // 휠 A-2-3-4-5
+  }
+  var rest = function (from) { return g.slice(from).map(function (x) { return x[1]; }); };
+  if (sh >= 0 && flush) return [8, sh];
+  if (g[0][0] === 4) return [7, g[0][1], g[1][1]];
+  if (g[0][0] === 3 && g[1][0] === 2) return [6, g[0][1], g[1][1]];
+  if (flush) return [5].concat(rs);
+  if (sh >= 0) return [4, sh];
+  if (g[0][0] === 3) return [3].concat(rest(0));
+  if (g[0][0] === 2 && g[1][0] === 2) return [2].concat(rest(0));
+  if (g[0][0] === 2) return [1].concat(rest(0));
+  return [0].concat(rs);
+}
+function cmp(a, b) {
+  for (var i = 0; i < Math.max(a.length, b.length); i++) {
+    var x = a[i] || 0, y = b[i] || 0;
+    if (x !== y) return x - y;
+  }
+  return 0;
+}
+/* 홀덤 — 일곱 장 중 가장 좋은 다섯 장 */
+function best(cards) {
+  var top = null, n = cards.length, a, b, c, d, e;
+  if (n < 5) return null;
+  for (a = 0; a < n; a++) for (b = a + 1; b < n; b++) for (c = b + 1; c < n; c++)
+    for (d = c + 1; d < n; d++) for (e = d + 1; e < n; e++) {
+      var s = eval5([cards[a], cards[b], cards[c], cards[d], cards[e]]);
+      if (!top || cmp(s, top) > 0) top = s;
+    }
+  return top;
+}
+/* 오마하 — 홀카드에서 정확히 두 장, 보드에서 정확히 세 장. fn 이 다섯 장을 점수로 바꾼다 */
+function omahaBest(hole, board, fn, better) {
+  var top = null, i, j, a, b, c;
+  for (i = 0; i < hole.length; i++) for (j = i + 1; j < hole.length; j++)
+    for (a = 0; a < board.length; a++) for (b = a + 1; b < board.length; b++) for (c = b + 1; c < board.length; c++) {
+      var s = fn([hole[i], hole[j], board[a], board[b], board[c]]);
+      if (s && (!top || better(s, top))) top = s;
+    }
+  return top;
+}
+/* 8-or-better 로우 — 서로 다른 8 이하 다섯 장(A 는 1). 낮을수록 좋다. 없으면 null */
+function low5(cs) {
+  var v = cs.map(function (c) { return c.r === 12 ? 1 : c.r + 2; });
+  if (v.some(function (x) { return x > 8; })) return null;
+  v.sort(function (a, b) { return b - a; });
+  for (var i = 1; i < 5; i++) if (v[i] === v[i - 1]) return null;
+  return v;
+}
+function bestPLOHigh(hole, board) { return omahaBest(hole, board, eval5, function (s, t) { return cmp(s, t) > 0; }); }
+function bestPLOLow(hole, board) { return omahaBest(hole, board, low5, function (s, t) { return cmp(s, t) < 0; }); }
+function handName(sc) {
+  var hi = function (r) { return CARD_RANKS[r].replace('T', '10'); };
+  switch (sc[0]) {
+    case 8: return sc[1] === 12 ? '로열 플러시' : hi(sc[1]) + ' 하이 스트레이트 플러시';
+    case 7: return hi(sc[1]) + ' 포카드';
+    case 6: return hi(sc[1]) + ' 풀하우스';
+    case 5: return hi(sc[1]) + ' 하이 플러시';
+    case 4: return hi(sc[1]) + ' 하이 스트레이트';
+    case 3: return hi(sc[1]) + ' 트리플';
+    case 2: return hi(sc[1]) + '·' + hi(sc[2]) + ' 투페어';
+    case 1: return hi(sc[1]) + ' 원페어';
+    default: return hi(sc[1]) + ' 하이';
+  }
+}
+/* 카드 면 텍스처 — 52장 + 뒷면을 한 번만 그린다 */
+var CARD_TEX = {};
+function cardTex(c) {
+  var key = c ? CARD_RANKS[c.r] + c.s : 'back';
+  if (CARD_TEX[key]) return CARD_TEX[key];
+  var cv = document.createElement('canvas'); cv.width = 64; cv.height = 90;
+  var x = cv.getContext('2d');
+  x.fillStyle = c ? '#fbfaf5' : '#7a1f2a'; x.fillRect(0, 0, 64, 90);
+  x.strokeStyle = '#2a2a2a'; x.lineWidth = 3; x.strokeRect(1.5, 1.5, 61, 87);
+  if (c) {
+    x.fillStyle = SUITS[c.s].red ? '#c0262e' : '#151515';
+    x.font = 'bold 34px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(CARD_RANKS[c.r].replace('T', '10'), 32, 28);
+    x.font = 'bold 34px sans-serif'; x.fillText(SUITS[c.s].s, 32, 64);
+  } else { x.strokeStyle = '#d8b35a'; x.strokeRect(8, 8, 48, 74); }
+  var t = new THREE.CanvasTexture(cv);
+  CARD_TEX[key] = t;
+  return t;
+}
 
 // ═══════════════════════════════════════════════════
 // 소리 — 첫 클릭 뒤에만 난다
@@ -355,6 +466,14 @@ function initScene() {
     });
     g.add(chips);
     t.pot = chips;
+    // 보드 카드 다섯 장 — 핸드가 진행되면 플랍 · 턴 · 리버 순서로 앞면이 깔린다
+    t.board = [];
+    for (var bc = 0; bc < 5; bc++) {
+      var bm = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.42), new THREE.MeshBasicMaterial({ map: cardTex(null) }));
+      bm.rotation.x = -Math.PI / 2; bm.position.set(-0.68 + bc * 0.34, 0.885, -0.3); bm.visible = false;
+      g.add(bm); t.board.push(bm);
+    }
+    t.felt = felt;
     g.position.set(t.cx, 0, t.cz);
     scene.add(g);
     t.group = g;
@@ -559,6 +678,7 @@ function applyDecor() {
     t.group.visible = i < 2 || !!G.owned.table3;
     t.shuffler.visible = !!G.owned.shuffler;
     t.lamp.visible = !!G.owned.interior;
+    t.felt.material.color.setHex(i === MIX_TABLE && G.owned.mix ? 0x1f4f7a : 0x0F6E56);   // 믹스 테이블은 남색 펠트
   });
 }
 
@@ -876,7 +996,7 @@ function newDay() {
     entries: 0, unique: 0, drinks: 0, noStock: 0, right: 0, wrong: 0, missed: 0, lost: 0, angry: 0,
     satSum: 0, satN: 0, repStart: G.rep, ann: 0, annMiss: 0, annWrong: 0, cleaned: 0, spillSec: 0,
     balanced: 0, balanceMiss: 0, queueLeave: 0, annByStaff: 0, regVisits: 0, depositRev: 0,
-    events: [], fines: 0
+    events: [], fines: 0, mixFee: 0
   };
   G.evPlan = planEvents(); G.groupArr = []; G.groupBoost = 0; G.blackout = false;
   if (LIGHT.hemi) { LIGHT.hemi.intensity = 0.55; LIGHT.sun.intensity = 0.85; decor.breakerLamp.visible = false; }
@@ -888,6 +1008,7 @@ function newDay() {
   G.tables = TABLE_DEF.slice(0, tableCount()).map(function (t, i) {
     t.alarm.visible = false;
     t.cards.forEach(function (c) { c.visible = false; });
+    t.board.forEach(function (m) { m.visible = false; });
     return {
       id: i, def: t, name: t.name, seats: [null, null, null, null, null, null],
       dealer: null, handT: 0, pos: null, last: null, needsDraw: true, changed: false,
@@ -1028,6 +1149,7 @@ function stepPlayerKeys(dt) {
 // 손님 — 문 → 등록 줄 → 바 대기 → 착석 → 탈락
 // ═══════════════════════════════════════════════════
 function pickType() {
+  if (G.owned.mix && chance(0.12)) return 'pro';   // 믹스 테이블이 있으면 고수가 더 온다
   var r = Math.random(), acc = 0, k;
   for (k in CUST_TYPES) { acc += CUST_TYPES[k].w; if (r < acc) return k; }
   return 'rookie';
@@ -1103,7 +1225,7 @@ function tickCounter(dt) {
 
 function register(c) {
   if (!regOpen()) { say(c, '마감이에요? 한잔만 하고 갈게요', 2.5); toBar(c, 'drink'); return; }
-  c.entries++;
+  c.entries++; c.mixPaid = false;
   G.stats.entries++;
   if (c.entries === 1) G.stats.unique++;
   G.dayRevenue += fee();
@@ -1167,6 +1289,11 @@ function liveTables() { return G.tables.filter(function (t) { return !t.broken &
 function seatCustomer(c, t, s) {
   t.seats[s] = c.id;
   t.changed = true;
+  if (isMix(t) && !c.mixPaid) {   // 믹스 테이블 — 앉을 때 믹스 참가비
+    c.mixPaid = true;
+    G.dayRevenue += MIX_FEE; G.stats.mixFee += MIX_FEE;
+    floatText(seatPos(t.def, s).setY(1.9), '🃏 +' + won(MIX_FEE), 'money'); pulse('money');
+  }
   c.table = t.id; c.seat = s; c.barSpot = null; c.state = 'to-seat';
   walkTo(c, [seatPos(t.def, s)], function () {
     c.state = 'seated'; c.sitting = true;
@@ -1256,6 +1383,8 @@ function tickTable(t, dt) {
   t.def.cards.forEach(function (cg, i) { cg.visible = !!(t.pos && occ(t, i) && n >= 2 && !t.broken); });
   t.def.alarm.visible = !!t.call;
   if (t.call) t.def.alarm.position.y = 2.9 + Math.sin(G.simT * 5) * 0.15;
+  if (!t.pos || t.broken || n < 2) t.cards = null;
+  showBoard(t);
   if (t.call || !d || t.broken || G.blackout) return;
   if (n < 2) { t.pos = null; t.needsDraw = true; t.handT = 0; return; }
   if (!t.pos) startHand(t);
@@ -1263,25 +1392,76 @@ function tickTable(t, dt) {
   if (!t.potMoving) t.def.pot.scale.set(1, 0.5 + 1.6 * Math.min(1, t.handT / 8), 1);
   if (t.handT >= 8) endHand(t);
 }
+/* 보드 — 핸드 진행(0~8)에 맞춰 플랍 3 · 턴 · 리버 */
+function showBoard(t) {
+  var n = !t.cards ? 0 : (t.handT >= 6.6 ? 5 : (t.handT >= 5 ? 4 : (t.handT >= 3 ? 3 : 0)));
+  if (n === t.shownBoard) return;
+  t.shownBoard = n;
+  t.def.board.forEach(function (m, i) {
+    m.visible = i < n;
+    if (i < n && m.material.map !== cardTex(t.cards.board[i])) { m.material.map = cardTex(t.cards.board[i]); m.material.needsUpdate = true; }
+  });
+  if (n === 3) tone(1500, 0.04, 'triangle', 0.03);
+}
+/* 핸드마다 실제 덱에서 홀카드(홀덤 2 · PLO 4)와 보드 다섯 장을 돌린다 */
+function dealReal(t) {
+  var deck = newDeck(), k = isMix(t) ? 4 : 2, holes = {};
+  for (var i = 0; i < N; i++) if (occ(t, i)) holes[i] = deck.splice(0, k);
+  t.cards = { holes: holes, board: deck.splice(0, 5) };
+  t.shownBoard = -1;
+}
+/* 쇼다운 — 끝까지 간 사람 중 가장 센 핸드가 이긴다. PLO8 은 로우가 있으면 반을 나눈다 */
+function showdown(t, contenders) {
+  var B = t.cards.board, mix = isMix(t), hi = null, his = [], lo = null, los = [];
+  contenders.forEach(function (s) {
+    var h = t.cards.holes[s];
+    var sc = mix ? bestPLOHigh(h, B) : best(h.concat(B));
+    var c = sc ? cmp(sc, hi || [-1]) : -1;
+    if (sc && c > 0) { hi = sc; his = [s]; } else if (sc && c === 0) his.push(s);
+    if (mix) {
+      var l = bestPLOLow(h, B);
+      if (l) { var cl = lo ? cmp(l, lo) : -1; if (!lo || cl < 0) { lo = l; los = [s]; } else if (cl === 0) los.push(s); }
+    }
+  });
+  return { hi: hi, his: his, lo: lo, los: los };
+}
+function flushSuit(cards) {
+  var cnt = [0, 0, 0, 0];
+  cards.forEach(function (c) { cnt[c.s]++; });
+  var m = Math.max.apply(null, cnt);
+  return m >= 3 ? SUITS[cnt.indexOf(m)].s : '♠';
+}
 
 function endHand(t) {
   t.hands++;
   t.handT = 0;
   var lv = level(), p = Math.min(0.14, 0.025 + lv * 0.007) * STACKS[stackIdx()].bust * (regOpen() ? 1 : 2.6);   // 마감 뒤엔 결판을 향해 빨라진다
   var occs = [];
-  for (var i = 0; i < N; i++) if (occ(t, i)) occs.push(i);
+  for (var i = 0; i < N; i++) if (occ(t, i) && t.cards && t.cards.holes[i]) occs.push(i);
+  if (!occs.length) { startHand(t); return; }
+  // 끝까지 간 사람 2~4명 — 나머지는 중간에 폴드했다
+  var contenders = shuffle(occs.slice()).slice(0, Math.min(occs.length, 2 + rnd(3)));
+  var sd = showdown(t, contenders);
+  var winners = sd.his.length ? sd.his : [contenders[0]];
+  var losers = contenders.filter(function (s) { return winners.indexOf(s) < 0 && sd.los.indexOf(s) < 0; });
+  // 탈락은 진 사람 중에서 — 전체 탈락률이 예전과 비슷하도록 확률을 키운다
+  var pl = Math.min(0.75, p * occs.length / Math.max(1, losers.length));
   var busted = [];
-  occs.forEach(function (s) { if (busted.length < occs.length - 1 && chance(p)) busted.push(s); });
+  losers.forEach(function (s) { if (busted.length < occs.length - 1 && chance(pl)) busted.push(s); });
   t.bustedLast = busted.map(function (s) { return { seat: s, name: G.customers[t.seats[s]].name }; });
-  var alive = occs.filter(function (s) { return busted.indexOf(s) < 0; });
-  if (alive.length) {
-    var ws = pick(alive), pot = t.def.pot, home = V(0, 0);
-    var toward = seatPos({ cx: 0, cz: 0 }, ws, -0.5);
-    t.potMoving = true;
-    moveTo(pot, home, toward, 0.35, 0, function () { pot.position.copy(home); pot.scale.set(1, 0.5, 1); t.potMoving = false; }, 0.1);
-    if (chance(0.3)) say(G.customers[t.seats[ws]], pick(['나이스!', '팟 가져갑니다~', '이게 되네 ㅋㅋ']), 1.8);
-    SFX.chips();
-  }
+  var ws = winners[0], pot = t.def.pot, home = V(0, 0);
+  var toward = seatPos({ cx: 0, cz: 0 }, ws, -0.5);
+  t.potMoving = true;
+  moveTo(pot, home, toward, 0.35, 0, function () { pot.position.copy(home); pot.scale.set(1, 0.5, 1); t.potMoving = false; }, 0.1);
+  var wc = G.customers[t.seats[ws]];
+  t.lastResult = { name: wc.name, hand: sd.hi ? handName(sd.hi) : '', split: winners.length > 1, low: sd.lo && sd.los.length ? G.customers[t.seats[sd.los[0]]].name : null };
+  if (sd.hi && sd.hi[0] >= 4 && chance(0.6)) {
+    var cat = sd.hi[0];
+    say(wc, (cat === 5 || cat === 8 ? flushSuit(t.cards.board) + ' ' : '') + CAT[cat] + '!' + (cat >= 6 ? ' 🔥' : ''), 2.2);
+  } else if (winners.length > 1) say(wc, '찹! 반반이네요 🤝', 1.8);
+  else if (chance(0.3)) say(wc, pick(['나이스!', '팟 가져갑니다~', '이게 되네 ㅋㅋ']), 1.8);
+  if (sd.lo && sd.los.length && sd.los[0] !== ws && chance(0.5)) say(G.customers[t.seats[sd.los[0]]], '로우 반 가져갑니다 🌙', 1.8);
+  SFX.chips();
   if (busted.length) chipBurst(V(t.def.cx, t.def.cz), 12);
   busted.forEach(function (s) { bust(t, s); });
   startHand(t);
@@ -1304,14 +1484,17 @@ function startHand(t) {
   t.pos = pos; t.last = { btn: pos.btn, sbSeat: pos.sbSeat, bb: pos.bb };
   t.needsDraw = false; t.changed = false;
   dealCards(t);
+  dealReal(t);
   var d = G.dealers[t.dealer];
   var miss = 1 - effAcc(d) / 100;
-  if (changed && !pos.draw && prev && seated(t) >= 4 && chance(0.1 + miss * 1.0)) {
+  var mixK = isMix(t) && !mixOk(d.staff) ? 2 : 1;   // 믹스 자격 없는 딜러 — 사고 2배
+  if (changed && !pos.draw && prev && seated(t) >= 4 && chance((0.1 + miss * 1.0) * mixK)) {
     createCall(t, 'pos', { prev: prev, pos: pos, busted: t.bustedLast.slice(), snap: snapSeats(t) });
     return;
   }
-  if (chance(0.06 + miss * 0.4)) {
-    var type = pick(['btn', 'cnt', 'under', 'under']);
+  if (chance((0.06 + miss * 0.4) * mixK)) {
+    /* 믹스(팟 리밋) 테이블은 레이즈 금액 판정을 내지 않는다 — 원문 대조 전 */
+    var type = isMix(t) ? pick(['btn', 'cnt']) : pick(['btn', 'cnt', 'under', 'under']);
     if (type === 'btn' && seated(t) < 4) type = 'cnt';
     createCall(t, type, genIncident(t, type));
   }
@@ -1345,7 +1528,7 @@ function genIncident(t, type) {
   }
   var data = { acts: acts, sa: isSA(acts) };
   if (type === 'btn') data.shouldBe = t.pos.btn;
-  if (type === 'cnt') { var s2 = pick(order); data.seat = s2; data.who = G.customers[t.seats[s2]].name; data.n = chance(0.5) ? 1 : 3; }
+  if (type === 'cnt') { var s2 = pick(order); data.seat = s2; data.who = G.customers[t.seats[s2]].name; data.n = isMix(t) ? pick([3, 5]) : (chance(0.5) ? 1 : 3); }
   return data;
 }
 
@@ -1404,7 +1587,7 @@ function resolveCall(task, result) {
     log(t.name + ' — 아무도 오지 않아 딜러가 알아서 처리했다', 'bad');
     SFX.bad();
   }
-  if (task.misdeal) t.handT = 0;
+  if (task.misdeal) { t.handT = 0; if (t.pos) dealReal(t); }   // 미스딜 — 다시 딜한다
   var dl = t.dealer !== null ? G.dealers[t.dealer] : null;   // 멘탈 약함 — 자기 테이블이 틀리면 흔들린다
   if (dl && result === 'wrong' && hasT(dl.staff, 'fragile')) { addMorale(dl.staff, -8); say(dl, '🥲 제 탓 같아요…', 2.2); }
 }
@@ -2292,11 +2475,11 @@ function renderOverlay() {
   G.tables.forEach(function (t, i) {
     var el = OV.tables[i];
     if (!el) { el = document.createElement('div'); el.className = 'tlabel'; el.onclick = function () { audioOn(); goTable(i); }; host.appendChild(el); OV.tables[i] = el; }
-    var p = project(V(t.def.cx, t.def.cz).setY(t.call ? 3.6 : 2.0));
+    var p = project(V(t.def.cx, t.def.cz - RZ - 0.3).setY(t.call ? 3.6 : 1.7));   // 뒤쪽 가장자리 위 — 보드를 가리지 않게
     el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
     var txt = t.broken ? t.name + '<small>재편으로 닫힘</small>' :
       (t.dealer === null ? '⚠️ ' + t.name + '<small>딜러 없음 — 눌러서 배치</small>' :
-      (t.call ? '🚨 플로어! — ' + t.name : t.name + '<small>' + seated(t) + '명</small>'));
+      (t.call ? '🚨 플로어! — ' + t.name : t.name + (isMix(t) ? ' · PLO8' : '') + '<small>' + seated(t) + '명</small>'));
     if (el._t !== txt) { el.innerHTML = txt; el._t = txt; }
     el.className = 'tlabel' + (t.call ? ' alert' : '');
   });
@@ -2385,6 +2568,8 @@ function openTable(i) {
   var h = '<div class="kicker">' + t.name + '</div><h2>' + (d ? '딜러 ' + d.name : '딜러 없음') + '</h2>' +
     (d ? '<p>정확도 ' + Math.round(d.acc) + ' · 피로 ' + Math.round(d.fatigue) + '/45 → 실제 정확도 <b>' + Math.round(effAcc(d)) + '</b> · 진행 속도 <b>' + Math.round(handSpeed(d) * 100) + '%</b>' +
       (d.fresh > G.simT ? ' ⚡교대 직후' : '') + '. 피로가 쌓이면 실수가 늘어 호출이 잦아지고 핸드가 느려진다.</p>' : '') +
+    (isMix(t) ? '<p class="note">🃏 PLO8 믹스 테이블 — 홀카드 넷, 하이 · 로우(8 이하) 반반. 딜러 믹스 자격 ' + (d ? (mixOk(d.staff) ? '✓' : '<b>✗ — 사고 2배</b>') : '—') + '</p>' : '') +
+    (t.lastResult ? '<p class="note">지난 핸드 — ' + t.lastResult.name + (t.lastResult.hand ? ' · ' + t.lastResult.hand : '') + (t.lastResult.split ? ' (찹)' : '') + (t.lastResult.low ? ' · 로우 ' + t.lastResult.low : '') + '</p>' : '') +
     '<div class="acts">' + names.join('<br>') + '</div>';
   if (!d && rest.length) {
     h += '<h3>딜러 배치</h3><div class="choices">' + rest.map(function (r) {
@@ -2735,7 +2920,7 @@ function resetGame() {
 function titleScreen() {
   G.phase = 'title';
   var sv = loadSave();
-  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 10판</div>' +
+  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 11판</div>' +
     '<h1>홀덤펍 점장</h1>' +
     '<p class="sub">오늘 밤, 당신의 펍에서 데일리 토너먼트가 열린다.</p></div>' +
     '<ul class="howto">' +
@@ -2937,6 +3122,7 @@ function prepScreen(tab) {
         }).join('') + '</div></div>';
     }).join('') + '</div><p class="note">휴식 딜러가 있어야 영업 중에 교대할 수 있다. 교대 직후 45초 동안 진행 속도가 오른다. ' +
       '<b>교육은 하루 한 번</b> — 판정(정확도 +3) · 속도(진행 +5%) · 응대(테이블 만족) 중 하나, 3문제 중 2개 이상 맞히면 한 단계 오른다. <b>판정 2단계면 믹스게임 자격</b>.' +
+      (G.owned.mix ? ' <b>2번 = PLO8 믹스 테이블</b> — 믹스 자격 없는 딜러를 앉히면 사고가 2배.' : '') +
       (ds.length < tn ? ' <b>딜러가 테이블 수보다 적다 — 직원 탭에서 채용하세요.</b>' : '') + '</p>';
   }
   var ready = cfg.assign.slice(0, tableCount()).every(function (x) { return x !== null && x !== undefined; });
@@ -3173,6 +3359,8 @@ function openDay() {
     assignDealer(t, d);
   });
   if (info0().wd === 4 || info0().wd === 5) openReservations();
+  var mt = G.owned.mix && G.tables[MIX_TABLE], md = mt && mt.dealer !== null ? G.dealers[mt.dealer] : null;
+  if (md && !mixOk(md.staff)) { msgs.push('⚠️ 믹스 테이블 딜러 ' + md.name + ' — 믹스 자격 없음(사고 2배)'); log('⚠️ 믹스 테이블 딜러 ' + md.name + ' — 믹스 자격이 없다. 판정 교육 2단계면 자격', 'bad'); }
   G.absent.forEach(function (st) { log('📵 ' + st.name + '(' + ROLES[st.role].ko + ') 노쇼 — 연락이 안 된다', 'bad'); });
   G.phase = 'open';
   $('#hud')._built = false;
@@ -3180,7 +3368,7 @@ function openDay() {
   if (G.absent.length) {
     toast('📵 노쇼 — ' + G.absent.map(function (x) { return x.name + '(' + ROLES[x.role].ko + ')'; }).join(' · ') + (msgs.length ? ' · ' + msgs.join(' · ') : '') + ' — 🧑‍💼 로 대타를 부를 수 있다');
     SFX.bad();
-  } else toast('18:00 — 영업 시작!');
+  } else toast('18:00 — 영업 시작!' + (msgs.length ? ' · ' + msgs.join(' · ') : ''));
   tip('open', '👟 바닥을 탭하면 점장이 걸어간다. 카운터 뒤에 서 있으면 등록이 빨라진다.');
   say(G.player, '오늘도 잘 부탁해요!', 2.5);
 }
@@ -3223,7 +3411,7 @@ function report(settleOk) {
   var done = G.goals.map(function (g) { return goalDef(g).test(s, g.n, ctx); });
   var stars = done.filter(Boolean).length;
   var bonus = stars * GOAL_REWARD;
-  var net = (s.depositRev || 0) + feeRev + drinkRev - wages - WAGE.ops - stockCost - settleLoss + bonus - s.fines;
+  var net = (s.depositRev || 0) + (s.mixFee || 0) + feeRev + drinkRev - wages - WAGE.ops - stockCost - settleLoss + bonus - s.fines;
   G.bank += net + stockCost;   // 재고비는 오픈 때 이미 냈다
   var rankBefore = rankOf(G.rep);
   var repDay = (G.rep - s.repStart) + (avgSat - 60) / 8 + stars * 2;   // 오늘 하루 평판 변화 전체
@@ -3260,12 +3448,13 @@ function report(settleOk) {
     ['참가비 ' + s.entries + '건 × ' + won(fee()), feeRev],
     ['음료 ' + s.drinks + '잔 × ' + won(PRICES[G.cfg.price].p), drinkRev],
     ['예약 보증금 (노쇼 ' + (G.resv ? G.resv.noshow : 0) + '명분)', s.depositRev || 0],
+    ['믹스 테이블 참가비 ' + Math.round((s.mixFee || 0) / MIX_FEE) + '명', s.mixFee || 0],
     ['목표 보상 ' + stars + '개', bonus],
     ['인건비 (출근 ' + present.length + '명' + (G.temps.length ? ' · 대타 ' + G.temps.length : '') + ')', -wages],
     ['운영비 (전기 · 재료 · 기타 — 임대료는 일요일에)', -WAGE.ops],
     ['음료 재고 ' + G.cfg.stock + '개', -stockCost]
   ];
-  rows = rows.filter(function (r) { return r[1] !== 0 || !/보증금/.test(r[0]); });
+  rows = rows.filter(function (r) { return r[1] !== 0 || !/보증금|믹스/.test(r[0]); });
   if (settleLoss) rows.push(['정산 오차 확인 비용', -settleLoss]);
   if (s.fines) rows.push(['벌금 (돌발 상황)', -s.fines]);
   var starHTML = '<div class="stars">' + [0, 1, 2].map(function (i) { return '<span class="' + (i < stars ? 'on' : '') + '" style="animation-delay:' + (i * 0.25) + 's">★</span>'; }).join('') + '</div>';
@@ -3362,6 +3551,7 @@ function bankrupt() {
 // ── 시작 ────────────────────────────────────────────
 G.saveGameNow = function () { saveGame(); };   // 자동 점검용
 G.placeAt = placeAtForTest;                    // 자동 점검용
+G.__eval = { best: best, eval5: eval5, plohi: bestPLOHigh, plolo: bestPLOLow, name: handName };   // 자동 점검용
 G.roster = startRoster();
 G.regulars = makeRegulars();
 G.cfg.resCap = 1; G.cfg.resDeposit = true;
