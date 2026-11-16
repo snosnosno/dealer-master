@@ -76,11 +76,39 @@ var STAFF_NAMES = ['도윤', '서아', '예준', '지우', '시우', '하은', '
   '선우', '윤서', '연우', '다은', '유준', '소율', '정우', '예린', '하윤', '로운', '이안', '나은'];
 function startRoster() {
   return [
-    { id: 1, name: '민준', role: 'dealer', skill: 86, speed: 0.95, days: 0, rel: 0.95 },
-    { id: 2, name: '서연', role: 'dealer', skill: 74, speed: 1.15, days: 0, rel: 0.88 },
-    { id: 3, name: '지호', role: 'dealer', skill: 63, speed: 1.05, days: 0, rel: 0.93 },
-    { id: 4, name: '다온', role: 'server', skill: 62, days: 0, rel: 0.9 }
-  ].map(function (x) { x.wage = wageOf(x.role, x.skill); return x; });
+    { id: 1, name: '민준', role: 'dealer', skill: 86, speed: 0.95, days: 0, rel: 0.95, trait: 'careful' },
+    { id: 2, name: '서연', role: 'dealer', skill: 74, speed: 1.15, days: 0, rel: 0.88, trait: 'fast' },
+    { id: 3, name: '지호', role: 'dealer', skill: 63, speed: 1.05, days: 0, rel: 0.93, trait: 'fragile' },
+    { id: 4, name: '다온', role: 'server', skill: 62, days: 0, rel: 0.9, trait: 'chatty' }
+  ].map(function (x) { x.wage = wageOf(x.role, x.skill); x.morale = 70; return x; });
+}
+/* 직원 특성 — 직원 · 지원자에 0~1개 */
+var TRAITS = {
+  fast: { ko: '손이 빠름', ic: '⚡', desc: '속도 +15%' },
+  careful: { ko: '꼼꼼함', ic: '🔍', desc: '정확도 +5' },
+  chatty: { ko: '수다쟁이', ic: '💬', desc: '응대 만족 +, 조금 느림' },
+  late: { ko: '지각 잦음', ic: '⏰', desc: '출근율 −8%p' },
+  fragile: { ko: '멘탈 약함', ic: '🥲', desc: '자기 테이블 오판정 때 사기 −8' },
+  mood: { ko: '분위기 메이커', ic: '🎉', desc: '주변 손님 만족이 서서히 오른다' }
+};
+function hasT(st, t) { return !!st && st.trait === t; }
+function rollTrait() { return chance(0.55) ? pick(Object.keys(TRAITS)) : null; }
+/* 교육 트리 — 판정 · 속도 · 응대 0~3단계. 판정 2단계부터 믹스게임 자격 */
+var TRAIN = {
+  j: { ko: '판정', desc: '실질 액션 퀴즈 · 단계마다 정확도 +3' },
+  s: { ko: '속도', desc: '칩 합계 퀴즈 · 단계마다 진행 속도 +5%' },
+  v: { ko: '응대', desc: '손님 응대 퀴즈 · 단계마다 테이블 만족이 서서히 오른다' }
+};
+function trainOf(st) { if (!st.train) st.train = { j: 0, s: 0, v: 0 }; return st.train; }
+function mixOk(st) { return trainOf(st).j >= 2; }
+/* 사기가 60 아래면 정확도 · 속도가 떨어진다 */
+function moralePen(st) { var m = st && st.morale != null ? st.morale : 70; return m < 60 ? 60 - m : 0; }
+function staffSpd(st) { return (hasT(st, 'fast') ? 1.15 : 1) * (hasT(st, 'chatty') ? 0.88 : 1) * (1 - moralePen(st) * 0.004); }
+function relOf(st) {
+  var r = st.rel != null ? st.rel : 0.92;
+  if (hasT(st, 'late')) r -= 0.08;
+  if ((st.morale != null ? st.morale : 70) < 35) r -= 0.15;
+  return clamp(r, 0.3, 1);
 }
 var SRC = {
   sa: '케이스 6 · Rule 36 (실질 액션) — 블라인드를 빼고, 차례대로 나온 액션 둘 중 하나라도 칩이 들어갔거나 액션이 셋이면 실질 액션',
@@ -685,7 +713,7 @@ function newDay() {
   G.dealers = []; G.servers = []; G.counterStaff = null; G.cleaner = null; G.floorStaff = null;
   G.absent = []; G.temps = []; G.pending = [];
   G.roster.forEach(function (st) {
-    if (G.day >= 2 && !chance(st.rel != null ? st.rel : 0.92)) { G.absent.push(st); return; }
+    if (G.day >= 2 && !chance(relOf(st))) { G.absent.push(st); return; }
     spawnStaff(st, false);
   });
   G.onCall = genOnCall();
@@ -751,7 +779,7 @@ function genOnCall() {
     var nm = pick(STAFF_NAMES.filter(function (n) { return used.indexOf(n) < 0; }));
     used.push(nm);
     var skill = 55 + rnd(26);
-    var st = { id: ++G.staffSeq, name: nm, role: role, skill: skill, days: 0, temp: true, rel: 0.9 };
+    var st = { id: ++G.staffSeq, name: nm, role: role, skill: skill, days: 0, temp: true, rel: 0.9, trait: rollTrait(), morale: 65 + rnd(15) };
     if (role === 'dealer') st.speed = Math.round((0.9 + Math.random() * 0.25) * 100) / 100;
     st.wage = Math.round(wageOf(role, skill) * 1.3 / 10000) * 10000;
     return st;
@@ -874,7 +902,7 @@ function tickCounter(dt) {
   if (!G.queue.length) { G.counterProg = 0; return; }
   var head = G.queue[0];
   if (head.mesh.position.distanceTo(QUEUE[0]) > 0.3) return;
-  var rate = G.counterRate = playerNear(V(8.2, 1.7), 1.6) ? 1 : (G.counterStaff && !G.counterStaff.arriving ? 0.55 + G.counterStaff.staff.skill / 220 : 0.28);
+  var rate = G.counterRate = playerNear(V(8.2, 1.7), 1.6) ? 1 : (G.counterStaff && !G.counterStaff.arriving ? (0.55 + G.counterStaff.staff.skill / 220) * staffSpd(G.counterStaff.staff) : 0.28);
   if (head.group && G.groupBoost > G.simT) rate *= 2;   // 단체를 맞았다 — 한꺼번에 등록
   G.counterProg += dt * rate;
   if (G.queue.length >= 3) tip('queue', '등록 줄이 길어진다 — 카운터 뒤로 걸어가면 빨리 처리된다. 카운터 직원을 채용해도 된다.');
@@ -1027,9 +1055,14 @@ function positionsFor(t) {
   return p;
 }
 
-function effAcc(d) { return clamp(d.acc - d.fatigue * 1.1, 15, 99); }
+function effAcc(d) {
+  var st = d.staff;
+  return clamp(d.acc - d.fatigue * 1.1 + (hasT(st, 'careful') ? 5 : 0) + trainOf(st).j * 3 - moralePen(st) * 0.25, 15, 99);
+}
 function handSpeed(d) {
-  return d.speed * (1 - d.fatigue / 100) * (d.fresh > G.simT ? 1.18 : 1) * (G.owned.shuffler ? 1.1 : 1);
+  var st = d.staff;
+  return d.speed * (1 - d.fatigue / 100) * (d.fresh > G.simT ? 1.18 : 1) * (G.owned.shuffler ? 1.1 : 1) *
+    (hasT(st, 'fast') ? 1.15 : 1) * (hasT(st, 'chatty') ? 0.93 : 1) * (1 + trainOf(st).s * 0.05) * (1 - moralePen(st) * 0.004);
 }
 
 function tickTable(t, dt) {
@@ -1187,6 +1220,8 @@ function resolveCall(task, result) {
     SFX.bad();
   }
   if (task.misdeal) t.handT = 0;
+  var dl = t.dealer !== null ? G.dealers[t.dealer] : null;   // 멘탈 약함 — 자기 테이블이 틀리면 흔들린다
+  if (dl && result === 'wrong' && hasT(dl.staff, 'fragile')) { addMorale(dl.staff, -8); say(dl, '🥲 제 탓 같아요…', 2.2); }
 }
 
 /* 아나운스 — 블라인드 업 · 레지 마감 30분 전 · 레지 마감 · 파이널 테이블 */
@@ -1291,7 +1326,7 @@ function tickSpills(dt) {
     var target = G.spills.filter(function (s) { return s.cleaning === null && G.simT - s.t0 > 6; })[0];
     if (target) {
       cl.busy = true;
-      var cspd = 2 + cl.staff.skill / 40;
+      var cspd = (2 + cl.staff.skill / 40) * staffSpd(cl.staff);
       walkTo(cl, [target.mesh.position.clone()], function () {
         if (G.spills.indexOf(target) >= 0) { target.cleaning = G.simT + 1.5; say(cl, '🧹', 1.5); }
         setTimeout(function () { walkTo(cl, [SPOTS.cleanerHome], function () { cl.busy = false; }, cspd); }, 50);
@@ -1665,7 +1700,7 @@ function tickServer(s, dt) {
     .sort(function (a, b) { return a.order - b.order; })[0];
   if (!c) { s.cool = 1; return; }
   c.orderTaken = true; s.busy = true;
-  var skill = s.staff.skill, spd = 2.3 + skill / 45;
+  var skill = s.staff.skill, spd = (2.3 + skill / 45) * staffSpd(s.staff);
   say(s, '네~ 바로 갈게요!', 1.4);
   walkTo(s, [BAR_PICK], function () {
     if (G.stock <= 0) {
@@ -1685,7 +1720,7 @@ function tickServer(s, dt) {
         var price = PRICES[G.cfg.price].p;
         G.dayRevenue += price; G.stats.drinks++;
         var quick = c.order && G.simT - c.order < 10;
-        c.lastDrink = G.simT; c.order = null; c.orderTaken = false; c.sat = clamp(c.sat + 4, 0, 100);
+        c.lastDrink = G.simT; c.order = null; c.orderTaken = false; c.sat = clamp(c.sat + 4 + (hasT(s.staff, 'chatty') ? 4 : 0), 0, 100);
         if (c.reg && quick) { c.reg.aff = clamp(c.reg.aff + 3, 0, 100); c.sat = clamp(c.sat + 4, 0, 100); }
         placeGlass(c);
         floatText(c.mesh.position.clone().setY(1.7), '+' + won(price), 'money');
@@ -1746,12 +1781,12 @@ function tickFloor() {
   task.claimed = true; f.busy = true;
   var dest = task.kind === 'announce' ? V(6.4, 2.1) :
     (task.kind === 'balance' ? approachFrom(G.tables[task.table], f.mesh.position) : task.spill.mesh.position.clone());
-  var spd = 2.4 + f.staff.skill / 60;
+  var spd = (2.4 + f.staff.skill / 60) * staffSpd(f.staff);
   walkTo(f, [dest], function () {
     if (G.tasks.indexOf(task) >= 0) {
       if (task.kind === 'announce') {
         removeTask(task); G.stats.ann++; G.stats.annByStaff++;
-        if (chance(0.55 + f.staff.skill / 250)) { G.rep = clamp(G.rep + 0.12, 0, 100); SFX.mic(); say(f, '📢 ' + ANN_LINE[task.type](task), 2.6); }
+        if (chance(0.55 + f.staff.skill / 250 + (hasT(f.staff, 'careful') ? 0.05 : 0) - moralePen(f.staff) / 300)) { G.rep = clamp(G.rep + 0.12, 0, 100); SFX.mic(); say(f, '📢 ' + ANN_LINE[task.type](task), 2.6); }
         else { G.stats.annWrong++; G.rep = clamp(G.rep - 0.6, 0, 100); say(f, '📢 어… 정정하겠습니다', 2.2); }
       } else if (task.kind === 'balance') doBalance(task, f);
       else { task.spill.cleaning = G.simT + 1.5; say(f, '🧹', 1.5); }
@@ -1766,6 +1801,12 @@ function tickDealers(dt) {
     stepActor(d, dt);
     if (d.table !== null) {
       d.fatigue = clamp(d.fatigue + dt / 7 * (G.owned.shuffler ? 0.65 : 1), 0, 45);
+      if (d.fatigue >= 35) {   // 과로 — 지친 채로 오래 두면 사기가 샌다
+        addMorale(d.staff, -dt * 0.12);
+        if (chance(dt * 0.02)) say(d, '😩 언제 쉬어요…', 2);
+      }
+      var tr = trainOf(d.staff).v;   // 응대 교육 — 자기 테이블 손님 만족이 서서히 오른다
+      if (tr) G.tables[d.table].seats.forEach(function (id) { if (id !== null) G.customers[id].sat = clamp(G.customers[id].sat + 0.03 * tr * dt, 0, 100); });
       if (d.fatigue > 25) tip('tired', '😓 딜러가 지쳤다 — 머리 위 막대가 빨개지면 실수가 늘고 느려진다. 테이블을 눌러 쉬는 딜러와 교대하자.');
       if (d.fatigue > 25 && chance(dt * 0.05)) {
         say(d, pick(['😓 손이 무거워요', '😵 집중이 안 돼…', '교대 언제예요…']), 2.4);
@@ -1785,6 +1826,16 @@ function swapDealer(t, incoming) {
   walkTo(incoming, [dealerPos(t.def)], function () { faceTo(incoming, V(t.def.cx, t.def.cz)); say(incoming, '교대했습니다! 💪', 2.2); });
   floatText(V(t.def.cx, t.def.cz).setY(2.2), '교대 — 45초 속도 UP', 'good');
   log(t.name + ' 딜러 교대 — ' + out.name + ' → ' + incoming.name, 'hi');
+}
+
+/* 분위기 메이커 — 반경 3 안 손님 만족이 서서히 오른다 */
+function staffActors() { return G.dealers.concat(G.servers, [G.counterStaff, G.cleaner, G.floorStaff]).filter(function (a) { return a && !a.arriving; }); }
+function tickMood(dt) {
+  staffActors().forEach(function (a) {
+    if (!hasT(a.staff, 'mood')) return;
+    custNear(a.mesh.position, 3).forEach(function (c) { c.sat = clamp(c.sat + 0.12 * dt, 0, 100); });
+    if (chance(dt * 0.015)) say(a, pick(['🎉 오늘 분위기 좋다!', '😄 다들 화이팅!', '🎶']), 1.8, true);
+  });
 }
 
 // ── 손님 수다 ────────────────────────────────────────
@@ -1854,6 +1905,7 @@ function simulate(dt) {
   if (G.cleaner) stepActor(G.cleaner, dt);
   if (G.floorStaff) stepActor(G.floorStaff, dt);
   if (G.inspector) stepActor(G.inspector, dt);
+  tickMood(dt);
   tickOrders(dt);
   tickStaff(dt);
   tickFloor();
@@ -2068,7 +2120,7 @@ function renderOverlay() {
     var p = project(d.mesh.position.clone().setY(1.55));
     el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
     var f = d.fatigue / 45;
-    el.querySelector('span').textContent = d.name + (d.fresh > G.simT ? ' ⚡' : '');
+    el.querySelector('span').textContent = d.name + (d.fresh > G.simT ? ' ⚡' : '') + (morale(d.staff) < 35 ? ' 😞' : '');
     var bar = el.querySelector('b');
     bar.style.width = Math.round(f * 100) + '%';
     bar.style.background = f > 0.66 ? 'var(--red)' : (f > 0.4 ? 'var(--amber)' : 'var(--ok)');
@@ -2157,8 +2209,10 @@ function openTable(i) {
       return '<button class="choice" data-swap="' + r.id + '">' + r.name + '와 교대 — 정확도 ' + Math.round(r.acc) + ' · 피로 ' + Math.round(r.fatigue) + '</button>';
     }).join('') + '</div>';
   }
+  if (d) h += '<p class="note">사기 ' + moraleTag(d.staff) + (d.staff.trait ? ' · ' + traitTag(d.staff) : '') + '</p>' + praiseBtn(d.staff);
   h += '<button class="cta ghost" data-close="1">닫기</button>';
   showModal(h);
+  bindPraise();
   document.querySelectorAll('[data-swap]').forEach(function (b) {
     b.onclick = function () { swapDealer(t, G.dealers[+b.getAttribute('data-swap')]); closeModal(); };
   });
@@ -2167,6 +2221,35 @@ function openTable(i) {
   });
   $('[data-close]').onclick = closeModal;
 }
+
+/* 칭찬 — 하루 한 번, 한 사람. 사기 +8 */
+function praiseBtn(st) {
+  var used = G.praiseDay === G.day;
+  return '<button class="cta ghost" data-praise="' + st.id + '"' + (used ? ' disabled' : '') + '>👏 ' + st.name + ' 칭찬하기' + (used ? ' — 오늘은 이미 칭찬했다' : ' (하루 한 번 · 사기 +8)') + '</button> ';
+}
+function bindPraise() {
+  document.querySelectorAll('[data-praise]').forEach(function (b) {
+    b.onclick = function () {
+      if (G.praiseDay === G.day) return;
+      var id = +b.getAttribute('data-praise');
+      var st = G.roster.concat(G.temps).filter(function (x) { return x.id === id; })[0];
+      var a = staffActors().filter(function (x) { return x.staff === st; })[0];
+      if (!st) return;
+      G.praiseDay = G.day;
+      addMorale(st, 8);
+      if (a) { say(a, pick(['감사합니다! 😊', '더 열심히 할게요 💪', '헤헤 🙌']), 2.2); floatText(a.mesh.position.clone().setY(1.9), '사기 +8', 'good'); }
+      say(G.player, '👏 ' + st.name + ' 씨 오늘 잘하고 있어요!', 2.2);
+      log('👏 ' + st.name + ' 칭찬 — 사기 ' + Math.round(st.morale), 'good');
+      SFX.good();
+      closeModal();
+    };
+  });
+}
+function moraleTag(st) {
+  var m = Math.round(st.morale != null ? st.morale : 70);
+  return '<b>' + (m >= 60 ? '😊' : (m >= 35 ? '😐' : '😞')) + ' ' + m + '</b>';
+}
+function traitTag(st) { var t = TRAITS[st.trait]; return t ? '<span class="trait" title="' + t.desc + '">' + t.ic + ' ' + t.ko + '</span>' : ''; }
 
 // ── 영업 중 직원 부르기 ─────────────────────────────
 function activeCount(role) {
@@ -2186,7 +2269,13 @@ function openHire() {
     '<p class="note">부른 사람은 문으로 걸어 들어와 자리에 간 뒤부터 일한다. 일당은 오늘 하루치가 다 나간다.</p>' +
     '<h3>대타 — 오늘 밤만 · 일당 1.3배</h3><div class="shop">' + (G.onCall.length ? G.onCall.map(function (x) { return row(x, 'temp'); }).join('') : '<p class="note">더 부를 사람이 없다.</p>') + '</div>' +
     '<h3>오늘 지원자 — 정식 채용 · 지금부터 출근</h3><div class="shop">' + (G.cands.length ? G.cands.map(function (x) { return row(x, 'perm'); }).join('') : '<p class="note">남은 지원자가 없다.</p>') + '</div>' +
+    '<h3>👏 칭찬 — 하루 한 번, 한 사람 (사기 +8)</h3><div class="shop">' + staffActors().map(function (a) {
+      var st = a.staff;
+      return '<div class="item"><div><b>' + st.name + '</b> <span class="role r-' + st.role + '">' + ROLES[st.role].ko + '</span> ' + traitTag(st) + '<div class="note">사기 ' + moraleTag(st) + '</div></div>' +
+        '<button class="cta ghost" data-praise="' + st.id + '"' + (G.praiseDay === G.day ? ' disabled' : '') + '>👏</button></div>';
+    }).join('') + '</div>' +
     '<button class="cta ghost" data-close="1">닫기</button>', true);
+  bindPraise();
   document.querySelectorAll('[data-hire-temp]').forEach(function (b) {
     b.onclick = function () {
       var st = G.onCall.filter(function (x) { return x.id === +b.getAttribute('data-hire-temp'); })[0];
@@ -2447,7 +2536,7 @@ function loadSave() {
 function resetGame() {
   G.day = 1; G.rep = 50; G.bank = START_BANK; G.owned = {}; G.roster = startRoster(); G.staffSeq = 10;
   G.cfg = { fee: 30000, stack: 1, level: 1, price: 1, stock: 60, chipOk: null, assign: [1, 2, null], train: null, resCap: 1, resDeposit: true };
-  G.goalsDay = null; G.candDay = null; G.tips = {}; G.weekLog = []; G.debtDays = 0; G.regulars = makeRegulars();
+  G.goalsDay = null; G.candDay = null; G.tips = {}; G.praiseDay = null; G.raiseDayChecked = null; G.raiseReq = null; G.weekLog = []; G.debtDays = 0; G.regulars = makeRegulars();
   applyDecor();
 }
 
@@ -2457,7 +2546,7 @@ function resetGame() {
 function titleScreen() {
   G.phase = 'title';
   var sv = loadSave();
-  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 8판</div>' +
+  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 9판</div>' +
     '<h1>홀덤펍 점장</h1>' +
     '<p class="sub">오늘 밤, 당신의 펍에서 데일리 토너먼트가 열린다.</p></div>' +
     '<ul class="howto">' +
@@ -2496,17 +2585,35 @@ function genCandidates() {
     var nm = pick(STAFF_NAMES.filter(function (n) { return used.indexOf(n) < 0; }));
     used.push(nm);
     var skill = 50 + rnd(41);
-    var s = { id: ++G.staffSeq, name: nm, role: role, skill: skill, days: 0, rel: Math.round((0.8 + Math.random() * 0.18) * 100) / 100 };
+    var s = { id: ++G.staffSeq, name: nm, role: role, skill: skill, days: 0, rel: Math.round((0.8 + Math.random() * 0.18) * 100) / 100, trait: rollTrait(), morale: 62 + rnd(18) };
     if (role === 'dealer') s.speed = Math.round((0.9 + Math.random() * 0.3) * 100) / 100;
     s.wage = wageOf(role, skill);
     return s;
   });
 }
+/* 일당 인상 요청 — 사기 45 아래 직원 한 명이 오픈 준비 때 찾아온다 (하루 한 번) */
+function genRaiseRequest() {
+  if (G.raiseDayChecked === G.day) return;
+  G.raiseDayChecked = G.day; G.raiseReq = null;
+  var low = G.roster.filter(function (s) { return morale(s) < 45 && s.raiseDay !== G.day; }).sort(function (a, b) { return morale(a) - morale(b); })[0];
+  if (low) G.raiseReq = { id: low.id, amt: Math.max(10000, Math.round(low.wage * 0.1 / 10000) * 10000) };
+}
+function raiseBox() {
+  var rq = G.raiseReq, s = rq && G.roster.filter(function (x) { return x.id === rq.id; })[0];
+  if (!s) return '';
+  return '<div class="raisebox">🙋 <b>' + s.name + '</b>(' + ROLES[s.role].ko + ', 사기 ' + Math.round(morale(s)) + ') — "사장님, 일당 좀 올려 주실 수 있을까요?" ' +
+    '<b>' + won(s.wage) + ' → ' + won(s.wage + rq.amt) + '</b>' +
+    '<div class="rqbtns"><button class="cta" data-rq="1">올려 준다 (사기 +20)</button><button class="cta ghost" data-rq="0">이번엔 어렵다 (사기 −15)</button></div></div>';
+}
 function roleCount(role) { return G.roster.filter(function (s) { return s.role === role; }).length; }
 function staffLine(s) {
   var stat = s.role === 'dealer' ? '정확도 ' + s.skill + ' · 속도 ' + Math.round(s.speed * 100) : '능력 ' + s.skill;
-  return '<b>' + s.name + '</b> <span class="role r-' + s.role + '">' + ROLES[s.role].ko + '</span><div class="note">' + stat +
-    ' · 일당 ' + won(s.wage) + (s.temp ? '' : ' · 출근율 ' + Math.round((s.rel != null ? s.rel : 0.92) * 100) + '%') + (s.days ? ' · ' + s.days + '일 근무' : '') + '</div>';
+  var tr = s.role === 'dealer' && !s.temp ? trainOf(s) : null;
+  return '<b>' + s.name + '</b> <span class="role r-' + s.role + '">' + ROLES[s.role].ko + '</span> ' + traitTag(s) +
+    (tr && mixOk(s) ? ' <span class="trait mix">🃏 믹스 자격</span>' : '') + '<div class="note">' + stat +
+    ' · 일당 ' + won(s.wage) + (s.temp ? '' : ' · 출근율 ' + Math.round(relOf(s) * 100) + '%') + (s.days ? ' · ' + s.days + '일 근무' : '') +
+    ' · 사기 ' + moraleTag(s) + (tr ? ' · 교육 판정 ' + tr.j + ' · 속도 ' + tr.s + ' · 응대 ' + tr.v : '') +
+    (s.trait ? '<br>' + TRAITS[s.trait].desc : '') + '</div>';
 }
 function wagesTotal() { return G.roster.reduce(function (t, s) { return t + s.wage; }, 0); }
 
@@ -2514,6 +2621,7 @@ function prepScreen(tab) {
   G.phase = 'prep';
   pickGoals();
   genCandidates();
+  genRaiseRequest();
   G.prepTab = tab || G.prepTab || 'shop';
   var cfg = G.cfg;
   // 해고된 딜러가 배치에 남아 있으면 비운다
@@ -2529,7 +2637,7 @@ function prepScreen(tab) {
   var h = '<div class="kicker">' + info.week + '주차 ' + info.wk + '요일 · 17:30 · 오픈 준비</div><h2>' + info.name + '</h2>' +
     '<p class="note" style="margin-top:-4px">' + info.desc + '</p>' + cal +
     '<div class="bankline">자금 <b>' + won(G.bank) + '원</b> · 평판 <b>' + Math.round(G.rep) + '</b> · <span class="rank">' + rankOf(G.rep) + '</span> · 오늘 인건비 <b>' + won(wagesTotal()) + '</b></div>' +
-    seasonBar() +
+    seasonBar() + raiseBox() +
     '<div class="goalbox"><b>🎯 오늘의 목표</b> (하나에 +' + won(GOAL_REWARD) + '원 · 평판 +2)<ol>' + G.goals.map(function (g) { return '<li>' + goalText(g) + '</li>'; }).join('') + '</ol></div>' +
     '<div class="tabs">' + tabs.map(function (x) { return '<button data-tab="' + x[0] + '" class="' + (G.prepTab === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>';
 
@@ -2542,8 +2650,12 @@ function prepScreen(tab) {
     }).join('') + '</div>';
   } else if (G.prepTab === 'staff') {
     h += '<h3>우리 직원</h3><div class="shop">' + G.roster.map(function (s) {
-      return '<div class="item"><div>' + staffLine(s) + '</div><button class="cta ghost" data-fire="' + s.id + '">내보내기</button></div>';
+      var raised = s.raiseDay === G.day;
+      return '<div class="item"><div>' + staffLine(s) + '</div><div class="btncol">' +
+        '<button class="cta ghost" data-raise="' + s.id + '"' + (raised ? ' disabled' : '') + '>' + (raised ? '인상함 ✓' : '💵 일당 +1만') + '</button>' +
+        '<button class="cta ghost" data-fire="' + s.id + '">내보내기</button></div></div>';
     }).join('') + '</div>' +
+      '<p class="note"><b>사기</b> — 60 아래면 정확도 · 속도가 떨어지고, 35 아래면 노쇼가 잦아지고, <b>20 아래면 마감 때 그만둔다</b>. 지친 딜러를 오래 두면 떨어지고, 칭찬(영업 중 하루 한 번) · 일요일 휴무 · 일당 인상(+15)으로 오른다.</p>' +
       '<h3>오늘 찾아온 지원자</h3><div class="shop">' + G.cands.map(function (s) {
         var full = roleCount(s.role) >= ROLES[s.role].max;
         return '<div class="item"><div>' + staffLine(s) + '<div class="note">' + ROLES[s.role].desc + '</div></div>' +
@@ -2602,9 +2714,16 @@ function prepScreen(tab) {
       var segs = [];
       for (var k = 0; k < tn; k++) segs.push('<button data-as="' + d.id + ':' + k + '" class="' + (cfg.assign[k] === d.id ? 'on' : '') + '">' + (k + 1) + '번</button>');
       segs.push('<button data-as="' + d.id + ':r" class="' + (a < 0 || a >= tn ? 'on' : '') + '">휴식</button>');
-      return '<div class="card"><div class="nm">딜러 ' + d.name + '</div><div class="st">정확도 ' + d.skill + '<br>속도 ' + Math.round(d.speed * 100) + '</div><div class="seg">' + segs.join('') + '</div>' +
-        '<button class="cta ghost" style="width:100%;margin-top:8px;padding:6px" data-train="' + d.id + '"' + (cfg.train !== null ? ' disabled' : '') + '>' + (cfg.train === d.id ? '교육 완료 ✓' : '교육 — 실질 액션 3문제') + '</button></div>';
-    }).join('') + '</div><p class="note">휴식 딜러가 있어야 영업 중에 교대할 수 있다. 교대 직후 45초 동안 진행 속도가 오른다. 교육은 하루 한 명 — 맞힌 만큼 정확도 +4.' +
+      var tr = trainOf(d);
+      return '<div class="card"><div class="nm">딜러 ' + d.name + ' ' + traitTag(d) + '</div><div class="st">정확도 ' + d.skill + '<br>속도 ' + Math.round(d.speed * 100) + '<br>사기 ' + Math.round(morale(d)) +
+        (mixOk(d) ? '<br>🃏 믹스 자격' : '') + '</div><div class="seg">' + segs.join('') + '</div>' +
+        '<div class="trtree">' + Object.keys(TRAIN).map(function (k) {
+          var lv = tr[k], max = lv >= 3;
+          return '<button class="cta ghost" data-train="' + d.id + ':' + k + '"' + (cfg.train !== null || max ? ' disabled' : '') + ' title="' + TRAIN[k].desc + '">' +
+            TRAIN[k].ko + ' <b>' + '●'.repeat(lv) + '○'.repeat(3 - lv) + '</b>' + (cfg.train === d.id + ':' + k ? ' ✓' : '') + '</button>';
+        }).join('') + '</div></div>';
+    }).join('') + '</div><p class="note">휴식 딜러가 있어야 영업 중에 교대할 수 있다. 교대 직후 45초 동안 진행 속도가 오른다. ' +
+      '<b>교육은 하루 한 번</b> — 판정(정확도 +3) · 속도(진행 +5%) · 응대(테이블 만족) 중 하나, 3문제 중 2개 이상 맞히면 한 단계 오른다. <b>판정 2단계면 믹스게임 자격</b>.' +
       (ds.length < tn ? ' <b>딜러가 테이블 수보다 적다 — 직원 탭에서 채용하세요.</b>' : '') + '</p>';
   }
   var ready = cfg.assign.slice(0, tableCount()).every(function (x) { return x !== null && x !== undefined; });
@@ -2622,6 +2741,25 @@ function prepScreen(tab) {
       G.roster.push(s); G.cands = G.cands.filter(function (x) { return x !== s; });
       toast(ROLES[s.role].ko + ' ' + s.name + ' — 채용'); SFX.good();
       prepScreen('staff');
+    };
+  });
+  document.querySelectorAll('[data-raise]').forEach(function (b) {
+    b.onclick = function () {
+      var s = G.roster.filter(function (x) { return x.id === +b.getAttribute('data-raise'); })[0];
+      if (!s || s.raiseDay === G.day) return;
+      s.raiseDay = G.day; s.wage += 10000; addMorale(s, 15);
+      toast('💵 ' + s.name + ' 일당 ' + won(s.wage) + ' — 사기 ' + Math.round(s.morale)); SFX.cash();
+      prepScreen('staff');
+    };
+  });
+  document.querySelectorAll('[data-rq]').forEach(function (b) {
+    b.onclick = function () {
+      var rq = G.raiseReq, s = rq && G.roster.filter(function (x) { return x.id === rq.id; })[0];
+      G.raiseReq = null;
+      if (!s) { prepScreen(); return; }
+      if (b.getAttribute('data-rq') === '1') { s.wage += rq.amt; addMorale(s, 20); s.raiseDay = G.day; toast('🤝 ' + s.name + ' 일당 인상 수락 — 사기 +20'); SFX.good(); }
+      else { addMorale(s, -15); toast('🙅 ' + s.name + ' 인상 거절 — 사기 −15'); SFX.bad(); }
+      prepScreen();
     };
   });
   document.querySelectorAll('[data-fire]').forEach(function (b) {
@@ -2649,7 +2787,9 @@ function prepScreen(tab) {
       prepScreen();
     };
   });
-  document.querySelectorAll('[data-train]').forEach(function (b) { b.onclick = function () { if (cfg.train === null) trainDealer(+b.getAttribute('data-train')); }; });
+  document.querySelectorAll('[data-train]').forEach(function (b) {
+    b.onclick = function () { var p = b.getAttribute('data-train').split(':'); if (cfg.train === null) trainDealer(+p[0], p[1]); };
+  });
   $('[data-open]').onclick = function () { if (ready) openDay(); };
 }
 
@@ -2691,37 +2831,71 @@ function chipQuiz() {
   });
 }
 
-function trainDealer(staffId) {
-  var st = G.roster.filter(function (s) { return s.id === staffId; })[0];
-  var qs = [], k;
-  for (k = 0; k < 3; k++) {
+/* 응대 교육 — 규정이 아니라 접객 원칙이다 (TDA 조항을 출제하지 않는다) */
+var SERVICE_QS = [
+  { q: '손님이 "딜러님 너무 느려요" 하고 짜증을 낸다.', a: ['"죄송합니다, 빠르게 하겠습니다" 하고 실수 없이 속도를 낸다', '"규정대로 하는 중입니다"라고 맞받는다', '못 들은 척하고 그대로 한다'], why: '사과 한마디와 눈에 보이는 개선이 테이블 분위기를 지킨다. 맞받으면 다른 손님까지 불편해진다.' },
+  { q: '처음 온 손님이 차례를 몰라 머뭇거린다.', a: ['웃으며 "손님 차례예요" 하고 부드럽게 알려 준다', '다른 손님에게 대신 알려 주라고 한다', '한숨을 쉬며 재촉한다'], why: '초보 손님이 편해야 다시 온다. 재촉보다 친절한 한마디가 테이블을 빠르게 만든다.' },
+  { q: '손님이 테이블에 음료를 엎질렀다.', a: ['괜찮으신지 묻고 카드 · 칩을 정리한 뒤 청소를 부른다', '손님 탓이라고 짚고 넘어간다', '모른 척 그대로 딜을 이어 간다'], why: '사람 → 판 → 바닥 순서. 젖은 채로 두면 주변 손님 만족이 샌다.' },
+  { q: '탈락한 손님이 아쉬워하며 일어선다.', a: ['"수고하셨습니다" 하고 인사하며 바 자리를 안내한다', '빨리 자리를 비켜 달라고 한다', '아무 말 없이 다음 핸드를 돌린다'], why: '마지막 인사가 다음 방문을 만든다. 아쉬운 손님일수록 따뜻하게 보낸다.' },
+  { q: '단골이 처음 온 친구를 데려와 같은 테이블에 앉았다.', a: ['둘 다 반갑게 맞고 친구에게 진행 방식을 짧게 안내한다', '단골에게만 아는 척을 한다', '친구에게 규칙을 다 외워 오라고 한다'], why: '친구가 편해야 단골이 또 데려온다. 짧고 친절한 안내면 충분하다.' },
+  { q: '두 손님이 언성을 높이기 시작했다.', a: ['차분한 목소리로 "잠시만요" 하고 진정시키고, 점장에게 알린다', '한쪽 편을 든다', '구경하며 모른 척한다'], why: '편을 들면 다른 쪽이 상한다. 차분하게 진정시키고 책임자에게 알리는 것이 접객의 기본이다.' }
+];
+function trainQuestion(branch) {
+  if (branch === 'j') {
     var n = pick([1, 2, 2, 3]), acts = [];
     for (var j = 0; j < n; j++) { var r = Math.random(); acts.push({ name: pick(NAMES), kind: r < 0.5 ? 'fold' : (r < 0.85 ? 'call' : 'raise') }); }
-    qs.push({ acts: acts, sa: isSA(acts) });
+    var sa = isSA(acts);
+    return { title: '실질 액션이 성립했나?', body: actsHTML(acts), opts: ['성립했다 — 이제 미스딜을 선언할 수 없다', '아직이다 — 미스딜 사유가 생기면 다시 딜한다'], correct: sa ? 0 : 1, fixed: true,
+      why: (sa ? '성립했다. ' : '아직이다. ') + '액션 ' + acts.length + '개 중 칩이 들어간 것 ' + acts.filter(function (a) { return a.kind !== 'fold'; }).length + '개.',
+      cite: '<div class="cite"><b>근거</b> ' + SRC.sa + '<span class="unverified">원문 확인 전</span></div>' };
+  }
+  if (branch === 's') {
+    var vals = [100, 500, 1000, 5000], cnt = vals.map(function () { return rnd(6); }), sum = 0;
+    cnt[1] = Math.max(1, cnt[1]);
+    vals.forEach(function (v, i) { sum += v * cnt[i]; });
+    var wrong = [sum + pick([500, 1000]), sum - pick([100, 400, 500])].filter(function (x) { return x > 0 && x !== sum; });
+    var all = [sum].concat(wrong);
+    return { title: '이 칩은 모두 얼마인가?', body: '<div class="acts">' + vals.map(function (v, i) { return won(v) + ' × ' + cnt[i]; }).join(' · ') + '</div>',
+      opts: all.map(function (x) { return won(x); }), correct: 0, why: vals.map(function (v, i) { return won(v) + '×' + cnt[i]; }).join(' + ') + ' = <b>' + won(sum) + '</b>. 팟 · 스택을 빨리 세면 핸드가 빨라진다.', cite: '' };
+  }
+  var s = pick(SERVICE_QS);
+  return { title: '어떻게 응대할까?', body: '<p>' + s.q + '</p>', opts: s.a.slice(), correct: 0, why: s.why, cite: '<div class="cite">접객 원칙 — 대회 규정이 아니다</div>' };
+}
+function trainDealer(staffId, branch) {
+  var st = G.roster.filter(function (s) { return s.id === staffId; })[0];
+  branch = TRAIN[branch] ? branch : 'j';
+  var used = [], qs = [];
+  for (var k = 0; k < 3; k++) {
+    var q = trainQuestion(branch);
+    if (branch === 'v') { var tries = 0; while (used.indexOf(q.body) >= 0 && tries++ < 10) q = trainQuestion(branch); used.push(q.body); }
+    qs.push(q);
   }
   var at = 0, right = 0;
   function ask() {
     var q = qs[at];
-    G.current = { kind: 'train', sa: q.sa };
-    showModal('<div class="kicker">교육 — 딜러 ' + st.name + ' · ' + (at + 1) + '/3</div><h2>실질 액션이 성립했나?</h2>' + actsHTML(q.acts) +
-      '<div class="choices"><button class="choice" data-sa="1">성립했다 — 이제 미스딜을 선언할 수 없다</button><button class="choice" data-sa="0">아직이다 — 미스딜 사유가 생기면 다시 딜한다</button></div>');
-    document.querySelectorAll('[data-sa]').forEach(function (b) {
+    var order = q.fixed ? q.opts.map(function (o, i) { return i; }) : shuffle(q.opts.map(function (o, i) { return i; }));
+    var correct = order.indexOf(q.correct);
+    G.current = { kind: 'train', branch: branch, correct: correct };
+    showModal('<div class="kicker">교육 · ' + TRAIN[branch].ko + ' — 딜러 ' + st.name + ' · ' + (at + 1) + '/3</div><h2>' + q.title + '</h2>' + q.body +
+      '<div class="choices">' + order.map(function (k2, i) { return '<button class="choice" data-tq="' + i + '">' + q.opts[k2] + '</button>'; }).join('') + '</div>');
+    document.querySelectorAll('[data-tq]').forEach(function (b) {
       b.onclick = function () {
-        var ok = (b.getAttribute('data-sa') === '1') === q.sa;
+        var ix = +b.getAttribute('data-tq'), ok = ix === correct;
         if (ok) right++;
         ok ? SFX.good() : SFX.bad();
-        showModal('<div class="kicker">교육 — ' + (at + 1) + '/3</div><div class="verdict ' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓ 맞았다' : '✗ 틀렸다') + '</div>' +
-          '<p>' + (q.sa ? '성립했다. ' : '아직이다. ') + '액션 ' + q.acts.length + '개 중 칩이 들어간 것 ' + q.acts.filter(function (a) { return a.kind !== 'fold'; }).length + '개.</p>' +
-          '<div class="cite"><b>근거</b> ' + SRC.sa + '<span class="unverified">원문 확인 전</span></div><button class="cta" data-next="1">' + (at < 2 ? '다음 문제' : '교육 끝') + '</button>');
+        showModal('<div class="kicker">교육 · ' + TRAIN[branch].ko + ' — ' + (at + 1) + '/3</div><div class="verdict ' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓ 맞았다' : '✗ 틀렸다') + '</div>' +
+          '<div class="choices" style="margin-bottom:10px">' + order.map(function (k2, i) { return '<div class="choice' + (i === correct ? ' right' : (i === ix ? ' wrong' : '')) + '">' + q.opts[k2] + '</div>'; }).join('') + '</div>' +
+          '<p>' + q.why + '</p>' + q.cite + '<button class="cta" data-next="1">' + (at < 2 ? '다음 문제' : '교육 끝') + '</button>');
         $('[data-next]').onclick = function () {
           at++;
-          if (at < 3) ask();
-          else {
-            st.skill = clamp(st.skill + right * 4, 0, 98);
-            G.cfg.train = staffId;
-            toast('딜러 ' + st.name + ' 정확도 +' + right * 4);
-            prepScreen('dealers');
-          }
+          if (at < 3) { ask(); return; }
+          var tr = trainOf(st), up = right >= 2 && tr[branch] < 3;
+          if (up) tr[branch]++;
+          G.cfg.train = staffId + ':' + branch;
+          addMorale(st, up ? 4 : 0);
+          toast(up ? '🎓 ' + st.name + ' ' + TRAIN[branch].ko + ' ' + tr[branch] + '단계!' + (branch === 'j' && tr.j === 2 ? ' 🃏 믹스게임 자격' : '') : '📚 ' + st.name + ' — ' + right + '/3, 다음에 다시');
+          right >= 2 ? SFX.win() : SFX.bad();
+          prepScreen('dealers');
         };
       };
     });
@@ -2830,6 +3004,11 @@ function report(settleOk) {
     st.days++;
     if (st.skill < 95) { st.skill++; grown.push(st.name); }
   });
+  // 사기 20 아래 — 마감 때 그만둔다
+  var quit = G.roster.filter(function (st) { return morale(st) < 20; });
+  G.roster = G.roster.filter(function (st) { return quit.indexOf(st) < 0; });
+  quit.forEach(function (st) { log('😞 ' + st.name + '(' + ROLES[st.role].ko + ') — 그만두겠다고 한다', 'bad'); });
+  var lowM = G.roster.filter(function (st) { return morale(st) < 35; });
 
   var reviews = [];
   if (s.right >= 3 && s.wrong === 0) reviews.push('“플로어가 룰 정리를 깔끔하게 해 줘서 믿고 친다.” ★★★★★');
@@ -2871,6 +3050,8 @@ function report(settleOk) {
     '<h3>손님</h3><p>평균 만족도 ' + Math.round(avgSat) + ' · 줄이 길어 돌아간 손님 ' + (s.lost + s.queueLeave) + '명 · 평판 ' + Math.round(s.repStart) + ' → <b>' + Math.round(G.rep) + '</b> (' + rankAfter + ')</p>' +
     '<p>' + (G.winner ? '🏆 우승 ' + G.winner.name + ' — 트로피와 다음 대회 시드권' : '마감까지 결판이 나지 않았다 — 남은 사람들은 다음 대회 시드권') + '</p>' +
     (grown.length ? '<p class="note">직원 성장 — ' + grown.join(' · ') + ' 능력 +1</p>' : '') +
+    (quit.length ? '<p class="warn">😞 그만뒀다 — ' + quit.map(function (x) { return x.name + '(' + ROLES[x.role].ko + ')'; }).join(' · ') + '. 사기가 바닥이었다</p>' : '') +
+    (lowM.length ? '<p class="warn">⚠️ 사기가 낮다 — ' + lowM.map(function (x) { return x.name + ' ' + Math.round(morale(x)); }).join(' · ') + ' (20 아래면 그만둔다)</p>' : '') +
     (G.resv ? '<p>📋 예약 ' + G.resv.total + '건 — 도착 ' + G.resv.arrived + ' · 노쇼 ' + G.resv.noshow + (G.cfg.resDeposit ? ' (보증금 받음)' : ' (보증금 없음)') + '</p>' : '') +
     (G.regDelta.length ? '<p>⭐ 단골 ' + G.regDelta.length + '명 — ' + G.regDelta.map(function (x) { return x.name + ' ' + (x.d >= 0 ? '+' : '') + x.d + '♥'; }).join(' · ') + '</p>' : '') +
     (G.absent.length ? '<p class="note">📵 노쇼 — ' + G.absent.map(function (x) { return x.name; }).join(' · ') + ' (일당 없음)</p>' : '') +
@@ -2893,6 +3074,7 @@ function report(settleOk) {
 function weeklyScreen() {
   var info = dayInfo(), w = info.week;
   G.bank -= WEEKLY_RENT;
+  G.roster.forEach(function (st) { addMorale(st, 6); });   // 일요일 휴무 — 쉬고 오면 사기 +6
   var sum = G.weekLog.reduce(function (t, d) { return t + d.net; }, 0);
   var stars = G.weekLog.reduce(function (t, d) { return t + d.stars; }, 0);
   var entries = G.weekLog.reduce(function (t, d) { return t + d.entries; }, 0);
@@ -2908,6 +3090,7 @@ function weeklyScreen() {
     '<tr class="total"><td>이번 주 합계</td><td>' + (sum - WEEKLY_RENT < 0 ? '−' : '') + won(Math.abs(sum - WEEKLY_RENT)) + '</td></tr>' +
     '<tr><td>자금</td><td>' + won(G.bank) + '</td></tr></table>' +
     '<p>이번 주 별 <b>' + stars + '</b>/' + G.weekLog.length * 3 + ' · 엔트리 ' + entries + '건' + (best ? ' · 최고의 날 ' + best.wk + '요일 ' + best.name : '') + '</p>' +
+    '<p class="note">🛌 휴무 — 직원 모두 사기 +6</p>' +
     seasonBar() +
     (G.bank < 0 ? '<p class="warn">⚠️ 임대료를 내고 자금이 마이너스다. 다음 주에 사흘 연속 적자면 폐업.</p>' : '') +
     '<button class="cta" data-week="1">' + (seasonDone ? '시즌 결과 보기' : (w + 1) + '주차 시작 — 월요일') + '</button>';
