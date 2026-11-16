@@ -152,6 +152,9 @@ button { font-family: inherit; }
 .rows td { padding: 5px 0; border-bottom: 1px solid var(--line); }
 .rows td:last-child { text-align: right; font-family: var(--mono); font-weight: 800; }
 .rows tr.total td { font-weight: 900; border-bottom: none; font-size: 14px; }
+.rows.struct { margin-bottom: 10px; font-family: var(--mono); }
+.rows.struct td { text-align: left; }
+.rows.struct td:last-child { text-align: right; }
 
 /* 좌석 지도 (버튼 판정) */
 .minimap { position: relative; width: 100%; aspect-ratio: 16 / 8.5; margin: 8px 0; }
@@ -180,6 +183,54 @@ button { font-family: inherit; }
   padding: 8px 14px; font-weight: 800; box-shadow: var(--shadow); font-size: 13px; transition: opacity .3s;
 }
 
+
+/* 말풍선 · 떠오르는 글자 · 딜러 피로 */
+.bubble {
+  position: absolute; transform: translate(-50%, -100%); pointer-events: none;
+  background: #fff; color: #1b1612; border-radius: 10px; padding: 3px 8px; font-size: 11.5px; font-weight: 700;
+  white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.35);
+}
+.bubble::after { content: ''; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%); border: 5px solid transparent; border-top-color: #fff; border-bottom: 0; }
+.bubble.me { background: #EF9F27; color: #2a1800; }
+.bubble.me::after { border-top-color: #EF9F27; }
+.float { position: absolute; transform: translate(-50%, -100%); pointer-events: none; font-weight: 900; font-size: 13px; text-shadow: 0 1px 3px rgba(0,0,0,.9); white-space: nowrap; font-family: var(--mono); }
+.float.money { color: #ffd76a; }
+.float.good { color: #8fe0bd; }
+.float.bad { color: #ff9b8c; }
+.dbar { position: absolute; transform: translate(-50%, -100%); pointer-events: none; text-align: center; }
+.dbar span { display: block; font-size: 10px; font-weight: 800; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.9); }
+.dbar i { display: block; width: 42px; height: 5px; border-radius: 9px; background: rgba(0,0,0,.55); overflow: hidden; margin: 1px auto 0; }
+.dbar b { display: block; height: 100%; }
+#goal {
+  display: none; position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(150px + env(safe-area-inset-bottom, 0px)); z-index: 9;
+  background: rgba(17,30,25,.85); color: #fff; font-weight: 800; font-size: 12px; padding: 5px 12px; border-radius: 99px; pointer-events: none;
+}
+.call.announce { border-color: var(--amber); }
+.call.announce .t { color: var(--amber-ink); }
+.call.announce .bar i { background: var(--amber); }
+.call.balance { border-color: #2C4A7A; }
+.call.balance .t { color: #2C4A7A; }
+.call.spill { border-color: var(--line-strong); }
+.call.spill .t { color: var(--ink-2); }
+
+/* 오픈 준비 */
+.bankline { font-size: 13px; color: var(--ink-2); margin: -2px 0 10px; }
+.bankline b { color: var(--ink); font-family: var(--mono); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 12px; overflow-x: auto; }
+.tabs button {
+  padding: 8px 14px; font-weight: 800; font-size: 13px; border: none; background: none; color: var(--ink-3); cursor: pointer;
+  border-bottom: 2.5px solid transparent; white-space: nowrap;
+}
+.tabs button.on { color: var(--ink); border-bottom-color: var(--felt); }
+.shop { display: flex; flex-direction: column; gap: 6px; }
+.shop .item { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.shop .item > div { min-width: 0; }
+.shop .item.own { background: var(--ok-bg); border-color: var(--ok); }
+.shop .item .cta { margin-top: 0; white-space: nowrap; flex: none; padding: 8px 12px; font-size: 13px; }
+.warn { color: var(--red); font-weight: 700; font-size: 13px; margin-top: 8px; }
+.prepfoot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.prepfoot .cta { margin-top: 0; }
+
 @media (max-width: 720px) {
   .hud { padding: 6px 8px; gap: 6px; }
   .hud .title { display: none; }
@@ -201,6 +252,7 @@ button { font-family: inherit; }
 <div class="ticker" id="ticker"></div>
 <div id="modal"></div>
 <div id="toast"></div>
+<div id="goal"></div>
 <script src="vendor/three.min.js"></script>
 <script src="game.js"></script>
 </body>
