@@ -254,9 +254,14 @@ function cardTex(c) {
 // ═══════════════════════════════════════════════════
 var AC = null, MUTED = false;
 function audioOn() {
-  if (AC) return;
-  try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = null; }
+  if (!AC) {
+    try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = null; }
+    if (AC) musicInit();
+  }
+  // iOS 는 멈춘 채로 만들거나 전화 · 앱 전환 뒤 멈춘다 — 탭할 때마다 깨운다
+  if (AC && AC.state !== 'running' && AC.resume) AC.resume().catch(function () { /* 다음 탭에 다시 */ });
 }
+document.addEventListener('visibilitychange', function () { if (!document.hidden && AC) audioOn(); });
 function tone(freq, dur, type, vol, delay) {
   if (!AC || MUTED) return;
   var t = AC.currentTime + (delay || 0);
@@ -277,6 +282,70 @@ var SFX = {
   chips: function () { for (var i = 0; i < 4; i++) tone(2400 + rnd(800), 0.03, 'triangle', 0.04, i * 0.035); },
   win: function () { [523, 659, 784, 1047].forEach(function (f, i) { tone(f, 0.25, 'triangle', 0.1, i * 0.12); }); }
 };
+
+/* 라운지 배경음악 — Cmaj7 · Am7 · Dm7 · G7 패드 + 워킹 베이스, 작게. 웅성거림은 손님 수에 비례.
+   🎵 로 켜고 끈다 (🔊 는 효과음). 외부 음원 없이 WebAudio 로 만든다 */
+var MUSIC = { on: true, master: null, padBus: null, timer: null, nextT: 0, beat: 0, mur: null };
+try { MUSIC.on = localStorage.getItem('pubsim.music') !== 'off'; } catch (e) { /* 저장이 막힌 브라우저 — 기본 켬 */ }
+var BPM = 80;
+var PROG = [
+  { pad: [60, 64, 67, 71], bass: [36, 40, 43, 44] },   // Cmaj7 — G# 로 A 에 다가간다
+  { pad: [60, 64, 67, 69], bass: [45, 43, 40, 39] },   // Am7 — Eb 로 D 에
+  { pad: [60, 62, 65, 69], bass: [38, 41, 45, 42] },   // Dm7 — F# 로 G 에
+  { pad: [59, 62, 65, 67], bass: [43, 47, 50, 37] }    // G7 — C# 로 C 에
+];
+function midiHz(n) { return 440 * Math.pow(2, (n - 69) / 12); }
+function musicInit() {
+  if (!AC || MUSIC.master) return;
+  MUSIC.master = AC.createGain(); MUSIC.master.gain.value = MUSIC.on ? 0.7 : 0;
+  MUSIC.master.connect(AC.destination);
+  var lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400; lp.connect(MUSIC.master);
+  MUSIC.padBus = lp;
+  // 웅성거림 — 흰 소음을 사람 목소리 대역으로 거르고 천천히 출렁이게
+  var len = AC.sampleRate * 2, buf = AC.createBuffer(1, len, AC.sampleRate), ch = buf.getChannelData(0);
+  for (var i = 0; i < len; i++) ch[i] = Math.random() * 2 - 1;
+  var src = AC.createBufferSource(); src.buffer = buf; src.loop = true;
+  var bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 650; bp.Q.value = 0.9;
+  var mg = AC.createGain(); mg.gain.value = 0;
+  var lfo = AC.createOscillator(), lg = AC.createGain(); lfo.frequency.value = 0.35; lg.gain.value = 180;
+  lfo.connect(lg); lg.connect(bp.frequency); lfo.start();
+  src.connect(bp); bp.connect(mg); mg.connect(MUSIC.master); src.start();
+  MUSIC.mur = mg;
+  MUSIC.nextT = AC.currentTime + 0.1;
+  MUSIC.timer = setInterval(scheduleMusic, 200);
+}
+function musicNote(freq, t, dur, vol, type, bus) {
+  var o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + (type === 'sine' ? 0.4 : 0.02));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(bus); o.start(t); o.stop(t + dur + 0.05);
+}
+function scheduleMusic() {
+  if (!AC || !MUSIC.on || AC.state !== 'running') { if (AC) MUSIC.nextT = AC.currentTime + 0.1; return; }
+  var spb = 60 / BPM;
+  if (MUSIC.nextT < AC.currentTime) MUSIC.nextT = AC.currentTime + 0.05;   // 탭이 오래 숨었다 — 밀린 박자는 버린다
+  while (MUSIC.nextT < AC.currentTime + 0.6) {
+    var bar = Math.floor(MUSIC.beat / 4) % PROG.length, b = MUSIC.beat % 4, ch = PROG[bar], t = MUSIC.nextT;
+    if (b === 0) ch.pad.forEach(function (n, i) { musicNote(midiHz(n), t + i * 0.03, spb * 4, 0.016, 'sine', MUSIC.padBus); });
+    musicNote(midiHz(ch.bass[b]), t, spb * 0.9, 0.05, 'triangle', MUSIC.padBus);
+    if (b === 1 || b === 3) musicNote(5200, t + spb * 0.66, 0.05, 0.004, 'square', MUSIC.master);   // 하이햇 스윙 느낌
+    MUSIC.beat++; MUSIC.nextT += spb;
+  }
+}
+function setMusic(on) {
+  MUSIC.on = on;
+  try { localStorage.setItem('pubsim.music', on ? 'on' : 'off'); } catch (e) { /* 무시 */ }
+  if (MUSIC.master) MUSIC.master.gain.setTargetAtTime(on ? 0.7 : 0, AC.currentTime, 0.2);
+}
+/* 손님 수에 비례하는 웅성거림 — 영업 중에만 */
+function tickMurmur() {
+  if (!MUSIC.mur) return;
+  var n = G.phase === 'open' ? G.customers.filter(function (c) { return c.alive && c.state !== 'leaving'; }).length : 0;
+  var target = G.phase === 'open' && !G.paused ? Math.min(0.06, n * 0.0028) : 0;
+  MUSIC.mur.gain.setTargetAtTime(target, AC.currentTime, 0.8);
+}
 
 // ═══════════════════════════════════════════════════
 // 3D 장면
@@ -769,13 +838,44 @@ function clickScene(e) {
 }
 
 // ── 사람 ─────────────────────────────────────────────
-function makePerson(color, vest, hat) {
+/* 사람 — 몸 · 머리 · 머리카락 · 눈 · 팔. 지오메트리는 모두 같이 쓴다 */
+var HAIR_COLS = [0x1b1b1b, 0x2e2018, 0x5a3a22, 0x8a6236, 0xc9a66b, 0x7a2a26, 0x6b6b6b];
+var PG = null, PM = {};
+function personGeo() {
+  if (PG) return PG;
+  PG = {
+    body: new THREE.CylinderGeometry(0.2, 0.26, 0.9, 14),
+    head: new THREE.SphereGeometry(0.17, 16, 12),
+    hair: new THREE.SphereGeometry(0.182, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55),
+    eye: new THREE.SphereGeometry(0.026, 8, 6),
+    arm: new THREE.CylinderGeometry(0.055, 0.05, 0.52, 8),
+    bow: new THREE.BoxGeometry(0.16, 0.07, 0.04),
+    knot: new THREE.BoxGeometry(0.04, 0.05, 0.05)
+  };
+  PG.arm.translate(0, -0.26, 0);   // 어깨에서 흔들리게 — 회전 중심을 위로
+  return PG;
+}
+function pmat(c) { if (!PM[c]) PM[c] = mat(c); return PM[c]; }
+function makePerson(color, vest, hat, opt) {
+  opt = opt || {};
+  var P = personGeo();
   var g = new THREE.Group();
-  var body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.9, 14), mat(color));
+  var body = new THREE.Mesh(P.body, mat(color));
   body.position.y = 0.45; body.castShadow = true;
-  var head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), mat(0xe8c4a0));
+  var head = new THREE.Mesh(P.head, pmat(0xe8c4a0));
   head.position.y = 1.07; head.castShadow = true;
   g.add(body, head);
+  var hair = new THREE.Mesh(P.hair, pmat(opt.hair != null ? opt.hair : pick(HAIR_COLS)));
+  hair.position.set(0, 1.09, -0.02); hair.rotation.x = -0.25; g.add(hair);
+  [-0.06, 0.06].forEach(function (x) { var e = new THREE.Mesh(P.eye, pmat(0x141414)); e.position.set(x, 1.1, 0.152); g.add(e); });
+  var arms = [-0.25, 0.25].map(function (x) {
+    var a = new THREE.Mesh(P.arm, pmat(color)); a.position.set(x, 0.82, 0); a.rotation.z = x < 0 ? 0.12 : -0.12; a.castShadow = true; g.add(a); return a;
+  });
+  g.userData.arms = arms;
+  if (opt.bow) {   // 딜러 나비넥타이
+    var bow = new THREE.Mesh(P.bow, pmat(0xa3121e)), kn = new THREE.Mesh(P.knot, pmat(0x6e0a12));
+    bow.position.set(0, 0.86, 0.205); kn.position.set(0, 0.86, 0.225); g.add(bow, kn);
+  }
   if (vest) {
     var v = new THREE.Mesh(new THREE.CylinderGeometry(0.215, 0.27, 0.5, 14, 1, true), mat(vest));
     v.position.y = 0.62; g.add(v);
@@ -800,7 +900,7 @@ function stepActor(a, dt) {
   var m = a.mesh;
   var targetY = a.sitting ? -0.18 : 0;
   m.position.y += (targetY - m.position.y) * Math.min(1, dt * 8);
-  if (!a.path || !a.path.length) return;
+  if (!a.path || !a.path.length) { if (!a.keyWalk) swingArms(m, 0); return; }
   var p = a.path[0];
   var dx = p.x - m.position.x, dz = p.z - m.position.z;
   var d = Math.hypot(dx, dz), sp = (a.spd || 2.6) * dt;
@@ -812,7 +912,13 @@ function stepActor(a, dt) {
     m.position.x += dx / d * sp; m.position.z += dz / d * sp;
     m.rotation.y = Math.atan2(dx, dz);
     m.position.y = Math.abs(Math.sin(G.simT * 14)) * 0.05;
+    swingArms(m, Math.sin(G.simT * 14) * 0.6);
   }
+}
+function swingArms(m, s) {
+  var ar = m.userData.arms;
+  if (!ar) return;
+  ar[0].rotation.x = s; ar[1].rotation.x = -s;
 }
 function faceTo(a, v) { a.mesh.rotation.y = Math.atan2(v.x - a.mesh.position.x, v.z - a.mesh.position.z); }
 function say(a, text, secs, ambient) { if (a) a.bubble = { text: text, until: now() + (secs || 2.6), ambient: !!ambient }; }
@@ -1032,7 +1138,7 @@ function newDay() {
 function spawnStaff(st, arriving) {
   var a;
   if (st.role === 'dealer') {
-    a = makeActor(makePerson(0xf2f2f2, 0x1c1c1c), 'dealer', st.name);
+    a = makeActor(makePerson(0xf2f2f2, 0x1c1c1c, null, { bow: true }), 'dealer', st.name);
     a.id = G.dealers.length; a.acc = st.skill; a.speed = st.speed; a.fatigue = 0; a.table = null; a.fresh = 0;
     a.home = SPOTS.dealerRest.clone().add(V((a.id % 5) * 0.55 - 1.1, 0));
     G.dealers.push(a);
@@ -1134,7 +1240,9 @@ function goClean(sp) {
 function stepPlayerKeys(dt) {
   var f = (KEYS.w || KEYS.arrowup ? 1 : 0) - (KEYS.s || KEYS.arrowdown ? 1 : 0);
   var r = (KEYS.d || KEYS.arrowright ? 1 : 0) - (KEYS.a || KEYS.arrowleft ? 1 : 0);
+  G.player.keyWalk = !!(f || r);
   if (!f && !r) return;
+  swingArms(G.player.mesh, Math.sin(G.simT * 14) * 0.6);
   var fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
   var rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
   var dx = fx * f + rx * r, dz = fz * f + rz * r, l = Math.hypot(dx, dz);
@@ -1439,8 +1547,8 @@ function endHand(t) {
   var occs = [];
   for (var i = 0; i < N; i++) if (occ(t, i) && t.cards && t.cards.holes[i]) occs.push(i);
   if (!occs.length) { startHand(t); return; }
-  // 끝까지 간 사람 2~4명 — 나머지는 중간에 폴드했다
-  var contenders = shuffle(occs.slice()).slice(0, Math.min(occs.length, 2 + rnd(3)));
+  // 끝까지 간 사람 2~4명 — 나머지는 중간에 폴드했다. 레지 마감 뒤엔 올인이 잦아 모두 쇼다운까지 (결판이 나게)
+  var contenders = shuffle(occs.slice()).slice(0, regOpen() ? Math.min(occs.length, 2 + rnd(3)) : occs.length);
   var sd = showdown(t, contenders);
   var winners = sd.his.length ? sd.his : [contenders[0]];
   var losers = contenders.filter(function (s) { return winners.indexOf(s) < 0 && sd.los.indexOf(s) < 0; });
@@ -2233,6 +2341,7 @@ function frame(ts) {
   }
   if (G.phase === 'open' && !G.modal) stepFx(real);
   if (G.phase === 'title') cam.yaw += real * 0.07;
+  if ((frame.mt = (frame.mt || 0) + real) > 0.5) { frame.mt = 0; tickMurmur(); }
   updateCamera(real);
   renderer.render(scene, camera);
   renderOverlay();
@@ -2373,13 +2482,15 @@ function renderHud() {
       '<button class="hbtn" data-goals="1" title="오늘의 목표">🎯</button>' +
       '<button class="hbtn" data-talk="1" title="손님 잡담">💬</button>' +
       '<button class="hbtn" data-follow="1" title="점장 따라가기">📍</button>' +
-      '<button class="hbtn" data-mute="1" title="소리">🔊</button>' +
+      '<button class="hbtn" data-music="1" title="배경음악 · 웅성거림">🎵</button>' +
+      '<button class="hbtn" data-mute="1" title="효과음">🔊</button>' +
       '<button class="hbtn" data-pause="1">❚❚</button>' +
       [1, 2, 4].map(function (s) { return '<button class="hbtn" data-speed="' + s + '">' + s + '×</button>'; }).join('');
     hud.querySelectorAll('[data-speed]').forEach(function (b) { b.onclick = function () { G.speed = +b.getAttribute('data-speed'); G.paused = false; }; });
     hud.querySelector('[data-pause]').onclick = function () { G.paused = !G.paused; };
     hud.querySelector('[data-follow]').onclick = function () { cam.follow = !cam.follow; if (cam.follow) cam.dist = Math.min(cam.dist, 16); else fitCamera(); };
-    hud.querySelector('[data-mute]').onclick = function () { MUTED = !MUTED; };
+    hud.querySelector('[data-mute]').onclick = function () { MUTED = !MUTED; toast(MUTED ? '효과음 끔' : '효과음 켬'); };
+    hud.querySelector('[data-music]').onclick = function () { audioOn(); setMusic(!MUSIC.on); toast(MUSIC.on ? '🎵 배경음악 켬' : '🎵 배경음악 끔'); };
     hud.querySelector('[data-talk]').onclick = function () { G.talkOn = !G.talkOn; toast(G.talkOn ? '손님 잡담 켬' : '손님 잡담 끔 — 중요한 말만 뜬다'); };
     hud.querySelector('[data-callstaff]').onclick = function () { audioOn(); openHire(); };
     hud.querySelector('[data-goals]').onclick = function () {
@@ -2406,6 +2517,7 @@ function renderHud() {
   hud.querySelector('[data-pause]').classList.toggle('on', G.paused);
   hud.querySelector('[data-follow]').classList.toggle('on', cam.follow);
   hud.querySelector('[data-mute]').textContent = MUTED ? '🔇' : '🔊';
+  hud.querySelector('[data-music]').classList.toggle('on', MUSIC.on);
   hud.querySelector('[data-talk]').classList.toggle('on', G.talkOn);
   renderTasks();
 }
@@ -2920,7 +3032,7 @@ function resetGame() {
 function titleScreen() {
   G.phase = 'title';
   var sv = loadSave();
-  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 11판</div>' +
+  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 12판</div>' +
     '<h1>홀덤펍 점장</h1>' +
     '<p class="sub">오늘 밤, 당신의 펍에서 데일리 토너먼트가 열린다.</p></div>' +
     '<ul class="howto">' +
@@ -3551,6 +3663,7 @@ function bankrupt() {
 // ── 시작 ────────────────────────────────────────────
 G.saveGameNow = function () { saveGame(); };   // 자동 점검용
 G.placeAt = placeAtForTest;                    // 자동 점검용
+G.__music = MUSIC;   // 자동 점검용
 G.__eval = { best: best, eval5: eval5, plohi: bestPLOHigh, plolo: bestPLOLow, name: handName };   // 자동 점검용
 G.roster = startRoster();
 G.regulars = makeRegulars();
