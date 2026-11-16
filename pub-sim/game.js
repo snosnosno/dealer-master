@@ -41,7 +41,7 @@ var BLINDS = [[100, 200], [200, 400], [300, 600], [400, 800], [500, 1000], [600,
   [25000, 50000], [30000, 60000], [40000, 80000], [50000, 100000]];
 
 var SHOP = [
-  { id: 'interior', ko: '인테리어 리뉴얼', price: 900000, desc: '조명 · 화분 · 바닥. 손님 도착 +15%, 만족도 감소 −30%' },
+  { id: 'interior', ko: '인테리어 리뉴얼', price: 900000, desc: '벽가 화분 · 테이블 조명 · 밝은 마감. 손님 도착 +15%, 만족도 감소 −30% (테마 · 장식은 「꾸미기」 탭)' },
   { id: 'shuffler', ko: '자동 셔플러', price: 700000, desc: '딜러 피로 누적 −35%, 핸드 속도 +10%' },
   { id: 'mic', ko: '자동 방송 시스템', price: 600000, desc: '블라인드 업 안내를 자동으로 — 레지 마감 · 파이널은 여전히 직접' },
   { id: 'bar', ko: '바 좌석 확장', price: 500000, desc: '대기 · 음료 좌석 7 → 10' },
@@ -242,7 +242,19 @@ function initScene() {
   rug.userData.floor = true; pickables.push(rug);
   decor.rug = rug;
   decor.wall = box(26, 3, 0.3, 0x2c3b36, 0, 1.5, -9);
-  box(0.3, 3, 18, 0x2c3b36, -13, 1.5, 0);
+  decor.sideWall = box(0.3, 3, 18, 0x2c3b36, -13, 1.5, 0);
+  // 네온 테마 — 벽을 따라 띠 조명
+  decor.neon = new THREE.Group();
+  [[0, 2.7, -8.82, 26, 0.06, 0.04, 0xff4fd8], [0, 0.35, -8.82, 26, 0.05, 0.04, 0x4fe3ff],
+   [-12.83, 2.7, 0, 0.04, 0.06, 18, 0x4fe3ff], [-12.83, 0.35, 0, 0.04, 0.05, 18, 0xff4fd8]].forEach(function (s) {
+    var m = new THREE.Mesh(new THREE.BoxGeometry(s[3], s[4], s[5]), new THREE.MeshBasicMaterial({ color: s[6] }));
+    m.position.set(s[0], s[1], s[2]); decor.neon.add(m);
+  });
+  var nl1 = new THREE.PointLight(0xff4fd8, 0.6, 14); nl1.position.set(-6, 2.4, -7.5);
+  var nl2 = new THREE.PointLight(0x4fe3ff, 0.6, 14); nl2.position.set(6, 2.4, -7.5);
+  decor.neon.add(nl1, nl2); decor.neon.visible = false; scene.add(decor.neon);
+  // 배치 모드 — 놓을 수 없는 곳을 붉게
+  decor.zones = new THREE.Group(); decor.zones.visible = false; scene.add(decor.zones);
   box(0.3, 0.6, 12, 0x2c3b36, 13, 0.3, -3);
   var mt = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.4), mat(0x8a2b22));
   mt.rotation.x = -Math.PI / 2; mt.position.set(10.5, 0.02, 7.6); scene.add(mt);
@@ -366,11 +378,181 @@ function initScene() {
   });
 }
 
+/* ── 매장 꾸미기 — 테마 · 장식 배치 ──────────────────── */
+var THEMES = {
+  classic: { ko: '클래식', price: 0, desc: '나무 바닥 · 짙은 초록 벽', floor: [0x6b4a33, 0x7a5636], rug: [0x3a2b3f, 0x2d3f5a], wall: [0x2c3b36, 0x3a2f2a], bg: 0x1b1612, hemi: 0xfff4e0 },
+  lounge: { ko: '라운지', price: 900000, desc: '따뜻한 원목 · 와인색 러그 · 은은한 조명', floor: [0x5a3a26, 0x6a4430], rug: [0x5c2a2a, 0x6a2c30], wall: [0x3d2b22, 0x4a3328], bg: 0x1e140e, hemi: 0xffd9a8 },
+  neon: { ko: '네온', price: 1200000, desc: '어두운 바닥 · 벽을 따라 분홍 · 하늘색 띠 조명', floor: [0x1d1b26, 0x23202e], rug: [0x2a1240, 0x30164a], wall: [0x141428, 0x18182e], bg: 0x0b0a12, hemi: 0xd8d0ff, neon: true }
+};
+var DECOR_ITEMS = {
+  plant: { ko: '화분', ic: '🪴', price: 80000, rate: 0.05, desc: '반경 3 손님 만족 서서히 +' },
+  sofa: { ko: '소파', ic: '🛋️', price: 250000, rate: 0.08, desc: '반경 3 손님 만족 + (바 대기 손님이 특히 좋아한다)' },
+  artwall: { ko: '아트월', ic: '🖼️', price: 300000, rate: 0.08, desc: '반경 3 손님 만족 + · 사진 찍는 손님' },
+  trophy: { ko: '트로피 진열장', ic: '🏆', price: 400000, rate: 0.05, desc: '우승자가 나올 때마다 트로피가 쌓인다 — 쌓일수록 효과 +', max: 1 }
+};
+var DECOR_R = 3;
+/* 놓을 수 없는 곳 — 테이블 · 카운터 · 동선 */
+function blockedZones() {
+  var z = [];
+  TABLE_DEF.forEach(function (t, i) { if (i < 2 || G.owned.table3) z.push({ x: t.cx, z: t.cz, r: 3.4 }); });
+  z.push({ x: 8.2, z: 2.4, r: 2.2 }, { x: 10.5, z: 7.2, r: 1.6 }, { x: 6.4, z: 1.6, r: 1.3 }, { x: -12.1, z: 6, r: 1.3 },
+    { x: -10.4, z: -2, r: 1.8 }, { x: -5.5, z: -5.3, r: 1.3 }, { x: 5.6, z: 1.2, r: 1 }, { x: -11, z: 4, r: 1 }, { x: 6.6, z: 3.8, r: 1 });
+  QUEUE.forEach(function (q) { z.push({ x: q.x, z: q.z, r: 1.0 }); });
+  return z;
+}
+function placeBlocked(x, zz, skip, kind) {
+  var pad = kind && kind !== 'plant' ? 0.8 : 0;   // 폭이 넓은 장식은 여유를 둔다
+  if (zz < -4.2 + pad && zz > -9) return '바 앞은 손님 자리다';
+  if (x < -12.2 + pad || x > 12.2 - pad || zz < -4.2 || zz > 8.5 - pad) return '벽에 너무 붙었다';
+  if (blockedZones().some(function (b) { return Math.hypot(b.x - x, b.z - zz) < b.r + pad; })) return '테이블 · 카운터 · 동선 근처에는 놓을 수 없다';
+  if (G.placed.some(function (p) { return p !== skip && Math.hypot(p.x - x, p.z - zz) < 1.2; })) return '다른 장식과 너무 가깝다';
+  return null;
+}
+function decorMesh(kind) {
+  var g = new THREE.Group();
+  if (kind === 'plant') {
+    var pot = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.24, 0.5, 12), mat(0x8a5a3c)); pot.position.y = 0.25;
+    var leaf = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 10), mat(0x2f7a45)); leaf.position.y = 0.95; leaf.scale.y = 1.3;
+    g.add(pot, leaf);
+  } else if (kind === 'sofa') {
+    box(1.6, 0.4, 0.7, 0x7a2f3a, 0, 0.3, 0, g); box(1.6, 0.6, 0.2, 0x6a2832, 0, 0.6, -0.3, g);
+    box(0.2, 0.5, 0.7, 0x6a2832, -0.75, 0.45, 0, g); box(0.2, 0.5, 0.7, 0x6a2832, 0.75, 0.45, 0, g);
+  } else if (kind === 'artwall') {
+    var c = document.createElement('canvas'); c.width = 128; c.height = 96;
+    var x = c.getContext('2d'), cols = ['#EF9F27', '#E5402F', '#3B6FB6', '#3E9B5F', '#7A4BB0', '#f2f2f2'];
+    x.fillStyle = '#1b1612'; x.fillRect(0, 0, 128, 96);
+    for (var i = 0; i < 9; i++) { x.fillStyle = cols[i % cols.length]; x.beginPath(); x.arc(14 + (i * 37) % 110, 14 + (i * 23) % 70, 10 + (i * 7) % 18, 0, Math.PI * 2); x.fill(); }
+    x.fillStyle = '#fff'; x.font = 'bold 18px sans-serif'; x.fillText('♠ ♥ ♦ ♣', 22, 88);
+    box(1.8, 1.4, 0.1, 0x2a1b14, 0, 1.1, 0, g);
+    var art = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.2), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(c), roughness: 0.6 }));
+    art.position.set(0, 1.1, 0.06); g.add(art);
+    box(0.1, 0.4, 0.5, 0x2a1b14, -0.7, 0.2, 0, g); box(0.1, 0.4, 0.5, 0x2a1b14, 0.7, 0.2, 0, g);
+  } else {
+    box(1.2, 1.7, 0.5, 0x3a2a1e, 0, 0.85, 0, g);
+    var glass = new THREE.Mesh(new THREE.BoxGeometry(1.08, 1.5, 0.05), new THREE.MeshStandardMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0.25, roughness: 0.1 }));
+    glass.position.set(0, 0.9, 0.26); g.add(glass);
+    box(1.08, 0.04, 0.4, 0x5a4434, 0, 0.62, 0, g); box(1.08, 0.04, 0.4, 0x5a4434, 0, 1.12, 0, g);
+    var n = Math.min(G.wins || 0, 12);
+    for (var k = 0; k < n; k++) {
+      var cup = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.03, 0.16, 10), mat(0xD8B35A, { metalness: 0.7, roughness: 0.25, emissive: 0x3a2a00 }));
+      cup.position.set(-0.42 + (k % 6) * 0.17, k < 6 ? 0.72 : 1.22, 0.02); g.add(cup);
+    }
+  }
+  g.traverse(function (o) { if (o.isMesh) { o.castShadow = true; o.userData.decor = g; } });
+  return g;
+}
+/* 놓인 장식을 다시 그린다 (트로피 수 · 불러오기) */
+function disposeTree(obj) {
+  obj.traverse(function (o) { if (o.isMesh) { o.geometry.dispose(); if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+}
+function rebuildPlaced() {
+  if (decor.placed) { scene.remove(decor.placed); disposeTree(decor.placed); pickables = pickables.filter(function (m) { return !m.userData.decor; }); }
+  decor.placed = new THREE.Group();
+  G.placed.forEach(function (p) {
+    var m = decorMesh(p.kind);
+    m.position.set(p.x, 0, p.z); m.rotation.y = p.rot || 0;
+    m.userData.place = p;
+    m.traverse(function (o) { if (o.isMesh) { o.userData.place = p; pickables.push(o); } });
+    decor.placed.add(m);
+  });
+  scene.add(decor.placed);
+}
+function decorCount(kind) { return (G.decorInv[kind] || 0); }
+function placedCount(kind) { return G.placed.filter(function (p) { return p.kind === kind; }).length; }
+/* 장식 반경 3 안의 손님 만족이 서서히 오른다 */
+var DECOR_CAP = 0.15;   // 장식을 몰아 놓아도 손님 한 명이 받는 효과는 초당 이만큼까지
+function tickDecor(dt) {
+  if (!G.placed.length) return;
+  G.customers.forEach(function (c) {
+    if (!c.alive || c.state === 'leaving') return;
+    var gain = 0, near = null;
+    G.placed.forEach(function (p) {
+      if (Math.hypot(c.mesh.position.x - p.x, c.mesh.position.z - p.z) > DECOR_R) return;
+      var r = DECOR_ITEMS[p.kind].rate + (p.kind === 'trophy' ? 0.01 * Math.min(G.wins || 0, 10) : 0);
+      gain += r * (p.kind === 'sofa' && /^bar-/.test(c.state) ? 1.5 : 1);
+      near = near || p;
+    });
+    if (!near) return;
+    c.sat = clamp(c.sat + Math.min(gain, DECOR_CAP) * dt, 0, 100);
+    if (chance(dt * 0.004)) say(c, pick(near.kind === 'artwall' ? ['📸 여기 사진 각!', '그림 예쁘다'] : (near.kind === 'trophy' ? ['🏆 우승하면 저기 올라가나?', '트로피 멋지다'] : ['여기 아늑하다 🌿', '분위기 좋네'])), 2, true);
+  });
+}
+
+/* 배치 모드 — 바닥을 탭하면 놓고, 놓인 것을 탭하면 회수 */
+function enterPlace() {
+  closeModal();
+  G.phase = 'place';
+  G.placeKind = Object.keys(DECOR_ITEMS).filter(function (k) { return decorCount(k) > placedCount(k); })[0] || null;
+  disposeTree(decor.zones);
+  while (decor.zones.children.length) decor.zones.remove(decor.zones.children[0]);
+  var zm = new THREE.MeshBasicMaterial({ color: 0xE5402F, transparent: true, opacity: 0.22, depthWrite: false });
+  blockedZones().forEach(function (b) {
+    var m = new THREE.Mesh(new THREE.CircleGeometry(b.r, 28), zm);
+    m.rotation.x = -Math.PI / 2; m.position.set(b.x, 0.04, b.z); decor.zones.add(m);
+  });
+  var bar = new THREE.Mesh(new THREE.PlaneGeometry(26, 4.6), zm); bar.rotation.x = -Math.PI / 2; bar.position.set(0, 0.04, -6.6); decor.zones.add(bar);
+  decor.zones.visible = true;
+  cam.target.set(-0.5, 0, 3.5); cam.yaw = 0; cam.pitch = 1.32;   // 앞줄이 하단 막대에 가리지 않게
+  renderPlaceBar();
+}
+function exitPlace() {
+  decor.zones.visible = false;
+  $('#placebar').innerHTML = '';
+  fitCamera(); cam.yaw = -0.18; cam.target.set(-0.5, 0, -0.5);
+  saveGame();
+  prepScreen('decor');
+}
+function renderPlaceBar() {
+  var kinds = Object.keys(DECOR_ITEMS).filter(function (k) { return decorCount(k) > 0; });
+  $('#placebar').innerHTML = '<div class="pbar"><div class="phead">🪴 배치 모드 — 바닥을 탭해 놓고, 놓인 장식을 탭하면 회수한다. <b>빨간 곳</b>(테이블 · 카운터 · 동선)에는 못 놓는다.</div><div class="pchips">' +
+    (kinds.length ? kinds.map(function (k) {
+      var it = DECOR_ITEMS[k], left = decorCount(k) - placedCount(k);
+      return '<button class="pchip' + (G.placeKind === k ? ' on' : '') + '" data-pk="' + k + '"' + (left > 0 ? '' : ' disabled') + '>' + it.ic + ' ' + it.ko + ' <small>' + left + '개 남음</small></button>';
+    }).join('') : '<span class="note">산 장식이 없다 — 꾸미기 탭에서 산다.</span>') +
+    '</div><button class="cta" data-pdone="1">배치 끝</button></div>';
+  document.querySelectorAll('[data-pk]').forEach(function (b) { b.onclick = function () { G.placeKind = b.getAttribute('data-pk'); renderPlaceBar(); }; });
+  $('[data-pdone]').onclick = exitPlace;
+}
+function placeClick() {
+  var hits = raycaster.intersectObjects(pickables, false);
+  for (var i = 0; i < hits.length; i++) {
+    var o = hits[i].object, u = o.userData;
+    if (!o.visible || (o.parent && o.parent.visible === false)) continue;
+    if (u.place) {
+      G.placed = G.placed.filter(function (p) { return p !== u.place; });
+      rebuildPlaced();
+      toast(DECOR_ITEMS[u.place.kind].ic + ' ' + DECOR_ITEMS[u.place.kind].ko + ' — 회수했다');
+      if (!G.placeKind) G.placeKind = u.place.kind;
+      renderPlaceBar(); tone(660, 0.08, 'triangle', 0.06);
+      return;
+    }
+    if (u.floor) {
+      var p = hits[i].point, k = G.placeKind;
+      if (!k || decorCount(k) <= placedCount(k)) { toast('놓을 장식을 아래에서 고르세요'); return; }
+      var why = placeBlocked(p.x, p.z, null, k);
+      if (why) { toast('🚫 ' + why); SFX.bad(); return; }
+      var rot = Math.atan2(-0.5 - p.x, 1 - p.z);   // 홀 가운데를 바라보게
+      G.placed.push({ kind: k, x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, rot: Math.round(rot * 100) / 100 });
+      rebuildPlaced();
+      if (decorCount(k) <= placedCount(k)) G.placeKind = Object.keys(DECOR_ITEMS).filter(function (x) { return decorCount(x) > placedCount(x); })[0] || null;
+      renderPlaceBar(); SFX.chips();
+      return;
+    }
+  }
+}
+function placeAtForTest(k, x, z) { G.placeKind = k; var w = placeBlocked(x, z, null, k); if (w) return w; G.placed.push({ kind: k, x: x, z: z, rot: 0 }); rebuildPlaced(); return null; }
+
 function applyDecor() {
   decor.interior.visible = !!G.owned.interior;
-  decor.floor.material.color.setHex(G.owned.interior ? 0x7a5636 : 0x6b4a33);
-  decor.rug.material.color.setHex(G.owned.interior ? 0x2d3f5a : 0x3a2b3f);
-  decor.wall.material.color.setHex(G.owned.interior ? 0x3a2f2a : 0x2c3b36);
+  var th = THEMES[G.theme] || THEMES.classic, iv = G.owned.interior ? 1 : 0;
+  decor.floor.material.color.setHex(th.floor[iv]);
+  decor.rug.material.color.setHex(th.rug[iv]);
+  decor.wall.material.color.setHex(th.wall[iv]);
+  decor.sideWall.material.color.setHex(th.wall[iv]);
+  scene.background.setHex(th.bg);
+  if (LIGHT.hemi) LIGHT.hemi.color.setHex(th.hemi);
+  decor.neon.visible = !!th.neon;
+  rebuildPlaced();
   decor.barExt.visible = !!G.owned.bar;
   decor.stools.forEach(function (s, i) { s.visible = i < barCap(); });
   TABLE_DEF.forEach(function (t, i) {
@@ -449,14 +631,16 @@ function bindInput() {
 
 /* 탭 — 테이블 · 카운터 · 쏟아진 자리 · 바닥 */
 function clickScene(e) {
-  if (G.modal || G.phase !== 'open') return;
   pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  if (G.phase === 'place' && !G.modal) { raycaster.setFromCamera(pointer, camera); placeClick(); return; }
+  if (G.modal || G.phase !== 'open') return;
   raycaster.setFromCamera(pointer, camera);
   var hits = raycaster.intersectObjects(pickables.concat(G.spills.map(function (s) { return s.mesh; })), false);
   for (var i = 0; i < hits.length; i++) {
     var o = hits[i].object, u = o.userData;
     if (!o.visible || (o.parent && o.parent.visible === false)) continue;
+    if (u.place) continue;   // 장식은 영업 중에 누르지 않는다 — 뒤의 바닥으로
     if (u.spill) { goClean(u.spill); return; }
     if (u.table !== undefined) { goTable(u.table); return; }
     if (u.counter) { goCounter(); return; }
@@ -538,7 +722,8 @@ var G = {
   stats: null, nextArrival: 2, nextSpill: 30, winner: null, winnerAt: null, finalized: false,
   counterProg: 0, stock: 0, announced: {}, chipIssueAt: null, finalDone: false,
   roster: [], staffSeq: 10, cands: [], goals: [], tips: {}, talkOn: true, servers: [], floorStaff: null,
-  weekLog: [], debtDays: 0, regulars: [], regDelta: [], friends: [], resv: null
+  weekLog: [], debtDays: 0, regulars: [], regDelta: [], friends: [], resv: null,
+  theme: 'classic', themes: { classic: true }, decorInv: {}, placed: [], wins: 0
 };
 window.__pub = G;   // 자동 점검용
 
@@ -1463,7 +1648,7 @@ function startEvent(type) {
     if (G.blackout) return false;
     G.blackout = true;
     LIGHT.hemi.intensity = 0.12; LIGHT.sun.intensity = 0.08;
-    decor.breakerLamp.visible = true;
+    decor.breakerLamp.visible = true; decor.neon.visible = false;
     toast('💡 정전! 왼쪽 벽 차단기로 가세요');
     addEvent({ type: type, ic: '💡', title: '정전', desc: '테이블이 멈췄다 — 왼쪽 벽 차단기', limit: 30,
       pos: function () { return V(-12.1, 6); },
@@ -1534,7 +1719,7 @@ function endBlackout(byPlayer) {
   if (!G.blackout) return;
   G.blackout = false;
   LIGHT.hemi.intensity = 0.55; LIGHT.sun.intensity = 0.85;
-  decor.breakerLamp.visible = false;
+  decor.breakerLamp.visible = false; decor.neon.visible = !!(THEMES[G.theme] || {}).neon;
   if (G.phase === 'open') { toast(byPlayer ? '💡 불이 들어왔다' : '💡 전기 기사가 와서 복구했다'); log('💡 전기 복구', byPlayer ? 'good' : 'bad'); }
 }
 function inspectorArrives() {
@@ -1678,6 +1863,7 @@ function checkBreak() {
   if (alive.length === 1 && !pending && G.stats.entries > 1) {
     G.winner = alive[0];
     var t = G.tables[G.winner.table];
+    G.wins = (G.wins || 0) + 1;   // 트로피 진열장에 하나 더
     log('우승 — ' + G.winner.name + '! 트로피와 다음 대회 시드권 (환전 없음)', 'good');
     toast('🏆 우승 ' + G.winner.name);
     say(G.winner, '우승이다!! 🏆', 5);
@@ -1906,6 +2092,7 @@ function simulate(dt) {
   if (G.floorStaff) stepActor(G.floorStaff, dt);
   if (G.inspector) stepActor(G.inspector, dt);
   tickMood(dt);
+  tickDecor(dt);
   tickOrders(dt);
   tickStaff(dt);
   tickFloor();
@@ -2526,6 +2713,7 @@ function saveGame() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       day: G.day, rep: G.rep, bank: G.bank, owned: G.owned, roster: G.roster, staffSeq: G.staffSeq, weekLog: G.weekLog, debtDays: G.debtDays, regulars: G.regulars,
+      theme: G.theme, themes: G.themes, decorInv: G.decorInv, placed: G.placed, wins: G.wins,
       cfg: { fee: G.cfg.fee, stack: G.cfg.stack, level: G.cfg.level, price: G.cfg.price, stock: G.cfg.stock, assign: G.cfg.assign, resCap: G.cfg.resCap, resDeposit: G.cfg.resDeposit }
     }));
   } catch (e) { /* 저장이 막힌 브라우저 — 이어하기만 안 될 뿐이다 */ }
@@ -2536,7 +2724,8 @@ function loadSave() {
 function resetGame() {
   G.day = 1; G.rep = 50; G.bank = START_BANK; G.owned = {}; G.roster = startRoster(); G.staffSeq = 10;
   G.cfg = { fee: 30000, stack: 1, level: 1, price: 1, stock: 60, chipOk: null, assign: [1, 2, null], train: null, resCap: 1, resDeposit: true };
-  G.goalsDay = null; G.candDay = null; G.tips = {}; G.praiseDay = null; G.raiseDayChecked = null; G.raiseReq = null; G.weekLog = []; G.debtDays = 0; G.regulars = makeRegulars();
+  G.goalsDay = null; G.candDay = null; G.tips = {}; G.praiseDay = null; G.raiseDayChecked = null; G.raiseReq = null;
+  G.theme = 'classic'; G.themes = { classic: true }; G.decorInv = {}; G.placed = []; G.wins = 0; G.weekLog = []; G.debtDays = 0; G.regulars = makeRegulars();
   applyDecor();
 }
 
@@ -2546,7 +2735,7 @@ function resetGame() {
 function titleScreen() {
   G.phase = 'title';
   var sv = loadSave();
-  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 9판</div>' +
+  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 10판</div>' +
     '<h1>홀덤펍 점장</h1>' +
     '<p class="sub">오늘 밤, 당신의 펍에서 데일리 토너먼트가 열린다.</p></div>' +
     '<ul class="howto">' +
@@ -2567,6 +2756,14 @@ function titleScreen() {
     resetGame();
     G.day = sv.day; G.rep = sv.rep; G.bank = sv.bank; G.owned = sv.owned || {}; G.roster = sv.roster || startRoster(); G.staffSeq = sv.staffSeq || 50;
     G.weekLog = sv.weekLog || []; G.debtDays = sv.debtDays || 0; G.regulars = sv.regulars || makeRegulars();
+    G.theme = THEMES[sv.theme] ? sv.theme : 'classic'; G.themes = sv.themes || { classic: true }; G.decorInv = sv.decorInv || {};
+    var cnt = {};
+    G.placed = (sv.placed || []).filter(function (p) {   // 망가진 저장 — 좌표가 이상하거나 산 것보다 많이 놓인 것은 버린다
+      if (!DECOR_ITEMS[p.kind] || !isFinite(p.x) || !isFinite(p.z)) return false;
+      cnt[p.kind] = (cnt[p.kind] || 0) + 1;
+      return cnt[p.kind] <= (G.decorInv[p.kind] || 0);
+    });
+    G.wins = sv.wins || 0;
     Object.keys(sv.cfg || {}).forEach(function (k) { G.cfg[k] = sv.cfg[k]; });
     applyDecor();
     if (dayInfo().wd === 6) weeklyScreen(); else prepScreen('shop');
@@ -2626,7 +2823,7 @@ function prepScreen(tab) {
   var cfg = G.cfg;
   // 해고된 딜러가 배치에 남아 있으면 비운다
   cfg.assign = cfg.assign.map(function (id) { return G.roster.some(function (s) { return s.id === id && s.role === 'dealer'; }) ? id : null; });
-  var tabs = [['shop', '상점'], ['staff', '직원'], ['chips', '칩 · 구조'], ['drinks', '음료'], ['dealers', '딜러 배치'], ['resv', '예약'], ['regs', '단골']];
+  var tabs = [['shop', '상점'], ['decor', '꾸미기'], ['staff', '직원'], ['chips', '칩 · 구조'], ['drinks', '음료'], ['dealers', '딜러 배치'], ['resv', '예약'], ['regs', '단골']];
   var info = dayInfo(), first = G.day - info.wd;
   var cal = '<div class="cal">' + WEEKDAYS.map(function (wd, i) {
     var di = dayInfo(first + i), past = i < info.wd, today = i === info.wd;
@@ -2648,6 +2845,22 @@ function prepScreen(tab) {
       return '<div class="item' + (own ? ' own' : '') + '"><div><b>' + it.ko + '</b><div class="note">' + it.desc + '</div></div>' +
         '<button class="cta' + (own ? ' ghost' : '') + '" data-buy="' + it.id + '"' + (dis ? ' disabled' : '') + '>' + (own ? '보유' : won(it.price) + '원') + '</button></div>';
     }).join('') + '</div>';
+  } else if (G.prepTab === 'decor') {
+    h += '<h3>테마</h3><div class="shop">' + Object.keys(THEMES).map(function (k) {
+      var th = THEMES[k], own = !!G.themes[k], on = G.theme === k;
+      var btn = on ? '<button class="cta ghost" disabled>사용 중</button>' :
+        (own ? '<button class="cta" data-theme-use="' + k + '">바꾸기</button>' :
+          '<button class="cta" data-theme-buy="' + k + '"' + (th.price > G.bank ? ' disabled' : '') + '>' + won(th.price) + '원</button>');
+      return '<div class="item' + (on ? ' own' : '') + '"><div><b>' + th.ko + '</b><div class="note">' + th.desc + '</div></div>' + btn + '</div>';
+    }).join('') + '</div>' +
+      '<h3>장식</h3><div class="shop">' + Object.keys(DECOR_ITEMS).map(function (k) {
+        var it = DECOR_ITEMS[k], n = decorCount(k), full = it.max && n >= it.max;
+        return '<div class="item"><div><b>' + it.ic + ' ' + it.ko + '</b>' + (n ? ' <span class="role">' + n + '개 · 놓음 ' + placedCount(k) + '</span>' : '') +
+          '<div class="note">' + it.desc + (k === 'trophy' ? ' — 지금까지 우승 ' + (G.wins || 0) + '번' : '') + '</div></div>' +
+          '<button class="cta" data-dbuy="' + k + '"' + (full || it.price > G.bank ? ' disabled' : '') + '>' + (full ? '보유' : won(it.price) + '원') + '</button></div>';
+      }).join('') + '</div>' +
+      '<p class="note">장식은 <b>반경 3 안 손님</b>의 만족도를 서서히 올린다 — 손님이 오래 머무는 바 앞 · 테이블 사이에 두면 효과가 크다. 테이블 · 카운터 · 동선 근처에는 놓을 수 없다. 위치는 저장된다.</p>' +
+      '<button class="cta" data-goplace="1"' + (Object.keys(DECOR_ITEMS).some(function (k) { return decorCount(k) > 0; }) ? '' : ' disabled') + '>🪴 배치하러 가기 (놓음 ' + G.placed.length + '개)</button>';
   } else if (G.prepTab === 'staff') {
     h += '<h3>우리 직원</h3><div class="shop">' + G.roster.map(function (s) {
       var raised = s.raiseDay === G.day;
@@ -2743,6 +2956,26 @@ function prepScreen(tab) {
       prepScreen('staff');
     };
   });
+  document.querySelectorAll('[data-theme-buy]').forEach(function (b) {
+    b.onclick = function () {
+      var k = b.getAttribute('data-theme-buy'), th = THEMES[k];
+      if (G.themes[k] || G.bank < th.price) return;
+      G.bank -= th.price; G.themes[k] = true; G.theme = k;
+      applyDecor(); toast('🎨 ' + th.ko + ' 테마 — 구매 · 적용'); SFX.cash(); prepScreen('decor');
+    };
+  });
+  document.querySelectorAll('[data-theme-use]').forEach(function (b) {
+    b.onclick = function () { G.theme = b.getAttribute('data-theme-use'); applyDecor(); toast('🎨 ' + THEMES[G.theme].ko + ' 테마로 바꿨다'); prepScreen('decor'); };
+  });
+  document.querySelectorAll('[data-dbuy]').forEach(function (b) {
+    b.onclick = function () {
+      var k = b.getAttribute('data-dbuy'), it = DECOR_ITEMS[k];
+      if (G.bank < it.price || (it.max && decorCount(k) >= it.max)) return;
+      G.bank -= it.price; G.decorInv[k] = decorCount(k) + 1;
+      toast(it.ic + ' ' + it.ko + ' — 샀다. 「배치하러 가기」로 놓는다'); SFX.cash(); prepScreen('decor');
+    };
+  });
+  var gp = $('[data-goplace]'); if (gp) gp.onclick = enterPlace;
   document.querySelectorAll('[data-raise]').forEach(function (b) {
     b.onclick = function () {
       var s = G.roster.filter(function (x) { return x.id === +b.getAttribute('data-raise'); })[0];
@@ -3127,6 +3360,8 @@ function bankrupt() {
 }
 
 // ── 시작 ────────────────────────────────────────────
+G.saveGameNow = function () { saveGame(); };   // 자동 점검용
+G.placeAt = placeAtForTest;                    // 자동 점검용
 G.roster = startRoster();
 G.regulars = makeRegulars();
 G.cfg.resCap = 1; G.cfg.resDeposit = true;

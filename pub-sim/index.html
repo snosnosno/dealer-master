@@ -302,6 +302,18 @@ button { font-family: inherit; }
 .call.announce .bar i { background: var(--amber); }
 .call.balance { border-color: #2C4A7A; }
 .call.balance .t { color: #2C4A7A; }
+/* 매장 꾸미기 — 배치 모드 하단 막대 */
+#placebar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 12; width: min(640px, calc(100% - 32px)); }
+.pbar { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 10px 12px; }
+.pbar .phead { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; margin-bottom: 8px; }
+.pbar .phead b { color: var(--red); }
+.pchips { display: flex; gap: 6px; flex-wrap: wrap; }
+.pchip { padding: 7px 10px; border-radius: 9px; border: 1.5px solid var(--line-strong); background: var(--surface-2); color: var(--ink); font-weight: 800; font-size: 13px; cursor: pointer; }
+.pchip small { font-weight: 600; color: var(--ink-3); }
+.pchip.on { border-color: var(--felt); background: var(--ok-bg); }
+.pchip[disabled] { opacity: .45; cursor: default; }
+.pbar .cta { width: 100%; margin-top: 8px; }
+
 /* 직원 깊이 — 특성 · 사기 · 인상 요청 · 교육 트리 */
 .trait { font-size: 10.5px; font-weight: 800; padding: 1px 7px; border-radius: 99px; background: var(--amber-bg); color: var(--amber-ink); white-space: nowrap; }
 .trait.mix { background: var(--ok-bg); color: var(--ok); }
@@ -364,6 +376,7 @@ button { font-family: inherit; }
 <div id="vignette"></div>
 <div id="qbar"><span></span><i><b></b></i></div>
 <div id="tip"></div>
+<div id="placebar"></div>
 <script src="vendor/three.min.js"></script>
 <script src="game.js"></script>
 </body>
