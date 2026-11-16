@@ -76,10 +76,10 @@ var STAFF_NAMES = ['도윤', '서아', '예준', '지우', '시우', '하은', '
   '선우', '윤서', '연우', '다은', '유준', '소율', '정우', '예린', '하윤', '로운', '이안', '나은'];
 function startRoster() {
   return [
-    { id: 1, name: '민준', role: 'dealer', skill: 86, speed: 0.95, days: 0 },
-    { id: 2, name: '서연', role: 'dealer', skill: 74, speed: 1.15, days: 0 },
-    { id: 3, name: '지호', role: 'dealer', skill: 63, speed: 1.05, days: 0 },
-    { id: 4, name: '다온', role: 'server', skill: 62, days: 0 }
+    { id: 1, name: '민준', role: 'dealer', skill: 86, speed: 0.95, days: 0, rel: 0.95 },
+    { id: 2, name: '서연', role: 'dealer', skill: 74, speed: 1.15, days: 0, rel: 0.88 },
+    { id: 3, name: '지호', role: 'dealer', skill: 63, speed: 1.05, days: 0, rel: 0.93 },
+    { id: 4, name: '다온', role: 'server', skill: 62, days: 0, rel: 0.9 }
   ].map(function (x) { x.wage = wageOf(x.role, x.skill); return x; });
 }
 var SRC = {
@@ -608,12 +608,6 @@ function newDay() {
   G.chipIssueAt = G.cfg.chipOk === false ? 60 + Math.random() * 120 : null;
 
   applyDecor();
-  G.dealers = G.roster.filter(function (s) { return s.role === 'dealer'; }).map(function (st, i) {
-    var dl = makeActor(makePerson(0xf2f2f2, 0x1c1c1c), 'dealer', st.name);
-    dl.id = i; dl.staff = st; dl.acc = st.skill; dl.speed = st.speed; dl.fatigue = 0; dl.table = null; dl.fresh = 0;
-    dl.mesh.position.copy(SPOTS.dealerRest).add(V(i * 0.55 - 1.1, 0));
-    return dl;
-  });
   G.tables = TABLE_DEF.slice(0, tableCount()).map(function (t, i) {
     t.alarm.visible = false;
     t.cards.forEach(function (c) { c.visible = false; });
@@ -623,38 +617,81 @@ function newDay() {
       call: null, hands: 0, broken: false, bustedLast: [], shortSince: null
     };
   });
-  var byRole = function (r) { return G.roster.filter(function (s) { return s.role === r; }); };
-  G.servers = byRole('server').map(function (st, i) {
-    var a = makeActor(makePerson(0xE6B94A), 'staff', st.name);
-    a.staff = st; a.busy = false; a.cool = 3 + i * 2; a.home = SPOTS.staffHome.clone().add(V(i * 1.2, 0));
+  /* 출근 — 2일차부터는 출근율만큼만 나온다. 노쇼한 사람은 일당이 없다 */
+  G.dealers = []; G.servers = []; G.counterStaff = null; G.cleaner = null; G.floorStaff = null;
+  G.absent = []; G.temps = []; G.pending = [];
+  G.roster.forEach(function (st) {
+    if (G.day >= 2 && !chance(st.rel != null ? st.rel : 0.92)) { G.absent.push(st); return; }
+    spawnStaff(st, false);
+  });
+  G.onCall = genOnCall();
+  G.player = makeActor(makePerson(0x22304A, 0xD8B35A, 0xEF9F27), 'player', '점장');
+  G.player.mesh.position.copy(SPOTS.playerHome);
+  G.player.spd = 4.2;
+}
+
+/* 직원 한 명을 매장에 세운다. arriving 이면 문으로 걸어 들어와 자리에 간 뒤부터 일한다 */
+function spawnStaff(st, arriving) {
+  var a;
+  if (st.role === 'dealer') {
+    a = makeActor(makePerson(0xf2f2f2, 0x1c1c1c), 'dealer', st.name);
+    a.id = G.dealers.length; a.acc = st.skill; a.speed = st.speed; a.fatigue = 0; a.table = null; a.fresh = 0;
+    a.home = SPOTS.dealerRest.clone().add(V((a.id % 5) * 0.55 - 1.1, 0));
+    G.dealers.push(a);
+  } else if (st.role === 'server') {
+    a = makeActor(makePerson(0xE6B94A), 'staff', st.name);
+    a.home = SPOTS.staffHome.clone().add(V(G.servers.length * 1.2, 0));
     var tray = new THREE.Group();
     var disc = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.02, 16), mat(0x9aa3a8, { metalness: 0.5, roughness: 0.3 }));
     var gl = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.16, 10), mat(0xD99A2B, { roughness: 0.2 }));
     gl.position.y = 0.09; tray.add(disc, gl);
     tray.position.set(0.3, 1.05, 0.1); tray.visible = false;
     a.mesh.add(tray); a.tray = tray;
-    a.mesh.position.copy(a.home);
-    return a;
+    G.servers.push(a);
+  } else if (st.role === 'counter') {
+    a = makeActor(makePerson(0x9AA5B1, 0x2C4A7A), 'counter', st.name);
+    a.home = V(8.9, 1.5); G.counterStaff = a;
+  } else if (st.role === 'cleaner') {
+    a = makeActor(makePerson(0x6FA8A0), 'cleaner', st.name);
+    a.home = SPOTS.cleanerHome.clone(); G.cleaner = a;
+  } else {
+    a = makeActor(makePerson(0x2E6E52, 0xD8B35A), 'floor', st.name);
+    a.home = SPOTS.floorHome.clone(); G.floorStaff = a;
+  }
+  a.staff = st; a.busy = false; a.cool = 3 + Math.random() * 2;
+  if (!arriving) { a.mesh.position.copy(a.home); return a; }
+  a.busy = true; a.arriving = true;
+  a.mesh.position.copy(SPOTS.outside);
+  walkTo(a, [SPOTS.door, a.home], function () {
+    a.busy = false; a.arriving = false;
+    say(a, '출근했습니다! 🙌', 2.2);
+    floatText(a.mesh.position.clone().setY(1.9), ROLES[st.role].ko + ' 합류', 'good');
+    SFX.good();
+    log(ROLES[st.role].ko + ' ' + st.name + ' 출근' + (st.temp ? ' (대타)' : ''), 'good');
+    if (st.role === 'dealer') {
+      var empty = G.tables.filter(function (t) { return t.dealer === null && !t.broken; })[0];
+      if (empty) assignDealer(empty, a);
+    }
+  }, 3);
+  return a;
+}
+function assignDealer(t, d) {
+  t.dealer = d.id; d.table = t.id;
+  walkTo(d, [dealerPos(t.def)], function () { faceTo(d, V(t.def.cx, t.def.cz)); });
+}
+/* 오늘 밤 부를 수 있는 대타 — 일당 1.3배, 오늘만. 가끔 연락이 끊긴다 */
+function genOnCall() {
+  var roles = shuffle(['counter', 'cleaner', 'floor']).slice(0, 1).concat(['dealer', 'server']);
+  var used = G.roster.map(function (x) { return x.name; });
+  return roles.map(function (role) {
+    var nm = pick(STAFF_NAMES.filter(function (n) { return used.indexOf(n) < 0; }));
+    used.push(nm);
+    var skill = 55 + rnd(26);
+    var st = { id: ++G.staffSeq, name: nm, role: role, skill: skill, days: 0, temp: true, rel: 0.9 };
+    if (role === 'dealer') st.speed = Math.round((0.9 + Math.random() * 0.25) * 100) / 100;
+    st.wage = Math.round(wageOf(role, skill) * 1.3 / 10000) * 10000;
+    return st;
   });
-  G.counterStaff = null; G.cleaner = null; G.floorStaff = null;
-  var cs = byRole('counter')[0];
-  if (cs) {
-    G.counterStaff = makeActor(makePerson(0x9AA5B1, 0x2C4A7A), 'counter', cs.name);
-    G.counterStaff.staff = cs; G.counterStaff.mesh.position.set(8.9, 0, 1.5);
-  }
-  var cl = byRole('cleaner')[0];
-  if (cl) {
-    G.cleaner = makeActor(makePerson(0x6FA8A0), 'cleaner', cl.name);
-    G.cleaner.staff = cl; G.cleaner.mesh.position.copy(SPOTS.cleanerHome); G.cleaner.busy = false;
-  }
-  var fl = byRole('floor')[0];
-  if (fl) {
-    G.floorStaff = makeActor(makePerson(0x2E6E52, 0xD8B35A), 'floor', fl.name);
-    G.floorStaff.staff = fl; G.floorStaff.mesh.position.copy(SPOTS.floorHome); G.floorStaff.busy = false;
-  }
-  G.player = makeActor(makePerson(0x22304A, 0xD8B35A, 0xEF9F27), 'player', '점장');
-  G.player.mesh.position.copy(SPOTS.playerHome);
-  G.player.spd = 4.2;
 }
 
 // ═══════════════════════════════════════════════════
@@ -754,7 +791,7 @@ function tickCounter(dt) {
   if (!G.queue.length) { G.counterProg = 0; return; }
   var head = G.queue[0];
   if (head.mesh.position.distanceTo(QUEUE[0]) > 0.3) return;
-  var rate = G.counterRate = playerNear(V(8.2, 1.7), 1.6) ? 1 : (G.counterStaff ? 0.55 + G.counterStaff.staff.skill / 220 : 0.28);
+  var rate = G.counterRate = playerNear(V(8.2, 1.7), 1.6) ? 1 : (G.counterStaff && !G.counterStaff.arriving ? 0.55 + G.counterStaff.staff.skill / 220 : 0.28);
   G.counterProg += dt * rate;
   if (G.queue.length >= 3) tip('queue', '등록 줄이 길어진다 — 카운터 뒤로 걸어가면 빨리 처리된다. 카운터 직원을 채용해도 된다.');
   G.queue.forEach(function (c, i) { if (i > 1) c.sat = clamp(c.sat - 0.25 * dt, 0, 100); });
@@ -1435,6 +1472,13 @@ function simulate(dt) {
     toast('칩 세팅 오류 — 스타팅 스택이 틀렸다는 항의. 평판 −2');
     log('칩 세팅 오류가 드러났다', 'bad');
   }
+  G.pending = G.pending.filter(function (p) {
+    if (G.simT < p.at) return true;
+    toast('📵 대타 ' + p.st.name + ' — 연락 두절. 다른 사람을 부르세요');
+    log('대타 ' + p.st.name + ' 연락 두절', 'bad');
+    SFX.bad();
+    return false;
+  });
   checkAnnouncements();
   checkBalance();
   // 제한 시간
@@ -1480,6 +1524,7 @@ function renderHud() {
       '<span class="kv m-hide">음료 재고 <b data-h="stock"></b></span>' +
       '<span class="kv m-hide" data-h="reg"></span>' +
       '<span class="sp"></span>' +
+      '<button class="hbtn" data-callstaff="1" title="직원 부르기">🧑‍💼</button>' +
       '<button class="hbtn" data-goals="1" title="오늘의 목표">🎯</button>' +
       '<button class="hbtn" data-talk="1" title="손님 잡담">💬</button>' +
       '<button class="hbtn" data-follow="1" title="점장 따라가기">📍</button>' +
@@ -1491,6 +1536,7 @@ function renderHud() {
     hud.querySelector('[data-follow]').onclick = function () { cam.follow = !cam.follow; if (cam.follow) cam.dist = Math.min(cam.dist, 16); else fitCamera(); };
     hud.querySelector('[data-mute]').onclick = function () { MUTED = !MUTED; };
     hud.querySelector('[data-talk]').onclick = function () { G.talkOn = !G.talkOn; toast(G.talkOn ? '손님 잡담 켬' : '손님 잡담 끔 — 중요한 말만 뜬다'); };
+    hud.querySelector('[data-callstaff]').onclick = function () { audioOn(); openHire(); };
     hud.querySelector('[data-goals]').onclick = function () {
       var s = G.stats;
       toast('🎯 ' + G.goals.map(function (g) { var d = goalDef(g); return goalText(g) + (d.now ? ' (' + d.now(s) + ')' : ''); }).join(' · '));
@@ -1574,7 +1620,8 @@ function renderOverlay() {
     var p = project(V(t.def.cx, t.def.cz).setY(t.call ? 3.6 : 2.0));
     el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
     var txt = t.broken ? t.name + '<small>재편으로 닫힘</small>' :
-      (t.call ? '🚨 플로어! — ' + t.name : t.name + '<small>' + seated(t) + '명</small>');
+      (t.dealer === null ? '⚠️ ' + t.name + '<small>딜러 없음 — 눌러서 배치</small>' :
+      (t.call ? '🚨 플로어! — ' + t.name : t.name + '<small>' + seated(t) + '명</small>'));
     if (el._t !== txt) { el.innerHTML = txt; el._t = txt; }
     el.className = 'tlabel' + (t.call ? ' alert' : '');
   });
@@ -1653,7 +1700,7 @@ function openTable(i) {
   var t = G.tables[i];
   if (t.broken) { toast(t.name + '은 재편으로 닫혔다'); return; }
   var d = t.dealer !== null ? G.dealers[t.dealer] : null;
-  var rest = G.dealers.filter(function (x) { return x.table === null; });
+  var rest = G.dealers.filter(function (x) { return x.table === null && !x.arriving; });
   var names = t.seats.map(function (id, s) {
     if (id === null) return seatNo(s) + ' —';
     var c = G.customers[id];
@@ -1664,6 +1711,11 @@ function openTable(i) {
     (d ? '<p>정확도 ' + Math.round(d.acc) + ' · 피로 ' + Math.round(d.fatigue) + '/45 → 실제 정확도 <b>' + Math.round(effAcc(d)) + '</b> · 진행 속도 <b>' + Math.round(handSpeed(d) * 100) + '%</b>' +
       (d.fresh > G.simT ? ' ⚡교대 직후' : '') + '. 피로가 쌓이면 실수가 늘어 호출이 잦아지고 핸드가 느려진다.</p>' : '') +
     '<div class="acts">' + names.join('<br>') + '</div>';
+  if (!d && rest.length) {
+    h += '<h3>딜러 배치</h3><div class="choices">' + rest.map(function (r) {
+      return '<button class="choice" data-place="' + r.id + '">' + r.name + ' 배치 — 정확도 ' + Math.round(r.acc) + ' · 피로 ' + Math.round(r.fatigue) + '</button>';
+    }).join('') + '</div>';
+  } else if (!d) h += '<p class="warn">쉬는 딜러가 없다 — 상단 🧑‍💼 로 대타를 부르세요.</p>';
   if (d && rest.length) {
     h += '<h3>교대</h3><div class="choices">' + rest.map(function (r) {
       return '<button class="choice" data-swap="' + r.id + '">' + r.name + '와 교대 — 정확도 ' + Math.round(r.acc) + ' · 피로 ' + Math.round(r.fatigue) + '</button>';
@@ -1673,6 +1725,54 @@ function openTable(i) {
   showModal(h);
   document.querySelectorAll('[data-swap]').forEach(function (b) {
     b.onclick = function () { swapDealer(t, G.dealers[+b.getAttribute('data-swap')]); closeModal(); };
+  });
+  document.querySelectorAll('[data-place]').forEach(function (b) {
+    b.onclick = function () { var d2 = G.dealers[+b.getAttribute('data-place')]; assignDealer(t, d2); d2.fresh = G.simT + 45; log(t.name + ' — 딜러 ' + d2.name + ' 배치', 'hi'); closeModal(); };
+  });
+  $('[data-close]').onclick = closeModal;
+}
+
+// ── 영업 중 직원 부르기 ─────────────────────────────
+function activeCount(role) {
+  return G.roster.concat(G.temps).filter(function (x) { return x.role === role && G.absent.indexOf(x) < 0; }).length;
+}
+function openHire() {
+  if (G.phase !== 'open') return;
+  var row = function (st, kind) {
+    var full = activeCount(st.role) >= ROLES[st.role].max;
+    return '<div class="item"><div>' + staffLine(st) + '<div class="note">' + ROLES[st.role].desc + '</div></div>' +
+      '<button class="cta" data-hire-' + kind + '="' + st.id + '"' + (full ? ' disabled' : '') + '>' + (full ? '정원 찼음' : (kind === 'perm' ? '채용' : '부르기')) + '</button></div>';
+  };
+  var need = G.tables.filter(function (t) { return t.dealer === null && !t.broken; }).length;
+  showModal('<div class="kicker">' + clock(gameMin()) + ' · 영업 중</div><h2>🧑‍💼 직원 부르기</h2>' +
+    (G.absent.length ? '<p class="warn">📵 오늘 노쇼 — ' + G.absent.map(function (x) { return x.name + '(' + ROLES[x.role].ko + ')'; }).join(' · ') + '</p>' : '') +
+    (need ? '<p class="warn">⚠️ 딜러 없는 테이블 ' + need + '개</p>' : '') +
+    '<p class="note">부른 사람은 문으로 걸어 들어와 자리에 간 뒤부터 일한다. 일당은 오늘 하루치가 다 나간다.</p>' +
+    '<h3>대타 — 오늘 밤만 · 일당 1.3배</h3><div class="shop">' + (G.onCall.length ? G.onCall.map(function (x) { return row(x, 'temp'); }).join('') : '<p class="note">더 부를 사람이 없다.</p>') + '</div>' +
+    '<h3>오늘 지원자 — 정식 채용 · 지금부터 출근</h3><div class="shop">' + (G.cands.length ? G.cands.map(function (x) { return row(x, 'perm'); }).join('') : '<p class="note">남은 지원자가 없다.</p>') + '</div>' +
+    '<button class="cta ghost" data-close="1">닫기</button>', true);
+  document.querySelectorAll('[data-hire-temp]').forEach(function (b) {
+    b.onclick = function () {
+      var st = G.onCall.filter(function (x) { return x.id === +b.getAttribute('data-hire-temp'); })[0];
+      G.onCall = G.onCall.filter(function (x) { return x !== st; });
+      if (chance(0.12)) {
+        G.pending.push({ st: st, at: G.simT + 10 });   // 연락이 끊긴다 — 10초 뒤에 알게 된다
+        toast('📞 ' + st.name + '에게 연락했다…');
+      } else {
+        G.temps.push(st); spawnStaff(st, true);
+        toast('📞 대타 ' + st.name + ' — 오는 중');
+      }
+      closeModal();
+    };
+  });
+  document.querySelectorAll('[data-hire-perm]').forEach(function (b) {
+    b.onclick = function () {
+      var st = G.cands.filter(function (x) { return x.id === +b.getAttribute('data-hire-perm'); })[0];
+      G.cands = G.cands.filter(function (x) { return x !== st; });
+      G.roster.push(st); spawnStaff(st, true);
+      toast('🧑‍💼 ' + st.name + ' 채용 — 오는 중');
+      closeModal();
+    };
   });
   $('[data-close]').onclick = closeModal;
 }
@@ -1957,7 +2057,7 @@ function genCandidates() {
     var nm = pick(STAFF_NAMES.filter(function (n) { return used.indexOf(n) < 0; }));
     used.push(nm);
     var skill = 50 + rnd(41);
-    var s = { id: ++G.staffSeq, name: nm, role: role, skill: skill, days: 0 };
+    var s = { id: ++G.staffSeq, name: nm, role: role, skill: skill, days: 0, rel: Math.round((0.8 + Math.random() * 0.18) * 100) / 100 };
     if (role === 'dealer') s.speed = Math.round((0.9 + Math.random() * 0.3) * 100) / 100;
     s.wage = wageOf(role, skill);
     return s;
@@ -1967,7 +2067,7 @@ function roleCount(role) { return G.roster.filter(function (s) { return s.role =
 function staffLine(s) {
   var stat = s.role === 'dealer' ? '정확도 ' + s.skill + ' · 속도 ' + Math.round(s.speed * 100) : '능력 ' + s.skill;
   return '<b>' + s.name + '</b> <span class="role r-' + s.role + '">' + ROLES[s.role].ko + '</span><div class="note">' + stat +
-    ' · 일당 ' + won(s.wage) + (s.days ? ' · ' + s.days + '일 근무' : '') + '</div>';
+    ' · 일당 ' + won(s.wage) + (s.temp ? '' : ' · 출근율 ' + Math.round((s.rel != null ? s.rel : 0.92) * 100) + '%') + (s.days ? ' · ' + s.days + '일 근무' : '') + '</div>';
 }
 function wagesTotal() { return G.roster.reduce(function (t, s) { return t + s.wage; }, 0); }
 
@@ -2001,7 +2101,7 @@ function prepScreen(tab) {
         return '<div class="item"><div>' + staffLine(s) + '<div class="note">' + ROLES[s.role].desc + '</div></div>' +
           '<button class="cta" data-hire="' + s.id + '"' + (full ? ' disabled' : '') + '>' + (full ? ROLES[s.role].ko + ' 정원 찼음' : '채용') + '</button></div>';
       }).join('') + (G.cands.length ? '' : '<p class="note">오늘은 더 찾아온 사람이 없다.</p>') + '</div>' +
-      '<p class="note">일당은 영업한 날마다 나간다. 직원은 하루 일할 때마다 능력이 1씩 오른다. 플로어 보조는 아나운스 · 밸런싱 · 청소를 대신하지만 <b>판정 호출은 점장 몫</b>이다.</p>';
+      '<p class="note">일당은 출근한 날마다 나간다. <b>2일차부터 출근율만큼만 나온다</b> — 노쇼하면 영업 중 🧑‍💼 로 대타를 부른다. 직원은 하루 일할 때마다 능력이 1씩 오른다. 플로어 보조는 아나운스 · 밸런싱 · 청소를 대신하지만 <b>판정 호출은 점장 몫</b>이다.</p>';
   } else if (G.prepTab === 'chips') {
     h += '<h3>스타팅 스택</h3><div class="seg">' + STACKS.map(function (s, i) {
       return '<button data-stack="' + i + '" class="' + (cfg.stack === i ? 'on' : '') + '">' + s.ko + '<br><small>' + (i === 0 ? '빨리 끝남 · 만족 ↓' : (i === 2 ? '오래 감 · 만족 ↑' : '보통')) + '</small></button>';
@@ -2162,16 +2262,26 @@ function openDay() {
   G.bank -= G.cfg.stock * STOCK_COST;
   G.dayRevenue = 0;
   newDay();
-  G.cfg.assign.slice(0, tableCount()).forEach(function (sid, k) {
-    var di = G.dealers.findIndex(function (d) { return d.staff.id === sid; });
-    var t = G.tables[k], d = G.dealers[di];
-    t.dealer = di; d.table = k;
-    walkTo(d, [dealerPos(t.def)], function () { faceTo(d, V(t.def.cx, t.def.cz)); });
+  var plan = G.cfg.assign.slice(0, tableCount()), msgs = [];
+  plan.forEach(function (sid, k) {
+    var t = G.tables[k];
+    var d = G.dealers.filter(function (x) { return x.staff.id === sid; })[0];
+    if (!d) {
+      var spare = G.dealers.filter(function (x) { return x.table === null && plan.indexOf(x.staff.id) < 0; })[0];
+      var who = (G.roster.filter(function (x) { return x.id === sid; })[0] || {}).name;
+      if (spare) { d = spare; msgs.push(who + ' 노쇼 → ' + spare.name + '가 ' + t.name); }
+      else { msgs.push(who + ' 노쇼 → ' + t.name + ' 딜러 없음!'); return; }
+    }
+    assignDealer(t, d);
   });
+  G.absent.forEach(function (st) { log('📵 ' + st.name + '(' + ROLES[st.role].ko + ') 노쇼 — 연락이 안 된다', 'bad'); });
   G.phase = 'open';
   $('#hud')._built = false;
   log(G.day + '일차 영업 시작 — 참가비 ' + won(G.cfg.fee) + ' · 스타팅 ' + won(STACKS[G.cfg.stack].chips) + ' · 레벨 ' + levelMin() + '분', 'hi');
-  toast('18:00 — 영업 시작!');
+  if (G.absent.length) {
+    toast('📵 노쇼 — ' + G.absent.map(function (x) { return x.name + '(' + ROLES[x.role].ko + ')'; }).join(' · ') + (msgs.length ? ' · ' + msgs.join(' · ') : '') + ' — 🧑‍💼 로 대타를 부를 수 있다');
+    SFX.bad();
+  } else toast('18:00 — 영업 시작!');
   tip('open', '👟 바닥을 탭하면 점장이 걸어간다. 카운터 뒤에 서 있으면 등록이 빨라진다.');
   say(G.player, '오늘도 잘 부탁해요!', 2.5);
 }
@@ -2203,7 +2313,8 @@ function closeDay() {
 function report(settleOk) {
   var s = G.stats;
   var feeRev = s.entries * G.cfg.fee, drinkRev = s.drinks * PRICES[G.cfg.price].p;
-  var wages = wagesTotal();
+  var present = G.roster.filter(function (x) { return G.absent.indexOf(x) < 0; });
+  var wages = present.concat(G.temps).reduce(function (t, x) { return t + x.wage; }, 0);
   var stockCost = G.cfg.stock * STOCK_COST;
   var settleLoss = settleOk ? 0 : 50000;
   var avgSat = s.satN ? s.satSum / s.satN : 70;
@@ -2219,7 +2330,7 @@ function report(settleOk) {
   var rankAfter = rankOf(G.rep);
   // 직원 성장 — 오늘 일한 사람은 능력 +1
   var grown = [];
-  G.roster.forEach(function (st) {
+  present.forEach(function (st) {
     st.days++;
     if (st.skill < 95) { st.skill++; grown.push(st.name); }
   });
@@ -2241,7 +2352,7 @@ function report(settleOk) {
     ['참가비 ' + s.entries + '건 × ' + won(G.cfg.fee), feeRev],
     ['음료 ' + s.drinks + '잔 × ' + won(PRICES[G.cfg.price].p), drinkRev],
     ['목표 보상 ' + stars + '개', bonus],
-    ['인건비 (직원 ' + G.roster.length + '명)', -wages],
+    ['인건비 (출근 ' + present.length + '명' + (G.temps.length ? ' · 대타 ' + G.temps.length : '') + ')', -wages],
     ['운영비 (임대 · 전기 · 기타)', -WAGE.ops],
     ['음료 재고 ' + G.cfg.stock + '개', -stockCost]
   ];
@@ -2261,6 +2372,7 @@ function report(settleOk) {
     '<h3>손님</h3><p>평균 만족도 ' + Math.round(avgSat) + ' · 줄이 길어 돌아간 손님 ' + (s.lost + s.queueLeave) + '명 · 평판 ' + Math.round(s.repStart) + ' → <b>' + Math.round(G.rep) + '</b> (' + rankAfter + ')</p>' +
     '<p>' + (G.winner ? '🏆 우승 ' + G.winner.name + ' — 트로피와 다음 대회 시드권' : '마감까지 결판이 나지 않았다 — 남은 사람들은 다음 대회 시드권') + '</p>' +
     (grown.length ? '<p class="note">직원 성장 — ' + grown.join(' · ') + ' 능력 +1</p>' : '') +
+    (G.absent.length ? '<p class="note">📵 노쇼 — ' + G.absent.map(function (x) { return x.name; }).join(' · ') + ' (일당 없음)</p>' : '') +
     '<h3>후기</h3><p>' + reviews.join('<br>') + '</p>' +
     '<button class="cta" data-next-day="1">다음 날 영업 준비</button> <button class="cta ghost" data-restart="1">타이틀로</button>';
   showModal(h, true);
