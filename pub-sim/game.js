@@ -146,6 +146,7 @@ var scene, camera, renderer, raycaster, pointer;
 var cam = { yaw: -0.18, pitch: 0.92, dist: 21, target: V(-0.5, -0.5), follow: false };
 var pickables = [];
 var decor = {};   // 상점 구매로 보이는 것들
+var LIGHT = {};   // 정전 때 어두워지는 조명
 
 var TABLE_DEF = [
   { name: '1번 테이블', cx: -4.4, cz: 0.4 },
@@ -194,8 +195,9 @@ function initScene() {
   scene.background = new THREE.Color(0x1b1612);
   camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
 
-  scene.add(new THREE.HemisphereLight(0xfff4e0, 0x3a2a1e, 0.55));
-  var sun = new THREE.DirectionalLight(0xffe9c8, 0.85);
+  LIGHT.hemi = new THREE.HemisphereLight(0xfff4e0, 0x3a2a1e, 0.55);
+  scene.add(LIGHT.hemi);
+  var sun = LIGHT.sun = new THREE.DirectionalLight(0xffe9c8, 0.85);
   sun.position.set(6, 16, 8);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
@@ -249,6 +251,11 @@ function initScene() {
   mic.position.set(6.4, 0.7, 1.6); scene.add(mic);
   var mh = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), mat(0x333333));
   mh.position.set(6.4, 1.45, 1.6); scene.add(mh);
+  // 차단기 — 왼쪽 벽. 정전이면 빨간 등이 켜진다
+  box(0.14, 0.8, 0.6, 0x5a5f66, -12.8, 1.5, 6);
+  decor.breakerLamp = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), mat(0xE5402F, { emissive: 0xE5402F, emissiveIntensity: 1 }));
+  decor.breakerLamp.position.set(-12.7, 1.95, 6); decor.breakerLamp.visible = false; scene.add(decor.breakerLamp);
+  var bs = labelSprite('차단기', '#9fb3ad'); bs.scale.set(1.2, 0.3, 1); bs.position.set(-12.6, 2.3, 6); scene.add(bs);
 
   // 인테리어 (구매하면 보인다)
   decor.interior = new THREE.Group();
@@ -565,6 +572,16 @@ function regDone(c) {
   G.regDelta.push({ name: r.name, d: d });
   if (r.aff < 15 && !r.gone) { r.gone = true; log('💔 단골 ' + r.name + ' — 발길을 끊었다', 'bad'); }
 }
+/* 인플루언서 — 나갈 때 만족도로 평판이 크게 움직인다 */
+function vipDone(c) {
+  if (!c.vip || c.vipDone || c.bounced) return;
+  c.vipDone = true;
+  var ok = c.sat >= 70;
+  G.rep = clamp(G.rep + (ok ? 5 : -4), 0, 100);
+  floatText(c.mesh.position.clone().setY(2.2), ok ? '📸 좋은 후기 · 평판 +5' : '📸 나쁜 후기 · 평판 −4', ok ? 'good' : 'bad');
+  log('📸 인플루언서 ' + c.name + ' — ' + (ok ? '「여기 분위기 최고」 후기' : '「별로였다」 후기') + ' (만족 ' + Math.round(c.sat) + ')', ok ? 'good' : 'bad');
+  evNote('influencer', ok, '인플루언서 만족 ' + Math.round(c.sat) + ' — 평판 ' + (ok ? '+5' : '−4'));
+}
 function nextName() {
   for (var k = 0; k < NAMES.length; k++) {
     var nm = NAMES[G.nameIx++ % NAMES.length];
@@ -632,6 +649,7 @@ function clearActors() {
   FX.parts.forEach(function (p) { scene.remove(p.m); });
   FX.moves = []; FX.parts = []; FX.floats = [];
   (G.glasses || []).forEach(function (g) { scene.remove(g.mesh); }); G.glasses = [];
+  if (G.inspector) { scene.remove(G.inspector.mesh); G.inspector = null; }
 }
 
 function newDay() {
@@ -644,8 +662,11 @@ function newDay() {
   G.stats = {
     entries: 0, unique: 0, drinks: 0, noStock: 0, right: 0, wrong: 0, missed: 0, lost: 0, angry: 0,
     satSum: 0, satN: 0, repStart: G.rep, ann: 0, annMiss: 0, annWrong: 0, cleaned: 0, spillSec: 0,
-    balanced: 0, balanceMiss: 0, queueLeave: 0, annByStaff: 0, regVisits: 0, depositRev: 0
+    balanced: 0, balanceMiss: 0, queueLeave: 0, annByStaff: 0, regVisits: 0, depositRev: 0,
+    events: [], fines: 0
   };
+  G.evPlan = planEvents(); G.groupArr = []; G.groupBoost = 0; G.blackout = false;
+  if (LIGHT.hemi) { LIGHT.hemi.intensity = 0.55; LIGHT.sun.intensity = 0.85; decor.breakerLamp.visible = false; }
   G.regulars.forEach(function (r) { r.inHouse = false; r.reserved = false; });
   G.regDelta = []; G.friends = []; G.resv = null;
   G.chipIssueAt = G.cfg.chipOk === false ? 60 + Math.random() * 120 : null;
@@ -768,6 +789,7 @@ function goTable(i) {
 }
 function goCounter() { playerGo(V(8.1, 1.6), null, '카운터로'); }
 G.goCounter = goCounter;   // 자동 점검용
+G.startEvent = function (type) { return startEvent(type); };   // 자동 점검용
 function goClean(sp) {
   playerGo(sp.mesh.position.clone(), function () {
     if (G.spills.indexOf(sp) < 0) return;
@@ -806,9 +828,9 @@ function freeBarSpot() {
 
 function spawnCustomer(opt) {
   opt = opt || {};
-  var r = opt.reg !== undefined ? opt.reg : (opt.resv || opt.friend ? null : pickRegular());
-  var type = r ? r.type : pickType();
-  var c = makeActor(makePerson(CUST_TYPES[type].color, null, r ? 0xD8B35A : null), 'cust', r ? r.name : nextName());
+  var r = opt.reg !== undefined ? opt.reg : (opt.resv || opt.friend || opt.vip || opt.group ? null : pickRegular());
+  var type = opt.vip ? 'pro' : (r ? r.type : pickType());
+  var c = makeActor(makePerson(CUST_TYPES[type].color, null, opt.vip ? 0xC77DFF : (r ? 0xD8B35A : null)), 'cust', r ? r.name : nextName());
   c.id = G.customers.length; c.type = type; c.alive = true; c.state = 'arrive';
   c.sat = 70 + (STACKS[stackIdx()].sat * 50); c.table = null; c.seat = null; c.barSpot = null;
   c.entries = 0; c.lastDrink = -99; c.leaveAt = 0; c.nextTalk = G.simT + 8 + Math.random() * 20;
@@ -824,11 +846,15 @@ function spawnCustomer(opt) {
   }
   if (c.resv) say(c, '📋 예약했어요!', 2.2);
   if (opt.friend) say(c, '😊 ' + opt.friend + ' 친구예요', 2.4);
+  if (opt.vip) { c.vip = true; say(c, '📸 여기가 그 홀덤펍?', 2.6); }
+  if (opt.group) { c.group = true; say(c, pick(['👥 단체예요!', '우리 여섯 명이요~', '자리 있죠?']), 2.2); }
   joinQueue(c, c.resv);
+  return c;
 }
 function joinQueue(c, priority) {
   if (G.queue.length >= QUEUE.length) {
     G.stats.lost++;
+    c.bounced = true;   // 들어오지도 못했다 — 인플루언서 후기를 매기지 않는다
     leave(c, '등록 줄이 너무 길다');
     say(c, '줄이 왜 이렇게 길어…', 2.5);
     return;
@@ -849,6 +875,7 @@ function tickCounter(dt) {
   var head = G.queue[0];
   if (head.mesh.position.distanceTo(QUEUE[0]) > 0.3) return;
   var rate = G.counterRate = playerNear(V(8.2, 1.7), 1.6) ? 1 : (G.counterStaff && !G.counterStaff.arriving ? 0.55 + G.counterStaff.staff.skill / 220 : 0.28);
+  if (head.group && G.groupBoost > G.simT) rate *= 2;   // 단체를 맞았다 — 한꺼번에 등록
   G.counterProg += dt * rate;
   if (G.queue.length >= 3) tip('queue', '등록 줄이 길어진다 — 카운터 뒤로 걸어가면 빨리 처리된다. 카운터 직원을 채용해도 된다.');
   G.queue.forEach(function (c, i) { if (i > 1) c.sat = clamp(c.sat - 0.25 * dt, 0, 100); });
@@ -903,7 +930,7 @@ function leave(c, why) {
   c.barSpot = null; c.table = null; c.seat = null;
   c.state = 'leaving';
   G.stats.satSum += c.sat; G.stats.satN++;
-  regDone(c);
+  regDone(c); vipDone(c);
   walkTo(c, [SPOTS.door, SPOTS.outside], function () { c.alive = false; scene.remove(c.mesh); });
   if (why) log(c.name + ' 퇴장 — ' + why, /화|지쳐|길다/.test(why) ? 'bad' : '');
 }
@@ -942,7 +969,7 @@ function seatWaiting() {
   var free = liveTables().filter(function (t) { return !t.call; }).reduce(function (n, t) { return n + safeSeats(t).length; }, 0);
   var held = heldSeats();
   G.customers.filter(function (c) { return c.alive && c.state === 'bar-wait'; })
-    .sort(function (a, b) { return (b.resv ? 1 : 0) - (a.resv ? 1 : 0); }).forEach(function (c) {
+    .sort(function (a, b) { return (b.resv ? 2 : (b.vip ? 1 : 0)) - (a.resv ? 2 : (a.vip ? 1 : 0)); }).forEach(function (c) {   // 예약 → 인플루언서 → 나머지
     if (!c.resv && free - held <= 0) {
       if (held && chance(0.004)) say(c, '저 자리 비어 있는데요? 🤨', 2.2);
       return;
@@ -1011,7 +1038,7 @@ function tickTable(t, dt) {
   t.def.cards.forEach(function (cg, i) { cg.visible = !!(t.pos && occ(t, i) && n >= 2 && !t.broken); });
   t.def.alarm.visible = !!t.call;
   if (t.call) t.def.alarm.position.y = 2.9 + Math.sin(G.simT * 5) * 0.15;
-  if (t.call || !d || t.broken) return;
+  if (t.call || !d || t.broken || G.blackout) return;
   if (n < 2) { t.pos = null; t.needsDraw = true; t.handT = 0; return; }
   if (!t.pos) startHand(t);
   t.handT += dt * handSpeed(d);
@@ -1280,6 +1307,300 @@ function finishSpill(sp, byPlayer) {
   floatText(sp.mesh.position.clone().setY(1.2), '반짝 ✨', 'good');
 }
 
+// ═══════════════════════════════════════════════════
+// 돌발 이벤트 — 할 일 목록의 kind: 'event'
+//   { type, title, desc, ic, pos(), on(task), onTimeout(), limit }
+//   누르면 점장이 pos() 로 걸어가고, 도착하면 on(task). 제한 시간이 지나면 onTimeout()
+// ═══════════════════════════════════════════════════
+var EV_EASY = ['group', 'drunk', 'influencer'];
+var EV_ALL = ['group', 'drunk', 'influencer', 'blackout', 'fight', 'exchange', 'inspect'];
+var EV_IC = { group: '👥', drunk: '🍻', influencer: '📸', blackout: '💡', fight: '😠', exchange: '💱', inspect: '🧾' };
+/* 직원 사기 — ④ 직원 깊이에서 쓴다. 값이 없으면 70 */
+function morale(st) { return st && st.morale != null ? st.morale : 70; }
+function addMorale(st, n) { if (st) st.morale = clamp(morale(st) + n, 0, 100); }
+
+/* 하루 1~2건(토 +1). 1일차는 쉬운 것 1건. 영업 중 무작위 시각 */
+function planEvents() {
+  var info = dayInfo(), n, pool;
+  if (G.day === 1) { n = 1; pool = EV_EASY.slice(); }
+  else { n = 1 + (chance(0.5) ? 1 : 0) + (info.wd === 5 ? 1 : 0); pool = EV_ALL.slice(); }
+  return shuffle(pool).slice(0, n).map(function (type) {
+    var lo = type === 'group' ? 30 : 45, hi = type === 'group' ? 170 : 290;
+    return { type: type, at: lo + Math.random() * (hi - lo), tries: 0 };
+  }).sort(function (a, b) { return a.at - b.at; });
+}
+function tickEvents() {
+  G.evPlan = G.evPlan.filter(function (e) {
+    if (G.simT < e.at) return true;
+    if (startEvent(e.type)) return false;
+    e.tries++; e.at = G.simT + 10;   // 조건이 안 맞으면 10초 뒤 다시
+    return e.tries < 8;
+  });
+  G.groupArr = G.groupArr.filter(function (a) {
+    if (G.simT < a.at) return true;
+    spawnCustomer({ group: true });
+    return false;
+  });
+}
+function evNote(type, ok, note) { G.stats.events.push({ ic: EV_IC[type], ok: ok, note: note }); }
+function addEvent(o) {
+  o.kind = 'event';
+  var task = addTask(o);
+  SFX.call();
+  log(o.ic + ' ' + o.title + ' — ' + o.desc, 'bad');
+  tip('event', '⚡ 돌발 상황! 할 일 목록에서 누르면 점장이 그쪽으로 걸어간다. 제한 시간 안에.');
+  return task;
+}
+function fine(amount, why) {
+  G.stats.fines += amount;
+  floatText(G.player.mesh.position.clone().setY(2.2), '벌금 −' + won(amount), 'bad');
+  log('💸 ' + why + ' — 벌금 ' + won(amount), 'bad');
+}
+function custNear(p, r) { return G.customers.filter(function (c) { return c.alive && c.state !== 'leaving' && c.mesh.position.distanceTo(p) < r; }); }
+function aliveActor(a) { return a && a.alive !== false && a.state !== 'leaving'; }
+
+function startEvent(type) {
+  var seatedC = G.customers.filter(function (c) { return c.alive && c.state === 'seated'; });
+  var barC = G.customers.filter(function (c) { return c.alive && /^bar-(drink|wait)$/.test(c.state); });
+  if (type === 'group') {
+    if (!regOpen()) return false;
+    for (var i = 0; i < 6; i++) G.groupArr.push({ at: G.simT + i * 1.1 });
+    addEvent({ type: type, ic: '👥', title: '단체 손님', desc: '여섯 명이 한꺼번에 온다 — 카운터로', limit: 25,
+      pos: function () { return V(8.1, 1.6); },
+      on: function (task) {
+        removeTask(task);
+        G.groupBoost = G.simT + 25;
+        say(G.player, '👥 단체 손님 이쪽으로요!', 2.2);
+        G.customers.filter(function (c) { return c.alive && c.group; }).forEach(function (c) { c.sat = clamp(c.sat + 6, 0, 100); });
+        floatText(V(8.2, 2.4).setY(2.2), '단체 등록 — 빠르게', 'good');
+        evNote(type, true, '단체 손님을 카운터에서 맞았다');
+        SFX.good();
+      },
+      onTimeout: function () { evNote(type, false, '단체 손님 — 카운터가 밀렸다'); }
+    });
+    return true;
+  }
+  if (type === 'influencer') {
+    if (!regOpen() || G.queue.length >= QUEUE.length) return false;   // 줄이 꽉 찼으면 10초 뒤 다시
+    var v = spawnCustomer({ vip: true });
+    addEvent({ type: type, ic: '📸', title: '인플루언서 방문', desc: '보라 고리 손님 — 가서 인사하기', limit: 30, actor: v,
+      pos: function () { return aliveActor(v) ? v.mesh.position.clone() : null; },
+      on: function (task) {
+        removeTask(task);
+        v.sat = clamp(v.sat + 15, 0, 100); v.greeted = true;
+        say(G.player, '어서 오세요! 편하게 즐기세요 😊', 2.4);
+        say(v, '📸 사장님 친절하시네요', 2.4);
+        SFX.good();
+      },
+      onTimeout: function () { if (aliveActor(v)) { v.sat = clamp(v.sat - 10, 0, 100); say(v, '…아무도 안 반겨 주네', 2.4); } }
+    });
+    tip('vip', '📸 인플루언서는 나갈 때 만족도가 70 이상이면 평판 +5, 아니면 −4. 반갑게 맞고 음료 · 판정을 챙기자.');
+    return true;
+  }
+  if (type === 'drunk') {
+    var dpool = barC.length ? barC : seatedC;   // 바에 아무도 없으면 테이블 손님이 취한다
+    if (!dpool.length) return false;
+    var d = pick(dpool);
+    d.drunk = true; d.leaveAt = Math.max(d.leaveAt || 0, G.simT + 40);
+    say(d, '🍻 히끅! 노래 한 곡 할게요~', 3);
+    addEvent({ type: type, ic: '🍻', title: '취객 소란', desc: d.name + ' — ' + (d.state === 'seated' ? '테이블' : '바') + '에서 소리친다', limit: 25, actor: d,
+      pos: function () { return aliveActor(d) ? d.mesh.position.clone() : null; },
+      on: function (task) {
+        removeTask(task); d.drunk = false;
+        say(G.player, '물 한 잔 드릴게요 — 조금만 쉬었다 가요', 2.6);
+        say(d, '…네 죄송해요 😳', 2.2);
+        evNote(type, true, d.name + ' 진정시켰다');
+        SFX.good();
+      },
+      onTimeout: function () {
+        d.drunk = false;
+        if (!aliveActor(d)) { evNote(type, null, '취객이 제풀에 나갔다'); return; }
+        custNear(d.mesh.position, 3.2).forEach(function (c) { if (c !== d) { c.sat = clamp(c.sat - 10, 0, 100); say(c, '아 시끄러워… 😒', 2); } });
+        if (d.table !== null && G.tables[d.table]) { G.tables[d.table].seats[d.seat] = null; G.tables[d.table].changed = true; }
+        leave(d, '소란 끝에 쫓겨났다');
+        G.rep = clamp(G.rep - 1, 0, 100);
+        evNote(type, false, '취객 소란 — 주변 손님 만족 −10');
+      }
+    });
+    return true;
+  }
+  if (type === 'blackout') {
+    if (G.blackout) return false;
+    G.blackout = true;
+    LIGHT.hemi.intensity = 0.12; LIGHT.sun.intensity = 0.08;
+    decor.breakerLamp.visible = true;
+    toast('💡 정전! 왼쪽 벽 차단기로 가세요');
+    addEvent({ type: type, ic: '💡', title: '정전', desc: '테이블이 멈췄다 — 왼쪽 벽 차단기', limit: 30,
+      pos: function () { return V(-12.1, 6); },
+      on: function (task) {
+        removeTask(task); endBlackout(true);
+        say(G.player, '🔌 차단기 올렸습니다!', 2.2);
+        G.rep = clamp(G.rep + 1, 0, 100);
+        evNote(type, true, '정전 — 차단기를 올렸다');
+        SFX.good();
+      },
+      onTimeout: function () {
+        endBlackout(false);
+        G.rep = clamp(G.rep - 3, 0, 100);
+        shuffle(G.customers.filter(function (c) { return c.alive && /^(seated|bar-wait|bar-drink)$/.test(c.state); })).slice(0, 2).forEach(function (c) {
+          if (c.table !== null && G.tables[c.table]) { G.tables[c.table].seats[c.seat] = null; G.tables[c.table].changed = true; }
+          say(c, '어두워서 못 하겠다', 2.2); leave(c, '정전이 길어져서');
+        });
+        evNote(type, false, '정전 30초 넘김 — 손님 이탈 · 평판 −3');
+      }
+    });
+    return true;
+  }
+  if (type === 'fight') {
+    var onT = G.dealers.filter(function (x) { return x.table !== null && !x.arriving; });
+    var others = G.dealers.filter(function (x) { return !x.arriving; });
+    if (!onT.length || others.length < 2) return false;
+    var a = pick(onT), b = pick(others.filter(function (x) { return x !== a; }));
+    var t = G.tables[a.table];
+    say(a, '😠 그건 네가 잘못했지!', 3); say(b, '😠 뭐라고?', 3);
+    addEvent({ type: type, ic: '😠', title: '딜러 다툼', desc: a.name + ' · ' + b.name + ' — ' + t.name, limit: 30, table: t.id,
+      pos: function () { return approachFrom(t, G.player.mesh.position); },
+      on: function (task) { openFight(task, a, b, t); },
+      onTimeout: function () {
+        addMorale(a.staff, -6); addMorale(b.staff, -6);
+        t.seats.forEach(function (id) { if (id !== null) G.customers[id].sat = clamp(G.customers[id].sat - 6, 0, 100); });
+        evNote(type, false, '딜러 다툼을 방치 — 사기 −6');
+      }
+    });
+    return true;
+  }
+  if (type === 'exchange') {
+    var pool = seatedC.concat(barC);
+    if (!pool.length) return false;
+    var c = pick(pool);
+    say(c, '💱 칩 좀 현금으로 바꿔 줘요', 3);
+    addEvent({ type: type, ic: '💱', title: '칩 환전 요구', desc: c.name + ' — 칩을 현금으로?', limit: 30, actor: c,
+      pos: function () { return aliveActor(c) ? c.mesh.position.clone() : null; },
+      on: function (task) { openExchange(task, c); },
+      onTimeout: function () {
+        if (aliveActor(c)) { c.sat = clamp(c.sat - 10, 0, 100); say(c, '대답도 안 해 주네', 2.2); }
+        evNote(type, false, '환전 요구에 답하지 못했다');
+      }
+    });
+    return true;
+  }
+  if (type === 'inspect') {
+    if (G.inspector) return false;
+    toast('🧾 12초 뒤 위생 점검원 방문 — 바닥을 확인하세요');
+    addEvent({ type: type, ic: '🧾', title: '위생 점검 예고', desc: '12초 뒤 도착 — 젖은 바닥이 있으면 벌금', limit: 12,
+      tap: function () { var sp = G.spills.filter(function (s) { return s.cleaning === null; })[0]; if (sp) goClean(sp); else toast('바닥은 깨끗하다 ✨'); },
+      onTimeout: inspectorArrives
+    });
+    return true;
+  }
+  return false;
+}
+function endBlackout(byPlayer) {
+  if (!G.blackout) return;
+  G.blackout = false;
+  LIGHT.hemi.intensity = 0.55; LIGHT.sun.intensity = 0.85;
+  decor.breakerLamp.visible = false;
+  if (G.phase === 'open') { toast(byPlayer ? '💡 불이 들어왔다' : '💡 전기 기사가 와서 복구했다'); log('💡 전기 복구', byPlayer ? 'good' : 'bad'); }
+}
+function inspectorArrives() {
+  var a = makeActor(makePerson(0x444b55, 0xf2f2f2), 'staff', '점검원');
+  a.mesh.position.copy(SPOTS.outside);
+  G.inspector = a;
+  say(a, '🧾 위생 점검 나왔습니다', 2.4);
+  walkTo(a, [SPOTS.door, V(2, 3)], function () {
+    var wet = G.spills.length;
+    if (wet) {
+      fine(200000, '위생 점검 — 바닥이 젖어 있었다');
+      G.rep = clamp(G.rep - 2, 0, 100);
+      say(a, '바닥이 젖어 있네요. 과태료입니다', 2.6);
+      evNote('inspect', false, '위생 점검 — 젖은 바닥 ' + wet + '곳 · 벌금 20만');
+      SFX.bad();
+    } else {
+      G.rep = clamp(G.rep + 1, 0, 100);
+      say(a, '깨끗하네요 👍', 2.4);
+      floatText(V(2, 3).setY(2.2), '위생 점검 통과 · 평판 +1', 'good');
+      evNote('inspect', true, '위생 점검 통과');
+      SFX.good();
+    }
+    walkTo(a, [SPOTS.door, SPOTS.outside], function () { scene.remove(a.mesh); G.inspector = null; }, 2.6);
+  }, 2.6);
+}
+
+/* 고르는 이벤트 — 선택지는 섞는다. 화면에 답(권장)을 띄우지 않는다 */
+function eventChoice(task, head, body, opts, done) {
+  var order = shuffle(opts.map(function (o, i) { return i; }));
+  var correct = order.indexOf(0);   // opts[0] 이 바른 처리
+  G.current = { kind: 'event', type: task.type, correct: correct };
+  showModal('<div class="kicker red">' + task.ic + ' ' + task.title + '</div><h2>' + head + '</h2>' + body + '<div class="choices">' +
+    order.map(function (k, i) { return '<button class="choice" data-ev="' + i + '">' + opts[k].t + '</button>'; }).join('') + '</div>');
+  document.querySelectorAll('[data-ev]').forEach(function (b) {
+    b.onclick = function () {
+      var ix = +b.getAttribute('data-ev'), o = opts[order[ix]];
+      if (G.tasks.indexOf(task) >= 0) removeTask(task);
+      var res = o.fx();
+      res.ok ? SFX.good() : SFX.bad();
+      showModal('<div class="kicker">' + task.ic + ' ' + task.title + '</div><div class="verdict ' + (res.ok ? 'ok' : 'no') + '">' + res.head + '</div>' +
+        '<div class="choices" style="margin-bottom:10px">' + order.map(function (k, i) {
+          return '<div class="choice' + (i === correct ? ' right' : (i === ix ? ' wrong' : '')) + '">' + opts[k].t + '</div>';
+        }).join('') + '</div><p>' + res.why + '</p>' + (res.cite || '') + '<button class="cta" data-ok="1">돌아간다</button>');
+      $('[data-ok]').onclick = function () { closeModal(); if (done) done(res); };
+    };
+  });
+}
+function openFight(task, a, b, t) {
+  var cs = function () { return t.seats.filter(function (x) { return x !== null; }).map(function (id) { return G.customers[id]; }); };
+  eventChoice(task, '딜러 둘이 싸운다',
+    '<p>' + a.name + '(' + t.name + ')과 ' + b.name + josa(b.name, '이', '가') + ' 교대 순서로 언성을 높인다. 손님들이 쳐다본다.</p>',
+    [
+      { t: '둘을 따로 불러 조용히 이야기를 듣고 중재한다', fx: function () {
+        addMorale(a.staff, 5); addMorale(b.staff, 5);
+        cs().forEach(function (c) { c.sat = clamp(c.sat + 3, 0, 100); });
+        say(a, '죄송합니다… 🙏', 2); say(b, '제가 예민했어요', 2);
+        evNote('fight', true, '딜러 다툼 — 조용히 중재 · 사기 +5');
+        return { ok: true, head: '✓ 조용히 정리됐다', why: '손님 앞에서 큰 소리를 키우지 않고, 양쪽 말을 따로 들었다. 둘 다 사기가 조금 오른다(+5).' };
+      } },
+      { t: a.name + '에게 휴식을 보내고 쉬는 딜러로 바꾼다', fx: function () {
+        var rest = G.dealers.filter(function (x) { return x.table === null && !x.arriving && x !== a && x !== b; })[0];
+        if (rest && t.dealer === a.id) swapDealer(t, rest);
+        addMorale(a.staff, -3);
+        evNote('fight', null, '딜러 다툼 — ' + a.name + ' 휴식');
+        return { ok: false, head: '△ 일단 떨어뜨렸다', why: '불은 껐지만 이야기를 듣지 않았다. ' + a.name + '은 벌을 받았다고 느낀다(사기 −3).' + (rest ? '' : ' 쉬는 딜러가 없어 교대는 못 했다.') };
+      } },
+      { t: '손님들 앞에서 둘을 공개적으로 꾸짖는다', fx: function () {
+        addMorale(a.staff, -10); addMorale(b.staff, -10);
+        cs().forEach(function (c) { c.sat = clamp(c.sat - 8, 0, 100); });
+        G.rep = clamp(G.rep - 1, 0, 100);
+        say(a, '…😞', 2); say(b, '…😞', 2);
+        evNote('fight', false, '딜러 다툼 — 공개 질책 · 사기 −10');
+        return { ok: false, head: '✗ 테이블 분위기가 얼어붙었다', why: '손님 앞에서 직원을 꾸짖으면 테이블 전체가 불편해진다. 두 딜러 사기 −10, 손님 만족 −8, 평판 −1.' };
+      } }
+    ]);
+}
+function openExchange(task, c) {
+  eventChoice(task, '“칩을 현금으로 바꿔 주세요”',
+    '<p>' + c.name + ': "오늘 많이 땄는데, 이 칩 현금으로 좀 바꿔 줄 수 있어요? 안 되면 상품권이라도…"</p>',
+    [
+      { t: '정중히 거절하고, 칩은 바꿔 드릴 수 없다고 설명한다', fx: function () {
+        G.rep = clamp(G.rep + 1, 0, 100);
+        if (aliveActor(c)) say(c, '아 그렇구나… 알겠어요', 2.2);
+        evNote('exchange', true, '칩 환전 요구 — 거절하고 설명');
+        return { ok: true, head: '✓ 바르게 거절했다', why: '칩의 현금 · 현금성 상품 교환은 불법 소지가 크다 — 우리 펍은 <b>참가비와 음료로만</b> 운영한다. 우승 상품은 트로피와 시드권뿐이다.' };
+      } },
+      { t: '이번만 현금으로 바꿔 준다', fx: function () {
+        fine(1000000, '불법 환전 신고');
+        G.rep = clamp(G.rep - 10, 0, 100);
+        evNote('exchange', false, '칩을 현금으로 — 신고 · 벌금 100만');
+        return { ok: false, head: '✗ 불법 환전 신고가 들어왔다', why: '칩을 현금으로 바꿔 주면 매장 전체가 불법 영업 소지를 떠안는다. 벌금 100만 · 평판 −10.<br>칩의 현금 · 현금성 상품 교환은 불법 소지가 크다 — 우리 펍은 참가비와 음료로만 운영한다.' };
+      } },
+      { t: '현금 대신 상품권으로 바꿔 준다', fx: function () {
+        fine(1000000, '불법 환전 신고 (상품권)');
+        G.rep = clamp(G.rep - 10, 0, 100);
+        evNote('exchange', false, '칩을 상품권으로 — 신고 · 벌금 100만');
+        return { ok: false, head: '✗ 상품권도 환전이다', why: '상품권은 현금성 상품이다 — 이름만 바꾼 환전으로 신고가 들어왔다. 벌금 100만 · 평판 −10.<br>칩의 현금 · 현금성 상품 교환은 불법 소지가 크다 — 우리 펍은 참가비와 음료로만 운영한다.' };
+      } }
+    ]);
+}
+
 // ── 테이블 재편 · 우승 ───────────────────────────────
 function checkBreak() {
   if (regOpen() || G.winner) return;
@@ -1518,6 +1839,11 @@ function simulate(dt) {
     var decay = G.owned.interior ? 0.7 : 1;
     if (c.state === 'bar-wait') c.sat = clamp(c.sat - 0.3 * dt * decay, 0, 100);
     if (c.state === 'seated' && G.tables[c.table] && G.tables[c.table].call) c.sat = clamp(c.sat - 1.2 * dt * decay, 0, 100);
+    if (G.blackout && c.state !== 'leaving') c.sat = clamp(c.sat - 0.4 * dt, 0, 100);
+    if (c.drunk && chance(dt * 0.25)) {
+      say(c, pick(['🍻 한 곡 더!!', '사장님 이리 와 봐요~', '내가 왕년에 말이야!']), 1.8);
+      custNear(c.mesh.position, 3).forEach(function (x) { if (x !== c) x.sat = clamp(x.sat - 0.6, 0, 100); });
+    }
     if (c.state === 'bar-drink' && G.simT > c.leaveAt) leave(c);
     if (c.state === 'bar-wait' && c.sat < 15) { say(c, '그냥 갈래요 😤', 2.4); leave(c, '자리를 기다리다 지쳐서'); }
     if (c.state === 'queue' && c.sat < 12) { G.stats.queueLeave++; leave(c, '등록 줄에서 지쳐서'); }
@@ -1527,6 +1853,7 @@ function simulate(dt) {
   if (G.counterStaff) stepActor(G.counterStaff, dt);
   if (G.cleaner) stepActor(G.cleaner, dt);
   if (G.floorStaff) stepActor(G.floorStaff, dt);
+  if (G.inspector) stepActor(G.inspector, dt);
   tickOrders(dt);
   tickStaff(dt);
   tickFloor();
@@ -1572,12 +1899,14 @@ function simulate(dt) {
     SFX.bad();
     return false;
   });
+  tickEvents();
   checkAnnouncements();
   checkBalance();
   // 제한 시간
   G.tasks.slice().forEach(function (k) {
     if (!k.limit || G.simT - k.t0 <= k.limit) return;
-    if (k.kind === 'call') resolveCall(k, 'missed');
+    if (k.kind === 'event') { removeTask(k); k.onTimeout(); }
+    else if (k.kind === 'call') resolveCall(k, 'missed');
     else if (k.kind === 'announce') annMissed(k);
     else if (k.kind === 'balance') {
       removeTask(k); G.stats.balanceMiss++; G.rep = clamp(G.rep - 1, 0, 100);
@@ -1663,7 +1992,8 @@ var TASK_TXT = {
   call: function (k) { return { t: '플로어! — ' + G.tables[k.table].name, d: { pos: '버튼 · 블라인드 이의', btn: '버튼 위치 오류', cnt: '카드 장수 이상', under: '레이즈 금액 이의' }[k.type], ic: '🚨' }; },
   announce: function (k) { return { t: '아나운스', d: { level: '블라인드 레벨 업', regwarn: '레지 마감 30분 전', regclose: '레지 마감', final: '파이널 테이블' }[k.type], ic: '📢' }; },
   balance: function (k) { return { t: '밸런싱 — ' + G.tables[k.table].name, d: G.tables[k.table].name + ' → ' + G.tables[k.to].name + ' 한 명', ic: '⚖️' }; },
-  spill: function () { return { t: '청소', d: '음료가 쏟아졌다', ic: '🧽' }; }
+  spill: function () { return { t: '청소', d: '음료가 쏟아졌다', ic: '🧽' }; },
+  event: function (k) { return { t: k.title, d: k.desc, ic: k.ic }; }
 };
 function renderTasks() {
   var el = $('#calls');
@@ -1690,8 +2020,20 @@ function doTask(id) {
   var k = G.tasks.filter(function (x) { return x.id === id; })[0];
   if (!k) return;
   if (k.kind === 'announce') openAnnounce(k);
+  else if (k.kind === 'event') goEvent(k);
   else if (k.kind === 'spill') goClean(k.spill);
   else goTable(k.table);
+}
+function goEvent(k) {
+  if (k.tap) { k.tap(k); return; }
+  var p = k.pos();
+  var gone = function () { removeTask(k); toast(k.title + ' — 이미 자리를 떴다'); evNote(k.type, null, k.title + ' — 손님이 먼저 떠났다'); };
+  if (!p) { gone(); return; }
+  playerGo(p, function () {
+    if (G.tasks.indexOf(k) < 0) return;
+    if (!k.pos()) { gone(); return; }   // 걸어가는 사이 떠났다
+    k.on(k);
+  }, k.title + ' 처리하러');
 }
 
 function renderTicker() {
@@ -1732,7 +2074,7 @@ function renderOverlay() {
     bar.style.background = f > 0.66 ? 'var(--red)' : (f > 0.4 ? 'var(--amber)' : 'var(--ok)');
   });
   // 말풍선
-  var actors = G.customers.concat(G.dealers, G.servers, [G.player, G.counterStaff, G.cleaner, G.floorStaff]).filter(Boolean);
+  var actors = G.customers.concat(G.dealers, G.servers, [G.player, G.counterStaff, G.cleaner, G.floorStaff, G.inspector]).filter(Boolean);
   var t = now(), seen = {};
   actors.forEach(function (a) {
     if (!a.bubble || a.bubble.until < t || (a.alive === false) || (a.bubble.ambient && !G.talkOn)) return;
@@ -2115,7 +2457,7 @@ function resetGame() {
 function titleScreen() {
   G.phase = 'title';
   var sv = loadSave();
-  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 3판</div>' +
+  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 8판</div>' +
     '<h1>홀덤펍 점장</h1>' +
     '<p class="sub">오늘 밤, 당신의 펍에서 데일리 토너먼트가 열린다.</p></div>' +
     '<ul class="howto">' +
@@ -2443,7 +2785,8 @@ function closeDay() {
   if (G.finalized) return;
   G.finalized = true;
   G.phase = 'closed';
-  G.customers.forEach(function (c) { if (c.alive) { G.stats.satSum += c.sat; G.stats.satN++; regDone(c); } });
+  G.customers.forEach(function (c) { if (c.alive) { G.stats.satSum += c.sat; G.stats.satN++; regDone(c); vipDone(c); } });
+  endBlackout(false);
   G.tasks = []; G.tables.forEach(function (t) { t.call = null; t.def.alarm.visible = false; });
   renderTasks();
   var s = G.stats, feeT = fee();
@@ -2473,7 +2816,7 @@ function report(settleOk) {
   var done = G.goals.map(function (g) { return goalDef(g).test(s, g.n, ctx); });
   var stars = done.filter(Boolean).length;
   var bonus = stars * GOAL_REWARD;
-  var net = (s.depositRev || 0) + feeRev + drinkRev - wages - WAGE.ops - stockCost - settleLoss + bonus;
+  var net = (s.depositRev || 0) + feeRev + drinkRev - wages - WAGE.ops - stockCost - settleLoss + bonus - s.fines;
   G.bank += net + stockCost;   // 재고비는 오픈 때 이미 냈다
   var rankBefore = rankOf(G.rep);
   var repDay = (G.rep - s.repStart) + (avgSat - 60) / 8 + stars * 2;   // 오늘 하루 평판 변화 전체
@@ -2512,6 +2855,7 @@ function report(settleOk) {
   ];
   rows = rows.filter(function (r) { return r[1] !== 0 || !/보증금/.test(r[0]); });
   if (settleLoss) rows.push(['정산 오차 확인 비용', -settleLoss]);
+  if (s.fines) rows.push(['벌금 (돌발 상황)', -s.fines]);
   var starHTML = '<div class="stars">' + [0, 1, 2].map(function (i) { return '<span class="' + (i < stars ? 'on' : '') + '" style="animation-delay:' + (i * 0.25) + 's">★</span>'; }).join('') + '</div>';
   var h = '<div class="kicker">' + G.day + '일차 마감 · ' + clock(gameMin()) + '</div>' + starHTML +
     '<h2 style="text-align:center">' + ['아쉬운 밤', '무난한 밤', '좋은 밤', '완벽한 밤'][stars] + '</h2>' +
@@ -2530,6 +2874,7 @@ function report(settleOk) {
     (G.resv ? '<p>📋 예약 ' + G.resv.total + '건 — 도착 ' + G.resv.arrived + ' · 노쇼 ' + G.resv.noshow + (G.cfg.resDeposit ? ' (보증금 받음)' : ' (보증금 없음)') + '</p>' : '') +
     (G.regDelta.length ? '<p>⭐ 단골 ' + G.regDelta.length + '명 — ' + G.regDelta.map(function (x) { return x.name + ' ' + (x.d >= 0 ? '+' : '') + x.d + '♥'; }).join(' · ') + '</p>' : '') +
     (G.absent.length ? '<p class="note">📵 노쇼 — ' + G.absent.map(function (x) { return x.name; }).join(' · ') + ' (일당 없음)</p>' : '') +
+    (s.events.length ? '<h3>⚡ 돌발 상황</h3><p>' + s.events.map(function (e) { return (e.ok === true ? '✓ ' : (e.ok === false ? '✗ ' : '△ ')) + e.ic + ' ' + e.note; }).join('<br>') + '</p>' : '') +
     '<h3>후기</h3><p>' + reviews.join('<br>') + '</p>' +
     (G.debtDays ? '<p class="warn">⚠️ 자금 마이너스 ' + G.debtDays + '일째 — 사흘 연속이면 폐업이다</p>' : '') +
     '<button class="cta" data-next-day="1">' + (G.debtDays >= 3 ? '…' : (dayInfo(G.day + 1).wd === 6 ? '🗓️ 일요일 — 주간 정산' : '다음 날 영업 준비')) + '</button> <button class="cta ghost" data-restart="1">타이틀로</button>';

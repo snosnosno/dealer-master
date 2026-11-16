@@ -302,6 +302,11 @@ button { font-family: inherit; }
 .call.announce .bar i { background: var(--amber); }
 .call.balance { border-color: #2C4A7A; }
 .call.balance .t { color: #2C4A7A; }
+.call.event { border-color: #7A4BB0; }
+.call.event .t { color: #7A4BB0; }
+.call.event .bar i { background: #7A4BB0; }
+:root[data-theme="dark"] .call.event .t { color: #c9a6f0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .call.event .t { color: #c9a6f0; } }
 .call.spill { border-color: var(--line-strong); }
 .call.spill .t { color: var(--ink-2); }
 

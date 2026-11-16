@@ -41,7 +41,7 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
     for (let i = 0; i < 30000; i++) {
       const st = await page.evaluate(() => {
         const G = window.__pub, q = s => !!document.querySelector(s);
-        return { modal: q('#modal .modal'), tasks: G.tasks.length, ch: q('[data-ch]'), ok: q('[data-ok]'), ms: q('[data-ms]'),
+        return { modal: q('#modal .modal'), tasks: G.tasks.length, ch: q('[data-ch]'), ev: q('[data-ev]'), ok: q('[data-ok]'), ms: q('[data-ms]'),
           an: q('[data-an]'), stl: q('[data-st]'), nd: q('[data-next-day]'), close: q('[data-close]'), simT: G.simT,
           walking: !!(G.player.path && G.player.path.length), phase: G.phase };
       });
@@ -69,6 +69,10 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
         const c = await page.evaluate(() => window.__pub.current.correct);
         const n = await page.locator('[data-ch]').count();
         await page.locator('[data-ch]').nth(P ? c : Math.floor(Math.random() * n)).click();
+      } else if (st.ev) { seen.event = (seen.event || 0) + 1; await shot('event');
+        const c = await page.evaluate(() => window.__pub.current.correct);
+        const n = await page.locator('[data-ev]').count();
+        await page.locator('[data-ev]').nth(P ? c : Math.floor(Math.random() * n)).click();
       } else if (st.ok) { await page.click('[data-ok]'); }
       else if (st.ms) { seen.pos = (seen.pos || 0) + 1; await shot('pos');
         const p = await page.evaluate(() => window.__pub.current.data.pos);
@@ -87,7 +91,7 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
       else if (st.tasks && !st.walking) {
         // 아나운스 → 호출 → 밸런싱 → 청소 순
         const lazy = day === 1;
-        const id = await page.evaluate((lazy) => { const order = { announce: 0, call: 1, balance: 2, spill: 3 }; const ts = window.__pub.tasks.filter(k => !lazy || k.kind === 'call').sort((a, b) => order[a.kind] - order[b.kind]); return ts.length ? ts[0].id : null; }, lazy);
+        const id = await page.evaluate((lazy) => { const order = { announce: 0, call: 1, event: 2, balance: 3, spill: 4 }; const ts = window.__pub.tasks.filter(k => !lazy || k.kind === 'call').sort((a, b) => order[a.kind] - order[b.kind]); return ts.length ? ts[0].id : null; }, lazy);
         if (id === null) { await page.waitForTimeout(25); continue; }
         seen.taskClicks = (seen.taskClicks || 0) + 1;
         try { await page.locator(`[data-task="${id}"]`).click({ timeout: 1500 }); } catch (e) { seen.clickMiss = (seen.clickMiss || 0) + 1; }
