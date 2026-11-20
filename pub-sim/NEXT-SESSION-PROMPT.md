@@ -1,4 +1,4 @@
-# 다음 세션 프롬프트 — 홀덤펍 점장 1.1 리디자인 뒤
+# 다음 세션 프롬프트 — 홀덤펍 점장 1.2 판정 30종 뒤
 
 > 이 파일을 새 세션에 그대로 붙여 넣는다. 매번 **새로 쓴다** — 지난 지시 위에 덧붙이지 않는다.
 
@@ -6,7 +6,7 @@
 
 ## 0. 먼저 할 것
 
-1. **사용자에게 1.1 을 해 본 소감을 받는다** — `DESIGN.md` §24 「1.1 해 보고 답해 줄 것」 넷(덜 복잡해졌나 · 스킨 · 콤보/등급 · 아직 복잡한 화면). 그다음 1.0 의 — `DESIGN.md` §22 「14판 재미 게이트」 세 문항과 §23 「밸런스 메모」 · 「출시 전에 사람이 할 것」. 답이 오기 전에는 새 기능을 얹지 않는다(출시판이다 — 버그 · 밸런스 · 사람이 정한 것만).
+1. **사용자에게 1.2 를 해 본 소감을 받는다** — `DESIGN.md` §25 「1.2 해 보고 답해 줄 것」 넷(판정 빈도 · 글 길이 · 정답이 길이로 보이나 · 이상한 케이스), §24 「1.1 해 보고 답해 줄 것」 넷. 그다음 1.0 의 — `DESIGN.md` §22 「14판 재미 게이트」 세 문항과 §23 「밸런스 메모」 · 「출시 전에 사람이 할 것」. 답이 오기 전에는 새 기능을 얹지 않는다(출시판이다 — 버그 · 밸런스 · 사람이 정한 것만).
    답이 없으면 묻고, 답에 맞춰 바꿀 것을 정한 뒤 시작한다. 짐작으로 새 기능을 얹지 않는다.
 2. **ECC(Everything Claude Code)** 로 진행한다.
    - 레포 브랜치 `claude/great-ramanujan-r33ul4` 의 `.claude/` 에 프로젝트 단위로 설치돼 있다(v2.2.3, 사용법 `.claude/ECC-사용법.md`).
@@ -24,8 +24,8 @@
 - 게임은 **`pub-sim/`** — 딜러마스터와 **별도 게임**. 빌드 없음, 폴더째 옮길 수 있다
   - `index.html`(스타일 · 껍데기) · `game.js`(약 3,800줄, 전부 여기, ES5 IIFE) · `vendor/three.min.js`(r149, MIT)
   - `DESIGN.md` — **설계 정본**. §9~§14 판별 피드백, §15~§20 로드맵 ③~⑦(8~12판), **§21 12판 게이트 답 → 13판 · §22 14판(주간 도전 · 쇼다운 연출) · §23 1.0 출시판(설정 · 일시정지 · 도움말 · 기록 · 오류 안전망 · QA)**. 실행 · 배포는 `README.md`
-  - `tools/` — `build-artifact.py` · `autoplay.js` · `weekend.js` · `noshow.js` · `events.js` · `staff.js` · `decor.js` · `table.js` · `av.js` · `growth.js` · `week.js` · `release.js`
-- 폰 링크(비공개 Artifact): **https://claude.ai/artifact/K1UXZgBs2dT8LTZvX9X9BP** — 지금 **1.1** (Artifact 버전 17)
+  - `tools/` — `build-artifact.py` · `autoplay.js` · `weekend.js` · `noshow.js` · `events.js` · `staff.js` · `decor.js` · `table.js` · `av.js` · `growth.js` · `week.js` · `release.js` · `cases.js`
+- 폰 링크(비공개 Artifact): **https://claude.ai/artifact/K1UXZgBs2dT8LTZvX9X9BP** — 지금 **1.2** (판정 30종)
 
 ## 2. 지금 게임 (13판까지 — 다시 만들지 마라)
 
@@ -34,6 +34,7 @@
 - 직원 채용 · 노쇼 · 대타 · 능력 성장, 주간 캠페인(금 딥스택 · 토 메인 · 일 정산 · 8주 시즌 · 폐업), 단골 12명 · 금/토 예약
 - 8판 돌발 이벤트 7종 · 9판 직원 깊이(특성 · 사기 · 칭찬 · 인상 요청 · 교육 트리) · 10판 꾸미기(테마 3 · 장식 4 · 배치 모드)
   · 11판 테이블 깊이(실제 족보 · 보드 · PLO8 믹스 테이블) · 12판 그래픽 · 사운드(캐릭터 · 라운지 음악 · 웅성거림)
+- **1.2**: 케이스 판정 27종(`CASES` — TDA 케이스 문서 1~30 중 동적 판정 5 · 6 · 19 제외). 플로어 호출의 절반 · 판정 교육의 절반. 이름 조사는 `fillNames` 가 받침에 맞춤
 - **1.1**: 리디자인 — 어두운 금색 스킨 · HUD 버튼 넷(☰ 메뉴에 빠른 토글) · 「오늘 밤」 카드 + 목표 칩 + 접힌 이번 주 · 아이콘 탭 · 고정 시작 버튼 · 네온 간판 · 판정 콤보 · 도장 · OPEN 배너 · 마감 등급 S/A/B/C
 - **1.0**: ⚙️ 설정 · ❚❚/Esc 일시정지 메뉴 · 📖 도움말 · 기록 · 만든 사람 · 오류 안전망 · 첫 사흘 평판 하락 절반 · README
 - **14판**: 주간 도전(월요일 셋 · 일요일 보상 · 셋 다면 장식) · 쇼다운 큰 글자 · 이긴 홀카드 앞면 · 폰 배속 버튼 하나
@@ -45,7 +46,8 @@
 - 성장 길이 안 쓰인다 → 실전 경험량(판정 +20/+5 · 속도 +1 · 응대 +3) · 멘토 +35 · 세미나 가격
 - 시즌 끝까지 동기가 약하다 → 주간 도전 목표치(`WEEK_CH`) · 시즌 보상(트로피 진열장과 연결) · 단골 이야기
 - 보드가 폰에서 작다 → 쇼다운 큰 글자 · 앞면 카드는 14판에 있다. 그래도 작으면 테이블을 누르면 확대 카메라
-- 판정 사고 확장 — **원문 대조를 마친 TDA 케이스만**(`docs/superpowers/plans/2026-11-16-nlh-sandbox-analysis.md` §9). 밸런싱 이동 좌석 · 새 손님 버튼~BB 착석 · 헤즈업 버튼 · 팟 리밋 레이즈는 **여전히 출제하지 않는다**
+- 케이스 판정 다듬기 — 빈도(`startHand` 의 `case` 개수) · 오답 문장 길이 균형 · 사용자가 꼽은 케이스 수정
+- 판정 사고 확장 — 케이스 문서 30건은 다 썼다. 더 늘리려면 **원문 대조를 마친 TDA 규칙만**(`docs/superpowers/plans/2026-11-16-nlh-sandbox-analysis.md` §9). 밸런싱 이동 좌석 · 새 손님 버튼~BB 착석 · 헤즈업 버튼 · 팟 리밋 레이즈는 **여전히 출제하지 않는다**
 - 실제 3D 에셋은 사용자가 「나중에」라고 했다 — 먼저 꺼내지 않는다
 
 ## 4. 지켜야 할 것
@@ -66,6 +68,7 @@ node -e "new Function(require('fs').readFileSync('game.js','utf8'))"   # 문법
 node tools/autoplay.js 2 perfect          # 이틀(약 5분) — errors [] · 두 날 모두 우승자. 큰 변경 뒤엔 7 perfect(약 20분, 백그라운드)로 일요일 정산까지
 node tools/weekend.js; node tools/noshow.js
 node tools/events.js [handle|timeout] [종류,…]
+node tools/cases.js [shot]   # 케이스 27건 — bad [] · mix 에 X 없음
 node tools/staff.js; node tools/growth.js [shot]; node tools/week.js [shot]; node tools/release.js [shot]; node tools/decor.js [shot]; node tools/table.js [shot]; node tools/av.js [shot]
 python3 tools/build-artifact.py <스크래치패드>/pub-artifact
 cp game.js <스크래치패드>/pub-artifact/game.js; mkdir -p <스크래치패드>/pub-artifact/vendor; cp vendor/three.min.js <스크래치패드>/pub-artifact/vendor/
@@ -73,10 +76,10 @@ cp game.js <스크래치패드>/pub-artifact/game.js; mkdir -p <스크래치패�
 
 - 점검 도구는 **현재 폴더에 스크린샷을 남긴다** — 스크래치패드에서 실행한다(`pub-sim/.gitignore` 가 `*.png` 를 막는다)
 - 게시: Artifact 도구로 `<스크래치패드>/pub-artifact/index.html` 을 publish, `files` 에 `{"game.js": …/pub-artifact/game.js, "vendor/three.min.js": …/pub-artifact/vendor/three.min.js}`
-  (파일은 작업 폴더나 스크래치패드 안이어야 한다), **url 은 위 링크**, `label` 은 「1.0.1 — …」 (출시 뒤 수정은 1.0.x — game.js 의 VERSION 도 함께 올린다)
+  (파일은 작업 폴더나 스크래치패드 안이어야 한다), **url 은 위 링크**, `label` 은 「1.2.1 — …」 (수정은 1.2.x — game.js 의 VERSION 도 함께 올린다)
 - 새 대화에서는 먼저 `action: "read"` 로 읽는다. 게시된 `game.js` 를 안 읽었다고 막히면 `list`(scope files) · 레포 커밋의 sha256 과 비교해 같은 판인지 확인한다
 
 ## 6. 끝나면
 
-`DESIGN.md` 에 §25~ 로 게이트 답 · 변경 · 자동 점검 결과를 남기고, 사용자에게 링크와 다음 재미 게이트 질문을 준다.
+`DESIGN.md` 에 §26~ 로 게이트 답 · 변경 · 자동 점검 결과를 남기고, 사용자에게 링크와 다음 재미 게이트 질문을 준다.
 이 파일을 다음 세션용으로 **새로 쓴다**.

@@ -138,6 +138,175 @@ var SRC = {
   under: '케이스 19 · Rule 52-A (언더레이즈 정정 시점)',
   dead: '토너먼트 데드 버튼 규칙'
 };
+/* ═══ 케이스 판정 — 딜러마스터 TDA 케이스 문서(05 · 11번) 30건 중 동적 판정(5 · 6 · 19)을 뺀 27건 ═══
+   상황 · 질문 · 선택지 · 정답 · 근거 · 해설은 문서 그대로(문장만 다듬음). ch[0] 이 정답 — 낼 때 섞는다.
+   {A}~{E} 는 그 테이블 손님 이름. nlh: 노리밋 전용 — 믹스(PLO8) 테이블에서는 내지 않는다. 전부 「원문 확인 전」 */
+var CASES = [
+  { n: 1, tag: '올인 쇼다운 타이밍', title: '카드를 지금 다 열어도 되나?', nlh: true,
+    sit: '셋이 남은 핸드. 프리플랍에서 숏스택 {A}가 올인, {B}와 {C}가 콜. 플랍은 체크 체크. 턴에서 {B}가 올인, {C}가 콜했다. 딜러가 세 사람 카드를 곧바로 모두 열려고 한다.',
+    q: '지금 세 사람 카드를 모두 여는 것이 맞나?',
+    ch: ['맞다 — 더 이상 베팅 액션이 없으니 지체 없이 모두 연다', '아니다 — 리버까지 딜한 뒤 쇼다운에서 한 번에 연다', '아니다 — {A}의 카드는 사이드팟을 나눌 때까지 뒷면으로 둔다'],
+    rule: 'Rule 16 (Face Up for All-Ins) · Illustration 예시 2', why: '베팅 액션이 완전히 끝난 시점(턴 올인 · 콜)에 지체 없이 모든 카드를 연다. 쇼다운까지 기다리거나 일부만 뒷면으로 두는 것은 규정 위반이다.' },
+  { n: 2, tag: '다수 칩 벳', title: '콜인가 레이즈인가?', nlh: true,
+    sit: '포스트플랍에서 {A}가 1,050 을 오픈 벳했다. {B}가 마지막 칩(1,000 짜리 두 개, 2,000)을 아무 말 없이 앞으로 밀었다. 「레이즈」도 「올인」도 말하지 않았다.',
+    q: '{B}의 액션은?',
+    ch: ['콜 (1,050)', '레이즈 (2,000 전액)', 'TD 재량으로 정한다'],
+    rule: 'Rule 45-A (Multiple Chip Betting)', why: '선언 없이 낸 다수 칩은, 칩 하나를 빼면 콜 금액에 못 미치는 경우 콜이다. 1,000 하나를 빼면 1,000 이라 1,050 에 못 미친다 — 콜. 마지막 칩이었다는 사실은 무관하고, 선언이 없었다는 게 핵심이다.' },
+  { n: 3, tag: '오픈 벳 언더콜', title: '모자란 칩으로 콜했다', nlh: true,
+    sit: '포스트플랍, 넷 중 {A}가 첫 벳으로 8,000 을 냈다. {B}가 아무 말 없이 2,000 칩만 앞으로 밀었다.',
+    q: '{B}는 어떻게 처리하나?',
+    ch: ['무조건 8,000 전액 콜로 처리한다', 'TD 재량으로 콜/폴드를 정한다', '2,000 만 인정하고 나머지는 폴드 처리'],
+    rule: 'Rule 51-B (Undercalls in Turn)', why: '그 라운드의 첫 벳(오픈 벳)에 대한 언더콜은 TD 재량이 아니라 무조건 전액 콜이다. 재량이 적용되는 건 오픈 벳이 아닌 경우다.' },
+  { n: 4, tag: '최소 레이즈 계산', title: '최소 얼마까지 올려야 하나?', nlh: true,
+    sit: '블라인드 100-200, 포스트플랍. {A}가 600 오픈, {B}가 1,000 레이즈(총 1,600), {C}가 2,000 리레이즈(총 3,600). {D}가 레이즈하고 싶다며 묻는다.',
+    q: '{D}의 최소 레이즈 총액은?',
+    ch: ['총 5,600 — 직전 레이즈분 2,000 을 더한다', '총 7,200 — 직전 총 벳 3,600 의 두 배', '총 4,200 — 최소 단위 600 을 더한다'],
+    rule: 'Rule 43-A (Raise Amounts) · Illustration 예시 1', why: '레이즈는 이번 라운드에서 지금까지 나온 가장 큰 벳 · 레이즈 「분」 이상이어야 한다. 그 금액은 {C}의 레이즈분 2,000(총액 3,600 이 아님). 3,600 + 2,000 = 5,600.' },
+  { n: 7, tag: '핸드 공개 요청 권리', title: '누가 카드 공개를 요구할 수 있나?',
+    sit: '리버에서 {A} 벳, {B} 콜, {C} 레이즈, {D} · {A} · {B} 모두 콜. 올인은 없다. {B}가 먼저 트립스를 보였고, {D}는 카드를 뒷면으로 버려 먹 처리됐다. {C}가 카드를 뒷면으로 밀기 시작한다.',
+    q: '{C}의 카드 공개를 요구할 권리가 있는 사람은?',
+    ch: ['{A}와 {B} 둘 다 — 양도할 수 없는 권리', '{B}만 — 먼저 보였으므로', '{D}도 — 콜을 했으므로'],
+    rule: 'Rule 18-B · Illustration 예시 2', why: '리버에 벳이 있었고 {C}가 마지막 어그레서다. 카드를 아직 가졌거나 보인 콜러({A} · {B})는 「돈을 내고 볼」 권리가 있다. {D}는 카드를 버려 권리를 포기했다 — 콜했다는 사실만으로는 유지되지 않는다.' },
+  { n: 8, tag: '순서 위반 액션', title: '차례를 건너뛰고 콜했다', nlh: true,
+    sit: '{A}가 600 레이즈. 다음 차례는 {B}인데, 그 옆 {C}가 {B}를 건너뛰고 600 콜. 이어서 {D}는 고민하다 폴드. 그동안 {B}는 아무 말도 하지 않았다.',
+    q: '{C}의 콜과 {D}의 폴드는 유효한가?',
+    ch: ['둘 다 구속력 있다 — 건너뛴 {B}의 핸드는 플로어가 정한다', '둘 다 무효 — {B}부터 다시 진행', '{C}의 콜만 무효, {D}의 폴드는 유효'],
+    rule: 'Rule 53-B (Action Out of Turn)', why: '칩이 들어간 액션을 포함한 두 사람의 순차 액션으로 실질 액션이 성립했고, {B}는 말할 시간이 있었는데 침묵했다. 순서 위반 액션은 구속력을 가지며, {B}의 핸드 처리는 플로어가 판단한다.' },
+  { n: 9, tag: '신원 확인', title: '얼굴을 가린 손님',
+    sit: '{A}가 얼굴을 가리는 큰 후드를 쓰고 앉아 있다. {B}가 항의한다.',
+    q: '플로어의 대응은?',
+    ch: ['벗어 달라고 요청할 수 있다', '개인 자유라 요청할 수 없다', '페널티부터 준다'],
+    rule: 'Rule 4', why: '신원 확인을 방해하거나 다른 참가자에게 방해가 되는 차림은 벗어 달라고 요청할 수 있다.' },
+  { n: 10, tag: '전자기기 사용', title: '핸드 중 휴대폰',
+    sit: '라이브 핸드를 가진 {A}가 휴대폰으로 문자를 확인하고 있다. {B}가 플로어를 부른다.',
+    q: '규정 위반인가?',
+    ch: ['위반 — 라이브 핸드 중에는 전자기기를 쓸 수 없다', '문제없다 — 통화만 아니면 된다', '소리만 안 나면 문제없다'],
+    rule: 'Rule 5-C', why: '라이브 핸드를 가진 플레이어는 전자 · 통신 기기를 쓸 수 없다. 통화 여부와 무관하게 위반이다.' },
+  { n: 11, tag: '자리 이탈', title: '딜할 때 자리에 없었다',
+    sit: '최초 딜의 마지막 카드가 돌아가는 순간 {A}가 화장실에 가 있었다. 돌아와 카드를 보려 한다.',
+    q: '{A}의 핸드는?',
+    ch: ['즉시 먹 처리 — 블라인드 · 앤티는 팟으로 몰수', '돌아왔으니 카드를 확인할 수 있다', '다음 핸드까지 미룬다'],
+    rule: 'Rule 30', why: '최초 딜의 마지막 카드가 돌아갈 때 자리에 없으면 카드를 볼 수 없고 즉시 먹 처리된다. 블라인드 · 앤티는 몰수.' },
+  { n: 12, tag: '헤즈업 액션 순서', title: '둘만 남았다 — 누가 먼저?', nlh: true,
+    sit: '테이블에 {A}와 {B} 둘만 남아 헤즈업이 시작됐다. {A}가 스몰 블라인드다. {B}가 액션 순서를 묻는다.',
+    q: '스몰 블라인드 {A}의 액션 순서는?',
+    ch: ['프리플랍은 먼저, 이후 라운드는 마지막', '모든 라운드에서 먼저', '모든 라운드에서 마지막'],
+    rule: 'Rule 34-B', why: '헤즈업에서 스몰 블라인드는 버튼을 겸하고 마지막 카드를 받는다. 프리플랍은 먼저, 이후 라운드는 마지막에 액션한다.' },
+  { n: 13, tag: '카드 부족을 알고 액션', title: '카드가 모자란데 체크했다',
+    sit: '버튼 {A}가 자기 카드가 한 장 모자란 걸 알았는데, 말하지 않고 체크했다. 뒤늦게 {B}가 이를 지적했다.',
+    q: '{A}의 핸드는?',
+    ch: ['먹 처리', '카드를 더 받고 계속한다', '미스딜 선언'],
+    rule: 'Rule 37', why: '카드가 모자란 걸 알면서 체크나 벳으로 액션하면 그 핸드는 먹 처리된다. 즉시 알렸다면 게임에 따라 보충이 가능했다.' },
+  { n: 14, tag: '구두 선언 · 칩 모순', title: '말한 금액과 낸 칩이 다르다',
+    sit: '리버 헤즈업. {A}가 「사만 이천」이라고 말했지만 5,000 칩 하나만 밀었다. 테이블 사람들이 선언을 다 듣지 못했다.',
+    q: '벳 금액은 어떻게 정하나?',
+    ch: ['TD 가 Rule 1(공정)과 상황을 보고 가장 공평하게 판단', '무조건 구두 선언(42,000)이 우선', '무조건 낸 칩(5,000)이 우선'],
+    rule: 'Rule 40-A', why: '구두 선언과 칩이 모순되고 상황이 불분명하면 TD 가 공정성 우선 원칙으로 판단한다. 어느 한쪽이 무조건 우선하지 않는다.' },
+  { n: 15, tag: '오버칩 하나', title: '큰 칩 하나를 조용히 냈다',
+    sit: '벳을 마주한 {A}가 「레이즈」라고 말하지 않고, 콜 금액보다 큰 칩 하나를 조용히 밀었다.',
+    q: '{A}의 액션은?',
+    ch: ['콜', '레이즈', 'TD 재량'],
+    rule: 'Rule 44', why: '레이즈를 먼저 선언하지 않고 큰 칩 하나를 조용히 내면 콜이다. 레이즈하려면 칩이 테이블에 닿기 전에 「레이즈」라고 말해야 한다.' },
+  { n: 16, tag: '칩 부분 회수', title: '낸 칩 일부를 다시 가져갔다',
+    sit: '레이즈를 마주한 {A}가 이미 낸 칩 중 일부만 회수하고 새 칩을 더했다.',
+    q: '처리 원칙은?',
+    ch: ['다수 칩 벳 규칙(50% 기준)을 적용한다', '회수했으니 항상 콜로 처리한다', '새 칩을 더했으니 항상 레이즈로 본다'],
+    rule: 'Rule 46-C', why: '부분 회수는 콜 금액을 넘는지와 상관없이 다수 칩 벳 규칙(50% 기준)을 적용한다 — 50% 이상이면 레이즈, 미만이면 콜.' },
+  { n: 17, tag: '숏 올인 재오픈', title: '다시 레이즈할 수 있나?', nlh: true,
+    sit: '{A} 100 오픈, {B} 총 125 올인(+25), {C} 125 콜, {D} 총 200 올인(+75), {E} 200 콜. {A}에게 다시 차례가 왔다.',
+    q: '{A}는 레이즈할 수 있나?',
+    ch: ['가능 — {B} · {D}의 증가분 합(100)이 최소 레이즈를 채운다', '불가능 — 증가분 각각이 최소에 못 미친다', 'TD 재량'],
+    rule: 'Rule 47 · Illustration 예시 1', why: '증가분 25 · 75 는 각각 완전한 레이즈가 아니지만 합치면 100 으로 최소 레이즈(100)를 채운다. {A}에게 폴드 · 콜 · 레이즈가 모두 다시 열린다.' },
+  { n: 18, tag: '인정된 액션', title: '딜러가 금액을 잘못 알려 줬다',
+    sit: '{A}가 콜하기 전에 딜러에게 금액을 물었는데 딜러가 잘못 알려 줬고, {A}는 그 금액대로 콜했다. 나중에 틀린 게 밝혀졌다.',
+    q: '어떻게 처리하나?',
+    ch: ['{A}는 실제 벳 금액을 내야 한다 (인정된 액션)', '딜러 실수이니 들은 금액만 낸다', '핸드 전체 무효'],
+    rule: 'Rule 49', why: '콜러가 카운트를 요청해 잘못된 정보를 듣고 그에 맞춰 콜했어도, 인정된 액션 원칙에 따라 실제 벳 금액 전체를 내야 한다.' },
+  { n: 20, tag: '팟 카운트 요청', title: '「팟이 얼마예요?」', nlh: true,
+    sit: '노리밋 홀덤 테이블에서 {A}가 딜러에게 「팟이 얼마냐」고 카운트를 요청했다. 딜러가 플로어를 본다.',
+    q: '딜러는 응해야 하나?',
+    ch: ['아니다 — 팟 카운트 요청 권리는 팟 리밋 게임에만 있다', '그렇다 — 모든 게임에서 요청할 수 있다', 'TD 가 승인할 때만'],
+    rule: 'Rule 54-A', why: '팟 카운트를 요청할 권리는 팟 리밋 게임에만 있다. 리밋 · 노리밋에서는 딜러가 팟을 카운트하지 않는다.' },
+  { n: 21, tag: '스트링 벳', title: '벳한 뒤 칩을 더 가져왔다',
+    sit: '{A}가 칩을 앞으로 밀어 벳한 뒤, 자기 스택으로 돌아가 칩을 더 가져와 벳에 보탰다. {B}가 항의한다.',
+    q: '허용되나?',
+    ch: ['안 된다 — 스트링 벳', '된다 — 최종 금액이 유효하다', 'TD 재량'],
+    rule: 'Rule 56', why: '벳한 뒤 칩을 더 가져오려고 스택으로 돌아가는 동작은 스트링 벳으로 금지된다.' },
+  { n: 22, tag: '불분명한 벳 선언', title: '「벳, 다섯 개」', nlh: true,
+    sit: '블라인드 200-400, 팟은 5,000 미만. {A}가 「벳, 다섯 개」라고만 말했다. 다른 설명은 없었다.',
+    q: '벳 금액은?',
+    ch: ['500', '5,000', 'TD 가 임의로 정한다'],
+    rule: 'Rule 57', why: '선언이 여러 뜻으로 읽히면 벳 전 팟보다 작거나 같은 가장 큰 합리적 금액으로 본다. 팟이 5,000 미만이므로 500.' },
+  { n: 23, tag: '벳 없는 폴드', title: '체크할 수 있는데 폴드했다',
+    sit: '포스트플랍에서 첫 액션 차례인 {A}가 체크 대신 「폴드」라고 했다. 곧바로 「아 체크요」라고 말을 바꾼다.',
+    q: '이 폴드는?',
+    ch: ['구속력 있는 폴드 — 페널티 대상일 수 있다', '무효 — 다시 체크 · 벳을 고를 수 있다', '자동으로 체크 처리'],
+    rule: 'Rule 58', why: '벳이 없는 상황(첫 액션 · 체크만 마주한 상황)의 폴드도 구속력이 있고 페널티 대상이 될 수 있다.' },
+  { n: 24, tag: '정밀 카운트 요청', title: '상대 스택을 정확히 세 달라',
+    sit: '{B}의 올인을 마주한 {A}가 자기 차례에 {B} 스택의 정밀 카운트를 요청했다.',
+    q: '정당한 요청인가?',
+    ch: ['정당하다 — 올인 벳을 마주하고 자기 차례일 때만 가능', '아무 때나 요청할 수 있다', '요청할 수 없다 — 눈대중으로만 판단'],
+    rule: 'Rule 60', why: '정밀 카운트는 올인 벳을 마주하고 자기 차례일 때만 요청할 수 있다. 그 밖에는 합리적인 추정 권리만 있다.' },
+  { n: 25, tag: '거스름 예상 오버벳', title: '거스름돈을 바라고 냈다', nlh: true,
+    sit: '오픈 벳이 325 인데 {A}가 200 거스름을 바라고 525(500 칩 + 25 칩)를 아무 말 없이 밀었다.',
+    q: '{A}의 액션은?',
+    ch: ['다수 칩 벳 규칙에 따라 650 레이즈', '325 콜로 보고 200 을 돌려준다', '525 전액 벳'],
+    rule: 'Rule 61', why: '조용히 낸 칩은 모두 벳에 들어갈 수 있다. 525 는 다수 칩 벳 규칙(Rule 45)으로 650 레이즈가 된다 — 거스름을 바라고 벳해서는 안 된다.' },
+  { n: 26, tag: '숨은 칩', title: '올인 뒤에 칩이 또 나왔다',
+    sit: '{A}가 올인했고 {B}가 콜한 뒤, {A} 앞에 숨어 있던 칩이 더 발견됐다.',
+    q: '이 칩은 액션에 들어가나?',
+    ch: ['TD 가 인정된 액션인지 판단 — 아니면 {A}는 이겨도 그 금액을 받지 못한다', '자동으로 올인 금액에 들어간다 — {A}의 칩이었으니 전부 걸린 것', '자동으로 무효 — 핸드가 끝나면 {A}에게 그대로 돌려준다'],
+    rule: 'Rule 62', why: '숨은 칩이 액션의 일부인지는 TD 가 판단한다. 액션의 일부가 아니면 {A}는 이겨도 그 금액을 받지 못하고, 져도 그 칩으로 살아남지 못한다.' },
+  { n: 27, tag: '실수로 먹 처리된 핸드', title: '딜러가 카드를 걷어 버렸다',
+    sit: '쇼다운을 기다리는데 딜러가 실수로 {A}의 핸드를 먹 처리했다. 어느 카드였는지 100% 가려낼 수 없다.',
+    q: '{A}는 구제받을 수 있나?',
+    ch: ['구제 불가 — 콜된 벳은 돌려받지 못하고, 콜 안 된 벳 · 레이즈만 돌려받는다', '딜러 실수이니 {A}가 넣은 칩을 전액 돌려받는다', '미스딜로 보고 이 핸드를 처음부터 다시 한다'],
+    rule: 'Rule 65-A', why: '100% 식별할 수 없으면 바로잡을 수 없다. 다만 아직 콜되지 않은 자기 벳 · 레이즈는 돌려받는다.' },
+  { n: 28, tag: '헬리콥터 폴드', title: '카드를 던지며 폴드했다',
+    sit: '마지막 차례인 {A}가 폴드하면서 카드를 높이 던졌다(「헬리콥터」). {B}가 불쾌해한다.',
+    q: '어떻게 보나?',
+    ch: ['페널티 대상 — 폴드 자체는 유효하다', '핸드 자체가 무효 — 다시 딜한다', '폴드했으니 문제없다 — 넘어간다'],
+    rule: 'Rule 68', why: '카드를 높이 들거나 던지는 행위는 페널티 대상이지만 폴드는 유효하다. 페널티는 핸드가 끝난 시점부터 시작한다.' },
+  { n: 29, tag: '미스라운드 페널티', title: '몇 핸드를 쉬나?',
+    sit: '9인 테이블에서 {A}가 미스라운드 페널티 1라운드를 받았다. {A}가 몇 핸드 쉬느냐고 묻는다.',
+    q: '{A}는 몇 핸드를 쉬나?',
+    ch: ['9 핸드 — 테이블 인원 × 페널티 라운드', '1 핸드 — 1라운드는 한 핸드다', '버튼이 한 바퀴 돌 때까지 — 인원과 무관'],
+    rule: 'Rule 71-A', why: '미스라운드 페널티는 (자신을 포함한 테이블 인원) × (페널티 라운드 수) 핸드만큼 쉰다. 9인 · 1라운드 = 9핸드.' },
+  { n: 30, tag: '소프트플레이', title: '서로 봐주는 것 같다',
+    sit: '{A}와 {B}가 일부러 약하게 플레이하며 서로 봐주는 정황이 보인다. {C}가 항의한다.',
+    q: '페널티는 TD 재량인가?',
+    ch: ['아니다 — 소프트플레이는 무조건 페널티', '그렇다 — TD 가 보고 정한다', '첫 위반은 경고만'],
+    rule: 'Rule 71-B', why: '소프트플레이 · 폭력적 언행 · 진행 방해 · 블라인드 회피 · 부정행위는 TD 재량이 아니라 무조건 페널티다.' }
+];
+var CASES_BY = {};
+CASES.forEach(function (c) { CASES_BY[c.n] = c; });
+var JOSA = { '가': ['이', '가'], '는': ['은', '는'], '와': ['과', '와'], '를': ['을', '를'] };
+/* {A}~{E} → 이름. 바로 뒤 조사(가 · 는 · 와 · 를)는 받침에 맞춰 바꾼다 — 김도현이 · 송지아가 */
+function fillNames(s, names) {
+  return s.replace(/\{([A-E])\}(가|는|와|를)?/g, function (m, k, j) {
+    var w = names['ABCDE'.indexOf(k)];
+    return w + (j ? josa(w, JOSA[j][0], JOSA[j][1]) : '');
+  });
+}
+/* 이 테이블에서 낼 케이스 하나 — 최근에 낸 것은 피한다 */
+function genCase(t) {
+  var pool = CASES.filter(function (c) { return !(c.nlh && isMix(t)); });
+  var fresh = pool.filter(function (c) { return (G.recentCases || []).indexOf(c.n) < 0; });
+  var c = pick(fresh.length ? fresh : pool);
+  G.recentCases = (G.recentCases || []).concat([c.n]).slice(-12);
+  var names = shuffle(t.seats.filter(function (x) { return x !== null; }).map(function (id) { return G.customers[id].name; }));
+  var extra = shuffle(NAMES.filter(function (n) { return names.indexOf(n) < 0; }));
+  while (names.length < 5) names.push(extra.pop());
+  return { id: c.n, names: names, order: shuffle([0, 1, 2]) };
+}
+/* 교육용 — 테이블 없이 케이스 하나 */
+function caseQuestion() {
+  var fresh = CASES.filter(function (c) { return (G.recentCases || []).indexOf(c.n) < 0; });
+  var c = pick(fresh.length ? fresh : CASES), names = shuffle(NAMES.slice()).slice(0, 5), f = function (s) { return fillNames(s, names); };
+  G.recentCases = (G.recentCases || []).concat([c.n]).slice(-12);
+  return { title: f(c.title), body: '<p>' + f(c.sit) + '</p><p><b>' + f(c.q) + '</b></p>', opts: c.ch.map(f), correct: 0,
+    why: f(c.why), cite: '<div class="cite"><b>근거</b> 케이스 ' + c.n + ' · ' + c.rule + '<span class="unverified">원문 확인 전</span></div>' };
+}
 
 // ── 유틸 ────────────────────────────────────────────
 function rnd(n) { return Math.floor(Math.random() * n); }
@@ -1715,7 +1884,7 @@ function startHand(t) {
   }
   if (chance(Math.min(0.85, (0.06 + miss * 0.4) * mixK))) {
     /* 믹스(팟 리밋) 테이블은 레이즈 금액 판정을 내지 않는다 — 원문 대조 전 */
-    var type = isMix(t) ? pick(['btn', 'cnt']) : pick(['btn', 'cnt', 'under', 'under']);
+    var type = isMix(t) ? pick(['btn', 'cnt', 'case', 'case']) : pick(['btn', 'cnt', 'under', 'under', 'case', 'case', 'case', 'case']);   // 케이스 판정 27건이 섞여 나온다
     if (type === 'btn' && seated(t) < 4) type = 'cnt';
     createCall(t, type, genIncident(t, type));
   }
@@ -1732,6 +1901,7 @@ function isSA(acts) {
   return acts.length >= 3 || (acts.length >= 2 && chips >= 1);
 }
 function genIncident(t, type) {
+  if (type === 'case') return genCase(t);
   var lv = BLINDS[level()];
   var order = preflopOrder(t);
   if (type === 'under') {
@@ -2655,7 +2825,7 @@ function renderHud() {
 }
 
 var TASK_TXT = {
-  call: function (k) { return { t: '플로어! — ' + G.tables[k.table].name, d: { pos: '버튼 · 블라인드 이의', btn: '버튼 위치 오류', cnt: '카드 장수 이상', under: '레이즈 금액 이의' }[k.type], ic: '🚨' }; },
+  call: function (k) { return { t: '플로어! — ' + G.tables[k.table].name, d: k.type === 'case' ? CASES_BY[k.data.id].tag : { pos: '버튼 · 블라인드 이의', btn: '버튼 위치 오류', cnt: '카드 장수 이상', under: '레이즈 금액 이의' }[k.type], ic: '🚨' }; },
   announce: function (k) { return { t: '아나운스', d: { level: '블라인드 레벨 업', regwarn: '레지 마감 30분 전', regclose: '레지 마감', final: '파이널 테이블' }[k.type], ic: '📢' }; },
   balance: function (k) { return { t: '밸런싱 — ' + G.tables[k.table].name, d: G.tables[k.table].name + ' → ' + G.tables[k.to].name + ' 한 명', ic: '⚖️' }; },
   spill: function () { return { t: '청소', d: '음료가 쏟아졌다', ic: '🧽' }; },
@@ -2934,7 +3104,15 @@ function openCall(task) {
   var head = '<div class="kicker red">플로어 호출 — ' + t.name + '</div>';
   if (task.type === 'pos') { openPosCall(task); return; }
   var title, body, choices, correct, why, cite;
-  if (task.type === 'btn') {
+  if (task.type === 'case') {   // 케이스 판정 — 문서의 상황 · 선택지 · 해설
+    var cs = CASES_BY[d.id], fn = function (x) { return fillNames(x, d.names); };
+    title = fn(cs.title);
+    body = '<p>' + fn(cs.sit) + '</p><p><b>' + fn(cs.q) + '</b></p>';
+    choices = d.order.map(function (i) { return fn(cs.ch[i]); });
+    correct = d.order.indexOf(0);
+    why = fn(cs.why);
+    cite = '케이스 ' + cs.n + ' · ' + cs.rule;
+  } else if (task.type === 'btn') {
     title = '버튼이 잘못 놓였다';
     body = '<p>손님: "버튼이 한 칸 지나쳤어요. 원래 ' + seatNo(d.shouldBe) + ' 차례예요." 확인해 보니 맞다.</p>' + actsHTML(d.acts);
     choices = ['미스딜 — 블라인드를 돌려주고 버튼을 바로잡아 다시 딜한다', '이 핸드는 그대로 진행하고, 다음 핸드부터 바른 자리로 돌린다', '버튼만 바른 자리로 옮기고 이 핸드를 이어 간다'];
@@ -3572,6 +3750,7 @@ var SERVICE_QS = [
 ];
 function trainQuestion(branch) {
   if (branch === 'j') {
+    if (chance(0.5)) return caseQuestion();   // 판정 교육 — 절반은 케이스 문제
     var n = pick([1, 2, 2, 3]), acts = [];
     for (var j = 0; j < n; j++) { var r = Math.random(); acts.push({ name: pick(NAMES), kind: r < 0.5 ? 'fold' : (r < 0.85 ? 'call' : 'raise') }); }
     var sa = isSA(acts);
@@ -3912,7 +4091,7 @@ function seasonBar() {
 // ═══════════════════════════════════════════════════
 // 출시용 껍데기 — 설정 · 일시정지 · 도움말 · 기록 · 만든 사람
 // ═══════════════════════════════════════════════════
-var VERSION = '1.1';
+var VERSION = '1.2';
 var SET_KEY = 'pubsim.settings', REC_KEY = 'pubsim.records';
 var SETTINGS = { music: 0.7, sfx: 1, quality: 'auto', motion: 'auto', talk: true };
 var SET_OK = {   // 저장된 설정이 망가져 있으면 기본값을 쓴다
@@ -4070,6 +4249,8 @@ G.placeAt = placeAtForTest;                    // 자동 점검용
 G.__music = MUSIC;   // 자동 점검용
 G.__plan = planEvents; G.__type = pickType; G.__diff = diffK;   // 자동 점검용
 G.__weekly = weeklyScreen;   // 자동 점검용
+G.__case = function (tid, n) { var t = G.tables[tid], d = genCase(t); if (n) d.id = n; createCall(t, 'case', d); return d; };   // 자동 점검용
+G.__cases = CASES; G.__caseQ = caseQuestion; G.__open = openCall; G.__isMix = isMix;
 var confirmNew = { ok: false };   // 자동 점검이 새로 시작 확인을 건너뛸 때 쓴다
 G.__confirmNew = confirmNew;
 G.__eval = { best: best, eval5: eval5, plohi: bestPLOHigh, plolo: bestPLOLow, name: handName };   // 자동 점검용
