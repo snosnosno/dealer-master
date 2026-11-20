@@ -17,6 +17,11 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
   const shot = async (n) => { if (SHOT && !shots[n]) { shots[n] = 1; await page.screenshot({ path: `v2-${n}.png` }); } };
   await shot('title'); await page.click('[data-go]');
   for (let day = 0; day < DAYS; day++) {
+    // 일요일 주간 정산이 떠 있으면 넘긴다 (도전 보상 · 임대료)
+    if (await page.$('[data-week]')) {
+      seen.weekly = await page.evaluate(() => document.querySelector('.modal').innerText.slice(0, 600));
+      await page.click('[data-week]');
+    }
     // 오픈 준비
     await shot('shop');
     if (day === 0) {

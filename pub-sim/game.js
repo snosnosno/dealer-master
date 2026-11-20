@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   홀덤펍 점장 — 프로토타입 2판
+   홀덤펍 점장 1.0
    설계: pub-sim/DESIGN.md
 
    플레이어는 점장이다. 직접 걸어 다니며 카운터를 보고, 호출에 가고, 바닥을 닦고,
@@ -286,7 +286,7 @@ function tone(freq, dur, type, vol, delay) {
   var o = AC.createOscillator(), g = AC.createGain();
   o.type = type || 'sine'; o.frequency.value = freq;
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(vol || 0.12, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, (vol || 0.12) * (typeof SETTINGS !== 'undefined' ? SETTINGS.sfx : 1)), t + 0.01);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(g); g.connect(AC.destination);
   o.start(t); o.stop(t + dur + 0.02);
@@ -315,7 +315,7 @@ var PROG = [
 function midiHz(n) { return 440 * Math.pow(2, (n - 69) / 12); }
 function musicInit() {
   if (!AC || MUSIC.master) return;
-  MUSIC.master = AC.createGain(); MUSIC.master.gain.value = MUSIC.on ? 0.7 : 0;
+  MUSIC.master = AC.createGain(); MUSIC.master.gain.value = MUSIC.on ? (typeof SETTINGS !== 'undefined' ? SETTINGS.music : 0.7) : 0;
   MUSIC.master.connect(AC.destination);
   var lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400; lp.connect(MUSIC.master);
   MUSIC.padBus = lp;
@@ -2064,12 +2064,12 @@ function startEvent(type) {
   }
   return false;
 }
-function endBlackout(byPlayer) {
+function endBlackout(byPlayer, quiet) {
   if (!G.blackout) return;
   G.blackout = false;
   LIGHT.hemi.intensity = 0.55; LIGHT.sun.intensity = 0.85;
   decor.breakerLamp.visible = false; decor.neon.visible = !!(THEMES[G.theme] || {}).neon;
-  if (G.phase === 'open') { toast(byPlayer ? '💡 불이 들어왔다' : '💡 전기 기사가 와서 복구했다'); log('💡 전기 복구', byPlayer ? 'good' : 'bad'); }
+  if (G.phase === 'open' && !quiet) { toast(byPlayer ? '💡 불이 들어왔다' : '💡 전기 기사가 와서 복구했다'); log('💡 전기 복구', byPlayer ? 'good' : 'bad'); }
 }
 function inspectorArrives() {
   var a = makeActor(makePerson(0x444b55, 0xf2f2f2), 'staff', '점검원');
@@ -2391,20 +2391,39 @@ function tickTalk() {
 // ═══════════════════════════════════════════════════
 var lastTs = 0;
 function frame(ts) {
+  requestAnimationFrame(frame);   // 먼저 다음 프레임을 잡는다 — 한 번 오류가 나도 게임이 멈추지 않게
   var real = Math.min(0.05, (ts - lastTs) / 1000 || 0);
   lastTs = ts;
-  if (G.phase === 'open' && !G.modal && !G.paused) {
-    var steps = G.speed > 4 ? Math.ceil(G.speed / 4) : 1;
-    for (var k = 0; k < steps; k++) simulate(real * G.speed / steps);
+  // 시뮬레이션과 그리기를 따로 지킨다 — 시뮬레이션이 터져도 화면 · HUD 는 계속 그린다
+  var ok = guard(function () {
+    if (G.phase === 'open' && !G.modal && !G.paused) {
+      var steps = G.speed > 4 ? Math.ceil(G.speed / 4) : 1;
+      for (var k = 0; k < steps; k++) simulate(real * G.speed / steps);
+    }
+    if (G.phase === 'open' && !G.modal) stepFx(real);
+    if (G.phase === 'title') cam.yaw += real * 0.07;
+    if ((frame.mt = (frame.mt || 0) + real) > 0.5) { frame.mt = 0; tickMurmur(); }
+  });
+  ok = guard(function () {
+    updateCamera(real);
+    renderer.render(scene, camera);
+    renderOverlay();
+    if (G.phase === 'open') renderHud();
+  }) && ok;
+  if (ok) frame.errs = 0;   // 연속 오류만 센다 — 드문 오류가 쌓여 멈추지 않게
+}
+function guard(fn) {
+  try { fn(); return true; } catch (e) {
+    frame.errs = (frame.errs || 0) + 1; frame.total = (frame.total || 0) + 1;
+    if (frame.total <= 3) console.error(e);   // 점검 도구가 잡도록 남긴다
+    if (frame.total === 1) toast('⚠️ 문제가 생겼다 — 계속 진행해 본다');
+    if (frame.errs >= 120 && !frame.fatal) {   // 연속으로 터지면 멈추고 알린다
+      frame.fatal = true; G.paused = true;
+      showModal('<h2>⚠️ 오류가 계속 난다</h2><p>더 진행하기 어렵다. 타이틀로 돌아가 <b>이어하기</b>를 누르면 마지막 마감부터 다시 할 수 있다.</p><button class="cta" data-err-title="1">타이틀로</button>');
+      $('[data-err-title]').onclick = function () { frame.errs = 0; frame.fatal = false; G.paused = false; endBlackout(false, true); clearActors(); G.tasks = []; renderTasks(); titleScreen(); };
+    }
+    return false;
   }
-  if (G.phase === 'open' && !G.modal) stepFx(real);
-  if (G.phase === 'title') cam.yaw += real * 0.07;
-  if ((frame.mt = (frame.mt || 0) + real) > 0.5) { frame.mt = 0; tickMurmur(); }
-  updateCamera(real);
-  renderer.render(scene, camera);
-  renderOverlay();
-  if (G.phase === 'open') renderHud();
-  requestAnimationFrame(frame);
 }
 
 function simulate(dt) {
@@ -2542,16 +2561,20 @@ function renderHud() {
       '<button class="hbtn" data-follow="1" title="점장 따라가기">📍</button>' +
       '<button class="hbtn" data-music="1" title="배경음악 · 웅성거림">🎵</button>' +
       '<button class="hbtn" data-mute="1" title="효과음">🔊</button>' +
-      '<button class="hbtn" data-pause="1">❚❚</button>' +
+      '<button class="hbtn" data-pause="1" title="일시정지 · 메뉴 (Esc)">❚❚</button>' +
       [1, 2, 4].map(function (s) { return '<button class="hbtn m-hide" data-speed="' + s + '">' + s + '×</button>'; }).join('') +
       '<button class="hbtn m-only" data-speedcycle="1" title="배속">1×</button>';   // 폰에서는 배속 버튼 하나 — 누를 때마다 1 → 2 → 4
     hud.querySelectorAll('[data-speed]').forEach(function (b) { b.onclick = function () { G.speed = +b.getAttribute('data-speed'); G.paused = false; }; });
     hud.querySelector('[data-speedcycle]').onclick = function () { G.speed = G.speed >= 4 ? 1 : G.speed * 2; G.paused = false; };
-    hud.querySelector('[data-pause]').onclick = function () { G.paused = !G.paused; };
+    hud.querySelector('[data-pause]').onclick = openPause;
+    hud.querySelectorAll('.hbtn').forEach(function (b) { b.setAttribute('aria-label', b.title || b.textContent); });   // 아이콘 버튼에 이름
     hud.querySelector('[data-follow]').onclick = function () { cam.follow = !cam.follow; if (cam.follow) cam.dist = Math.min(cam.dist, 16); else fitCamera(); };
     hud.querySelector('[data-mute]').onclick = function () { MUTED = !MUTED; toast(MUTED ? '효과음 끔' : '효과음 켬'); };
-    hud.querySelector('[data-music]').onclick = function () { audioOn(); setMusic(!MUSIC.on); toast(MUSIC.on ? '🎵 배경음악 켬' : '🎵 배경음악 끔'); };
-    hud.querySelector('[data-talk]').onclick = function () { G.talkOn = !G.talkOn; toast(G.talkOn ? '손님 잡담 켬' : '손님 잡담 끔 — 중요한 말만 뜬다'); };
+    hud.querySelector('[data-music]').onclick = function () {
+      audioOn(); if (MUSIC.on) setMusic.last = SETTINGS.music; SETTINGS.music = MUSIC.on ? 0 : (setMusic.last || 0.7);
+      saveSettings(); applySettings(); toast(MUSIC.on ? '🎵 배경음악 켬' : '🎵 배경음악 끔');
+    };
+    hud.querySelector('[data-talk]').onclick = function () { SETTINGS.talk = !G.talkOn; saveSettings(); applySettings(); toast(G.talkOn ? '손님 잡담 켬' : '손님 잡담 끔 — 중요한 말만 뜬다'); };
     hud.querySelector('[data-callstaff]').onclick = function () { audioOn(); openHire(); };
     hud.querySelector('[data-goals]').onclick = function () {
       var s = G.stats;
@@ -2725,7 +2748,9 @@ function renderOverlay() {
 
 function showModal(html, wide) {
   G.modal = true;
-  $('#modal').innerHTML = '<div class="modal-bg"><div class="modal' + (wide ? ' wide' : '') + '">' + html + '</div></div>';
+  $('#modal').innerHTML = '<div class="modal-bg"><div class="modal' + (wide ? ' wide' : '') + '" role="dialog" aria-modal="true" tabindex="-1">' + html + '</div></div>';
+  var m = $('#modal .modal');   // 키보드 · 화면 읽기 — 창이 열리면 창으로 포커스
+  if (m && m.focus) m.focus({ preventScroll: true });
 }
 function closeModal() { G.modal = null; $('#modal').innerHTML = ''; }
 
@@ -3073,14 +3098,21 @@ var SAVE_KEY = 'pubsim.save.v1';
 function saveGame() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      day: G.day, rep: G.rep, bank: G.bank, owned: G.owned, roster: G.roster, staffSeq: G.staffSeq, weekLog: G.weekLog, debtDays: G.debtDays, regulars: G.regulars,
+      v: 2, ver: VERSION, day: G.day, rep: G.rep, bank: G.bank, owned: G.owned, roster: G.roster, staffSeq: G.staffSeq, weekLog: G.weekLog, debtDays: G.debtDays, regulars: G.regulars,
       theme: G.theme, themes: G.themes, decorInv: G.decorInv, placed: G.placed, wins: G.wins, weekCh: G.weekCh,
       cfg: { fee: G.cfg.fee, stack: G.cfg.stack, level: G.cfg.level, price: G.cfg.price, stock: G.cfg.stock, assign: G.cfg.assign, resCap: G.cfg.resCap, resDeposit: G.cfg.resDeposit }
     }));
   } catch (e) { /* 저장이 막힌 브라우저 — 이어하기만 안 될 뿐이다 */ }
 }
 function loadSave() {
-  try { var s = localStorage.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; }
+  var raw = null;
+  try { raw = localStorage.getItem(SAVE_KEY); } catch (e) { return null; }   // 저장이 막힌 브라우저
+  if (!raw) return null;
+  try {
+    var s = JSON.parse(raw);
+    if (!s || typeof s.day !== 'number' || !(s.day >= 1) || typeof s.bank !== 'number' || !Array.isArray(s.roster)) return { corrupt: true };
+    return s;
+  } catch (e) { return { corrupt: true }; }
 }
 function resetGame() {
   G.day = 1; G.rep = 50; G.bank = START_BANK; G.owned = {}; G.roster = startRoster(); G.staffSeq = 10;
@@ -3094,9 +3126,11 @@ function resetGame() {
 // 타이틀
 // ═══════════════════════════════════════════════════
 function titleScreen() {
-  G.phase = 'title';
-  var sv = loadSave();
-  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · 프로토타입 14판</div>' +
+  G.phase = 'title'; G.menu = null; G.paused = false;
+  var sv = loadSave(), corrupt = !!(sv && sv.corrupt);
+  if (corrupt) sv = null;
+  var rec = loadRecords();
+  showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · ' + VERSION + '</div>' +
     '<h1>홀덤펍 점장</h1>' +
     '<p class="sub">오늘 밤, 당신의 펍에서 데일리 토너먼트가 열린다.</p></div>' +
     '<ul class="howto">' +
@@ -3109,8 +3143,23 @@ function titleScreen() {
     '<p class="note">매출은 참가비와 음료뿐이다. 우승 상품은 트로피와 다음 대회 시드권 — 칩 환전과 현금 시상은 없다. 판정 정답은 딜러마스터 TDA 케이스 문서를 따르며 원문 대조 전이다.</p>' +
     '<div class="titlebtns">' +
     (sv ? '<button class="cta" data-cont="1">이어하기 — ' + dayInfo(sv.day).week + '주차 ' + dayInfo(sv.day).wk + '요일 · ' + rankOf(sv.rep) + '</button>' : '') +
-    '<button class="cta' + (sv ? ' ghost' : '') + '" data-go="1">' + (sv ? '새로 시작' : '오픈 준비') + '</button></div>');
-  $('[data-go]').onclick = function () { audioOn(); resetGame(); prepScreen('shop'); };
+    '<button class="cta' + (sv ? ' ghost' : '') + '" data-go="1">' + (sv ? '새로 시작' : '오픈 준비') + '</button></div>' +
+    (corrupt ? '<p class="warn">저장 데이터가 손상돼 이어할 수 없다 — 새로 시작하면 덮어쓴다.</p>' : '') +
+    (rec.seasons || rec.bankrupt ? '<p class="note recline">🏅 기록 — 시즌 ' + rec.seasons + '번 (클리어 ' + rec.clears + ') · 최고 평판 ' + rec.bestRep + ' · 최고 자금 ' + won(rec.bestBank) + '원' + (rec.bankrupt ? ' · 폐업 ' + rec.bankrupt + '번' : '') + '</p>' : '') +
+    '<div class="titlefoot"><button class="linkbtn" data-tset="1">⚙️ 설정</button><button class="linkbtn" data-thelp="1">📖 도움말</button><button class="linkbtn" data-tcred="1">만든 사람 · 라이선스</button></div>');
+  $('[data-tset]').onclick = function () { openSettings(titleScreen); };
+  $('[data-thelp]').onclick = function () { openHelp(titleScreen); };
+  $('[data-tcred]').onclick = function () { openCredits(titleScreen); };
+  $('[data-go]').onclick = function () {
+    audioOn();
+    if (sv && !confirmNew.ok) {   // 이어할 저장이 있으면 한 번 더 묻는다
+      showModal('<h2>새로 시작할까요?</h2><p>지금 저장(' + dayInfo(sv.day).week + '주차 ' + dayInfo(sv.day).wk + '요일)을 덮어쓴다.</p><div class="titlebtns"><button class="cta" data-new-yes="1">새로 시작</button><button class="cta ghost" data-new-no="1">돌아가기</button></div>');
+      $('[data-new-yes]').onclick = function () { resetGame(); prepScreen('shop'); };
+      $('[data-new-no]').onclick = titleScreen;
+      return;
+    }
+    resetGame(); prepScreen('shop');
+  };
   var c = $('[data-cont]');
   if (c) c.onclick = function () {
     audioOn();
@@ -3629,6 +3678,8 @@ function report(settleOk) {
   G.bank += net + stockCost;   // 재고비는 오픈 때 이미 냈다
   var rankBefore = rankOf(G.rep);
   var repDay = (G.rep - s.repStart) + (avgSat - 60) / 8 + stars * 2;   // 오늘 하루 평판 변화 전체
+  var gentle = G.day <= 3 && repDay < 0;   // 첫 사흘은 배우는 기간 — 평판 하락을 절반으로
+  if (gentle) repDay *= 0.5;
   G.rep = clamp(s.repStart + repDay * dayInfo().repMul, 0, 100);
   G.weekLog.push({ day: G.day, name: dayInfo().name, wk: dayInfo().wk, net: net, stars: stars, entries: s.entries, rep: Math.round(G.rep),
     err: s.wrong + s.missed, drinks: s.drinks, win: !!G.winner, evOk: s.events.filter(function (e) { return e.ok === true; }).length });
@@ -3685,6 +3736,7 @@ function report(settleOk) {
   var h = '<div class="kicker">' + G.day + '일차 마감 · ' + clock(gameMin()) + '</div>' + starHTML +
     '<h2 style="text-align:center">' + ['아쉬운 밤', '무난한 밤', '좋은 밤', '완벽한 밤'][stars] + '</h2>' +
     (rankAfter !== rankBefore ? '<div class="rankup">' + (G.rep > s.repStart ? '🎉 펍 등급 상승 — ' : '펍 등급 하락 — ') + '<b>' + rankAfter + '</b></div>' : '') +
+    (gentle ? '<p class="note" style="text-align:center">🌱 첫 사흘 — 손님들이 너그럽다. 평판 하락이 절반으로 줄었다</p>' : '') +
     '<h3>🎯 오늘의 목표</h3><ul class="goals">' + G.goals.map(function (g, i) { return '<li class="' + (done[i] ? 'ok' : 'no') + '">' + (done[i] ? '✓ ' : '✗ ') + goalText(g) + '</li>'; }).join('') + '</ul>' +
     (settleOk ? '<p>✓ 레지 정산이 맞았다.</p>' : '<p>✗ 레지 정산이 틀렸다 — 차액을 맞추느라 마감이 늦어졌다.</p>') +
     '<table class="rows">' + rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + (r[1] < 0 ? '−' : '') + won(Math.abs(r[1])) + '</td></tr>'; }).join('') +
@@ -3789,7 +3841,7 @@ function weeklyScreen() {
   G.weekLog = []; G.weekCh = null;
   G.day++;   // 월요일로
   saveGame();
-  $('[data-week]').onclick = function () { if (seasonDone) seasonEnd(cleared); else prepScreen('shop'); };
+  $('[data-week]').onclick = function () { if (seasonDone) seasonEnd(cleared, w === SEASON_WEEKS); else prepScreen('shop'); };
 }
 /* 난이도 — 오픈 준비에 막대, 월요일엔 무엇이 어려워졌는지 */
 function diffBox() {
@@ -3806,7 +3858,129 @@ function seasonBar() {
     '<div class="sbar"><i style="width:' + Math.round(w / SEASON_WEEKS * 100) + '%"></i></div>' +
     '<span class="note">지금 평판 ' + Math.round(G.rep) + ' (' + rankOf(G.rep) + ') · 자금 ' + won(G.bank) + '원</span></div>';
 }
-function seasonEnd(cleared) {
+// ═══════════════════════════════════════════════════
+// 출시용 껍데기 — 설정 · 일시정지 · 도움말 · 기록 · 만든 사람
+// ═══════════════════════════════════════════════════
+var VERSION = '1.0';
+var SET_KEY = 'pubsim.settings', REC_KEY = 'pubsim.records';
+var SETTINGS = { music: 0.7, sfx: 1, quality: 'auto', motion: 'auto', talk: true };
+var SET_OK = {   // 저장된 설정이 망가져 있으면 기본값을 쓴다
+  music: function (v) { return typeof v === 'number' && v >= 0 && v <= 1; }, sfx: function (v) { return typeof v === 'number' && v >= 0 && v <= 1; },
+  quality: function (v) { return ['auto', 'high', 'low'].indexOf(v) >= 0; }, motion: function (v) { return v === 'auto' || v === 'reduce'; }, talk: function (v) { return typeof v === 'boolean'; }
+};
+try { var _s = JSON.parse(localStorage.getItem(SET_KEY) || 'null'); if (_s) Object.keys(SETTINGS).forEach(function (k) { if (_s[k] !== undefined && SET_OK[k](_s[k])) SETTINGS[k] = _s[k]; }); } catch (e) { /* 기본값 */ }
+try { if (!localStorage.getItem(SET_KEY) && localStorage.getItem('pubsim.music') === 'off') SETTINGS.music = 0; } catch (e) { /* 예전 🎵 끔을 이어받는다 */ }
+function saveSettings() { try { localStorage.setItem(SET_KEY, JSON.stringify(SETTINGS)); } catch (e) { /* 막힌 브라우저 */ } }
+function coarse() { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); }
+/* 설정을 실제 화면 · 소리에 반영한다 */
+function applySettings() {
+  MUSIC.on = SETTINGS.music > 0;
+  if (MUSIC.master && AC) MUSIC.master.gain.setTargetAtTime(SETTINGS.music, AC.currentTime, 0.2);
+  G.talkOn = !!SETTINGS.talk;
+  var q = SETTINGS.quality === 'auto' ? (coarse() ? 'mid' : 'high') : SETTINGS.quality;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q === 'high' ? 2 : (q === 'mid' ? 1.5 : 1)));
+  LIGHT.sun.castShadow = q !== 'low';
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  var reduce = SETTINGS.motion === 'reduce' || (SETTINGS.motion === 'auto' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  document.documentElement.classList.toggle('reduce-motion', !!reduce);
+}
+function seg(key, opts) {
+  return '<div class="seg" role="radiogroup">' + opts.map(function (o) {
+    var on = SETTINGS[key] === o[0];
+    return '<button data-set="' + key + '" data-val="' + JSON.stringify(o[0]).replace(/"/g, '&quot;') + '" role="radio" aria-checked="' + on + '" class="' + (on ? 'on' : '') + '">' + o[1] + '</button>';
+  }).join('') + '</div>';
+}
+function openSettings(back) {
+  showModal('<div class="kicker">⚙️ 설정</div><h2>설정</h2>' +
+    '<h3>배경음악 · 웅성거림</h3>' + seg('music', [[0, '끔'], [0.35, '작게'], [0.7, '보통'], [1, '크게']]) +
+    '<h3>효과음</h3>' + seg('sfx', [[0, '끔'], [0.5, '작게'], [1, '보통']]) +
+    '<h3>그래픽</h3>' + seg('quality', [['auto', '자동'], ['high', '높음'], ['low', '가볍게 (그림자 끔)']]) +
+    '<h3>움직임</h3>' + seg('motion', [['auto', '기기 설정 따름'], ['reduce', '줄이기']]) +
+    '<h3>손님 잡담 말풍선</h3>' + seg('talk', [[true, '켬'], [false, '끔 — 중요한 말만']]) +
+    '<h3>저장</h3><p class="note">진행은 이 브라우저에 마감 때마다 저장된다.</p><button class="cta ghost" data-wipe="1">저장 지우기…</button>' +
+    '<div class="titlebtns"><button class="cta" data-back="1">돌아가기</button></div>', false);
+  document.querySelectorAll('[data-set]').forEach(function (b) {
+    b.onclick = function () {
+      var key = b.getAttribute('data-set'), val = b.getAttribute('data-val'), mEl = $('#modal .modal'), top = mEl ? mEl.scrollTop : 0;
+      SETTINGS[key] = JSON.parse(val);
+      saveSettings(); audioOn(); applySettings(); openSettings(back);
+      // 다시 그려도 보던 자리 · 누른 버튼을 지킨다 (폰에서 맨 위로 튀지 않게)
+      var m2 = $('#modal .modal'); if (m2) m2.scrollTop = top;
+      var again = Array.prototype.filter.call(document.querySelectorAll('[data-set="' + key + '"]'), function (x) { return x.getAttribute('data-val') === val; })[0];
+      if (again) again.focus({ preventScroll: true });
+      if (b.getAttribute('data-set') === 'sfx' && SETTINGS.sfx > 0) SFX.good();
+    };
+  });
+  $('[data-wipe]').onclick = function () {
+    showModal('<div class="kicker">⚙️ 설정</div><h2>저장을 지울까요?</h2><p>이어하기 · 직원 · 단골 · 꾸미기 · 이번 시즌이 모두 사라진다. 되돌릴 수 없다. (최고 기록은 남는다)</p>' +
+      '<div class="titlebtns"><button class="cta" data-wipe-yes="1" style="background:var(--red)">지운다</button><button class="cta ghost" data-wipe-no="1">그만두기</button></div>');
+    $('[data-wipe-yes]').onclick = function () { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 무시 */ } toast('저장을 지웠다'); titleScreen(); };
+    $('[data-wipe-no]').onclick = function () { openSettings(back); };
+  };
+  $('[data-back]').onclick = back;
+}
+/* 일시정지 — ❚❚ · Esc */
+function openPause() {
+  if (G.phase !== 'open') return;
+  G.menu = 'pause'; G.paused = true;
+  showModal('<div class="kicker">' + clock(gameMin()) + ' · 일시정지</div><h2>❚❚ 잠깐 쉬는 중</h2>' +
+    '<p class="note">오늘 목표 — ' + G.goals.map(goalText).join(' · ') + '</p>' +
+    '<div class="menu"><button class="cta" data-resume="1">▶ 계속하기</button>' +
+    '<button class="cta ghost" data-mset="1">⚙️ 설정</button><button class="cta ghost" data-mhelp="1">📖 도움말</button>' +
+    '<button class="cta ghost" data-mtitle="1">타이틀로</button></div>');
+  $('[data-resume]').onclick = resumeGame;
+  $('[data-mset]').onclick = function () { openSettings(openPause); };
+  $('[data-mhelp]').onclick = function () { openHelp(openPause); };
+  $('[data-mtitle]').onclick = function () {
+    showModal('<h2>타이틀로 나갈까요?</h2><p>오늘 영업은 저장되지 않는다 — 이어하기는 <b>어제 마감</b>부터다.</p>' +
+      '<div class="titlebtns"><button class="cta" data-q-yes="1">나간다</button><button class="cta ghost" data-q-no="1">계속하기</button></div>');
+    $('[data-q-yes]').onclick = function () { G.menu = null; G.paused = false; endBlackout(false, true); clearActors(); G.tasks = []; renderTasks(); titleScreen(); };
+    $('[data-q-no]').onclick = openPause;
+  };
+}
+function resumeGame() { G.menu = null; G.paused = false; closeModal(); }
+/* 도움말 — 게임 가이드 */
+var HELP = [
+  ['🗓️ 하루 · 한 주', '오픈 준비(17:30)에서 상점 · 꾸미기 · 직원 · 칩 구조 · 음료 · 딜러 배치를 정하고 <b>영업 시작</b>. 18:00~02:00 영업(1배속 6분) 뒤 레지 정산 · 보고서. 월~목 데일리 · 금 딥스택 · 토 메인 이벤트(참가비 2배 · 레지 24:00) · 일요일은 휴무 · 주간 정산(임대료). 8주가 한 시즌 — 목표는 <b>홀덤 명소(평판 85) + 자금 500만</b>. 자금이 사흘 연속 마이너스면 폐업.'],
+  ['👟 점장 · 할 일', '바닥을 탭하거나 WASD 로 걷는다. 오른쪽(폰은 아래) 할 일 목록을 누르면 그 자리로 걸어가 처리한다. 카운터 뒤에 서 있으면 등록이 빨라진다. 🚨 판정 30초 · 📢 아나운스 · ⚖️ 밸런싱 · 🧽 청소 · ⚡ 돌발 상황.'],
+  ['🚨 플로어 판정 넷', '<b>버튼 위치 오류 · 카드 장수 이상</b> — 실질 액션(블라인드 뒤 액션 둘 중 칩이 하나라도 들어갔거나 액션이 셋) 전이면 미스딜, 뒤면 버튼은 그대로 · 장수 틀린 좌석만 데드. <b>레이즈 금액 미달</b> — 다음 카드 전이면 최소 레이즈까지 채우고, 깔렸으면 그대로. <b>버튼 · 블라인드</b> — BB 는 반드시 다음 사람에게 한 칸, SB 는 지난 BB 자리(탈락이면 없음), 버튼은 지난 SB 자리(비었으면 데드 버튼). 근거는 TDA 케이스 문서로 <b>원문 확인 전</b>이다.'],
+  ['📢 아나운스', '레벨이 바뀌는 그 시각에 뜬다. 8초 안에 맞게 안내하면 정시 보너스. 구조표에서 지금 시각의 줄을 읽는다. 레지 마감 30분 전 · 레지 마감(총 칩 = 엔트리 × 스타팅) · 파이널 테이블.'],
+  ['🧑‍💼 직원', '딜러 · 홀 서버 · 카운터 · 청소 · 플로어 보조. 출근율만큼 나오고 노쇼하면 🧑‍💼 로 대타. <b>사기</b>가 60 아래면 느려지고 20 아래면 그만둔다 — 과로를 피하고 하루 한 번 칭찬한다. 딜러 <b>교육 트리</b>(판정 · 속도 · 응대)는 교육 · 실전 경험 · 멘토 · 세미나로 오른다. 판정 2단계 = 믹스 자격.'],
+  ['⚡ 돌발 상황', '단체 손님 · 인플루언서 · 정전(왼쪽 벽 차단기) · 딜러 다툼 · 칩 환전 요구 · 취객 · 위생 점검. 주가 갈수록 잦아진다.'],
+  ['🎨 꾸미기 · 테이블', '테마와 장식을 사서 배치 모드에서 놓는다 — 장식 반경 3 손님 만족이 오른다. 테이블에서는 실제 카드로 승자가 정해지고, 큰 족보는 테이블 위에 크게 뜬다. 믹스 테이블(PLO8)은 상점에서.'],
+  ['🎯 목표 · 도전', '오늘의 목표 셋 = 별 셋. 이번 주 도전 셋은 일요일에 보상(셋 다면 장식). 난이도는 6주에 걸쳐 조금씩 오른다.'],
+  ['⚖️ 합법 운영', '매출은 참가비 · 음료(· 예약 보증금 · 믹스 참가비)뿐이다. 우승 상품은 트로피와 다음 대회 시드권. <b>칩을 현금이나 상품권으로 바꿔 주지 않는다</b> — 게임 안에서도 마찬가지다.']
+];
+function openHelp(back) {
+  showModal('<div class="kicker">📖 도움말</div><h2>홀덤펍 점장 — 게임 가이드</h2>' +
+    HELP.map(function (h, i) { return '<details class="help"' + (i === 0 ? ' open' : '') + '><summary>' + h[0] + '</summary><p>' + h[1] + '</p></details>'; }).join('') +
+    '<div class="titlebtns"><button class="cta" data-back="1">돌아가기</button></div>', true);
+  $('[data-back]').onclick = back;
+}
+function openCredits(back) {
+  showModal('<div class="kicker">만든 사람 · 라이선스</div><h2>홀덤펍 점장 ' + VERSION + '</h2>' +
+    '<p>홀덤펍 경영 시뮬레이션. 판정 문제는 딜러마스터 TDA 케이스 문서를 바탕으로 했고, 원문 대조 전이다 — 실제 대회 판정은 그 대회의 규정과 플로어를 따른다.</p>' +
+    '<p class="note">3D — three.js r149 (MIT License) · 글꼴 — Noto Sans KR · JetBrains Mono (SIL Open Font License) · 음악 · 효과음은 브라우저 WebAudio 로 직접 만든다.<br>이 게임에는 실제 돈 · 칩 환전 · 현금 시상이 없다.</p>' +
+    '<div class="titlebtns"><button class="cta" data-back="1">돌아가기</button></div>');
+  $('[data-back]').onclick = back;
+}
+/* 기록 — 시즌이 끝나거나 폐업할 때 남긴다 */
+function loadRecords() { try { return JSON.parse(localStorage.getItem(REC_KEY) || 'null') || { seasons: 0, clears: 0, bestRep: 0, bestBank: 0, bankrupt: 0 }; } catch (e) { return { seasons: 0, clears: 0, bestRep: 0, bestBank: 0, bankrupt: 0 }; } }
+function recordRun(kind) {
+  var r = loadRecords();
+  if (kind === 'bankrupt') r.bankrupt++; else { r.seasons++; if (kind === 'clear') r.clears++; }
+  r.bestRep = Math.max(r.bestRep, Math.round(G.rep)); r.bestBank = Math.max(r.bestBank, Math.round(G.bank));
+  try { localStorage.setItem(REC_KEY, JSON.stringify(r)); } catch (e) { /* 무시 */ }
+}
+/* Esc — 일시정지 열고 닫기 */
+window.addEventListener('keydown', function (e) {
+  if (e.key !== 'Escape') return;
+  if (G.menu === 'pause') resumeGame();
+  else if (G.phase === 'open' && !G.modal) openPause();
+});
+
+function seasonEnd(cleared, firstEnd) {
+  if (firstEnd) recordRun(cleared ? 'clear' : 'season');   // 8주차 일요일에 한 번만 — 계속 운영하는 주는 세지 않는다
   showModal('<div class="titlecard"><div class="kicker">시즌 ' + SEASON_WEEKS + '주 끝</div><h1>' + (cleared ? '🏆 시즌 클리어!' : '시즌 종료') + '</h1>' +
     '<p class="sub">' + (cleared ? '당신의 펍은 이 동네의 홀덤 명소가 됐다.' : '목표에는 닿지 못했다 — 하지만 펍은 계속된다.') + '</p></div>' +
     '<p>평판 <b>' + Math.round(G.rep) + '</b> (' + rankOf(G.rep) + ') · 자금 <b>' + won(G.bank) + '원</b> · 직원 ' + G.roster.length + '명</p>' +
@@ -3816,6 +3990,7 @@ function seasonEnd(cleared) {
   $('[data-new]').onclick = function () { resetGame(); prepScreen('shop'); };
 }
 function bankrupt() {
+  recordRun('bankrupt');
   try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 무시 */ }
   showModal('<div class="titlecard"><div class="kicker">' + dayInfo().week + '주차</div><h1>💸 폐업</h1>' +
     '<p class="sub">자금이 사흘 연속 마이너스였다. 펍 문을 닫는다.</p></div>' +
@@ -3831,11 +4006,14 @@ G.placeAt = placeAtForTest;                    // 자동 점검용
 G.__music = MUSIC;   // 자동 점검용
 G.__plan = planEvents; G.__type = pickType; G.__diff = diffK;   // 자동 점검용
 G.__weekly = weeklyScreen;   // 자동 점검용
+var confirmNew = { ok: false };   // 자동 점검이 새로 시작 확인을 건너뛸 때 쓴다
+G.__confirmNew = confirmNew;
 G.__eval = { best: best, eval5: eval5, plohi: bestPLOHigh, plolo: bestPLOLow, name: handName };   // 자동 점검용
 G.roster = startRoster();
 G.regulars = makeRegulars();
 G.cfg.resCap = 1; G.cfg.resDeposit = true;
 initScene();
+applySettings();
 newDay();
 titleScreen();
 requestAnimationFrame(frame);
