@@ -1878,13 +1878,15 @@ function startHand(t) {
   var d = G.dealers[t.dealer];
   var miss = 1 - effAcc(d) / 100;
   var mixK = (isMix(t) && !mixOk(d.staff) ? 2 : 1) * (1 + 0.5 * diffK());   // 믹스 자격 없는 딜러 — 사고 2배 · 주가 갈수록 사고 +50% 까지
-  if (changed && !pos.draw && prev && seated(t) >= 4 && chance(Math.min(0.85, (0.1 + miss * 1.0) * mixK))) {
+  /* 버튼 · 블라인드 이의는 좌석이 바뀔 때마다 노릴 수 있어 너무 잦았다(1.2: 하루 호출의 ⅓) — 확률을 낮추고 연달아 내지 않는다 */
+  if (changed && !pos.draw && prev && seated(t) >= 4 && G.lastCall !== 'pos' && chance(Math.min(0.25, (0.02 + miss * 0.3) * mixK))) {
     createCall(t, 'pos', { prev: prev, pos: pos, busted: t.bustedLast.slice(), snap: snapSeats(t) });
     return;
   }
   if (chance(Math.min(0.85, (0.06 + miss * 0.4) * mixK))) {
     /* 믹스(팟 리밋) 테이블은 레이즈 금액 판정을 내지 않는다 — 원문 대조 전 */
-    var type = isMix(t) ? pick(['btn', 'cnt', 'case', 'case']) : pick(['btn', 'cnt', 'under', 'under', 'case', 'case', 'case', 'case']);   // 케이스 판정 27건이 섞여 나온다
+    var types = isMix(t) ? ['btn', 'cnt', 'case', 'case', 'case'] : ['btn', 'cnt', 'under', 'case', 'case', 'case', 'case', 'case'];   // 케이스 판정 27건이 가장 많이 나온다
+    var type = pick(types.filter(function (x) { return x === 'case' || x !== G.lastCall; }));   // 같은 종류 판정을 연달아 내지 않는다
     if (type === 'btn' && seated(t) < 4) type = 'cnt';
     createCall(t, type, genIncident(t, type));
   }
@@ -1937,6 +1939,7 @@ function removeTask(task) { G.tasks = G.tasks.filter(function (x) { return x !==
 
 function createCall(t, type, data) {
   var task = addTask({ kind: 'call', table: t.id, type: type, data: data, limit: CALL_LIMIT });
+  G.lastCall = type;
   t.call = task;
   var d = G.dealers[t.dealer];
   say(d, '플로어! ✋', 3);
@@ -4091,7 +4094,7 @@ function seasonBar() {
 // ═══════════════════════════════════════════════════
 // 출시용 껍데기 — 설정 · 일시정지 · 도움말 · 기록 · 만든 사람
 // ═══════════════════════════════════════════════════
-var VERSION = '1.2';
+var VERSION = '1.2.1';
 var SET_KEY = 'pubsim.settings', REC_KEY = 'pubsim.records';
 var SETTINGS = { music: 0.7, sfx: 1, quality: 'auto', motion: 'auto', talk: true };
 var SET_OK = {   // 저장된 설정이 망가져 있으면 기본값을 쓴다
