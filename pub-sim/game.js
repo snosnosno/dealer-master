@@ -1055,6 +1055,7 @@ function flickerNeon(real) {
   if (!m) return;
   flickerNeon.t = (flickerNeon.t || 0) - real;
   if (G.blackout) { m.material.opacity = 0.08; return; }
+  if (document.documentElement.classList.contains('reduce-motion')) { m.material.opacity = 1; return; }   // 움직임 줄이기 — 깜빡이지 않는다
   if (flickerNeon.t <= 0) { flickerNeon.t = 4 + Math.random() * 8; flickerNeon.off = 0.18; }
   if (flickerNeon.off > 0) { flickerNeon.off -= real; m.material.opacity = Math.random() < 0.5 ? 0.35 : 1; } else m.material.opacity = 1;
 }

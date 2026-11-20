@@ -570,6 +570,11 @@ details.weekfold[open] > summary { margin: 0 -10px 8px; border-bottom: 1px solid
   .call .d { font-size: 12.5px; margin-top: 0; }
   .call .bar { margin-top: 4px; height: 4px; }
 }
+
+/* 1.1 리뷰 반영 — 폰에서 손님 칩 숨김 · 레벨업 깜빡임도 움직임 줄이기 */
+@media (max-width: 720px) { .hud .chip.m-hide { display: none; } }
+.reduce-motion .hud .chip.flash { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .hud .chip.flash { animation: none !important; } }
 </style>
 </head>
 <body>
