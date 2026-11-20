@@ -575,6 +575,19 @@ details.weekfold[open] > summary { margin: 0 -10px 8px; border-bottom: 1px solid
 @media (max-width: 720px) { .hud .chip.m-hide { display: none; } }
 .reduce-motion .hud .chip.flash { animation: none !important; }
 @media (prefers-reduced-motion: reduce) { .hud .chip.flash { animation: none !important; } }
+/* 1.3 — 케이스 판정 상황 글 · 판정 도감 */
+.scene { border-left: 3px solid var(--amber); background: rgba(255,255,255,.035); border-radius: 0 10px 10px 0; padding: 8px 12px; margin: 4px 0 12px; }
+.scene p { margin: 3px 0; line-height: 1.55; }
+.caseq { font-size: 1.04em; }
+.dexnew { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: var(--amber-bg); color: var(--amber-ink); font-weight: 700; text-align: center; }
+.dex { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin: 10px 0 14px; max-height: 52vh; overflow-y: auto; }
+.dexc { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.03); min-height: 74px; }
+.dexc .no { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.dexc b { font-size: 13px; line-height: 1.3; color: var(--ink-3); word-break: keep-all; }
+.dexc small { font-size: 11px; color: var(--ink-3); }
+.dexc.got { border-color: var(--glass-line, var(--amber)); background: var(--amber-bg); }
+.dexc.got b { color: var(--ink); }
+.dexc.got .no { color: var(--amber-ink); }
 </style>
 </head>
 <body>
