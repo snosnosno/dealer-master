@@ -16,7 +16,7 @@ const SHOT = process.argv[2] === 'shot';
   const G = (f, a) => page.evaluate(f, a);
   const out = {};
   await page.click('[data-go]');
-  out.box = await G(() => { const b = document.querySelector('.weekch'); return b ? b.innerText.replace(/\n/g, ' / ') : null; });
+  out.box = await G(() => { const b = document.querySelector('.weekch'); return b ? b.textContent : null; });   // 「이번 주」는 접혀 있다 — textContent 로 읽는다
   out.ch = await G(() => window.__pub.weekCh);
   // 쇼다운 — 영업 1분 남짓 동안 큰 글자 · 홀카드 앞면을 찾는다
   await page.click('[data-tab="dealers"]');

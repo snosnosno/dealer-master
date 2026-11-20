@@ -474,6 +474,7 @@ function initScene() {
     st.position.set(p.x, 0.3, p.z - 0.55); st.castShadow = true; scene.add(st);
     return st;
   });
+  makeNeonSign();
   var barSign = labelSprite('BAR', '#EF9F27');
   barSign.position.set(-7.6, 2.2, -8.3); scene.add(barSign);
 
@@ -1000,6 +1001,64 @@ function log(t, c) {
   if (G.log.length > 60) G.log.shift();
   renderTicker();
 }
+/* ── 연출 — 배너 · 판정 콤보 · 숫자 세기 · 네온 간판 ───────────────── */
+/* 화면 가운데를 가로지르는 큰 배너 (영업 시작 · 콤보) */
+function banner(big, small, cls) {
+  var el = $('#banner');
+  if (!el) return;
+  el.innerHTML = '<div class="bn ' + (cls || '') + '"><b>' + big + '</b>' + (small ? '<span>' + small + '</span>' : '') + '</div>';
+  clearTimeout(banner.h);
+  banner.h = setTimeout(function () { el.innerHTML = ''; }, 2300);
+}
+/* 판정 콤보 — 연속으로 맞히면 보너스 평판, 틀리거나 놓치면 끊긴다 */
+function comboHit(ok) {
+  if (!ok) {
+    if ((G.combo || 0) >= 3) toast('💔 콤보 끊김 — ×' + G.combo);
+    G.combo = 0; return;
+  }
+  G.combo = (G.combo || 0) + 1;
+  G.stats.maxCombo = Math.max(G.stats.maxCombo || 0, G.combo);
+  if (G.combo >= 2) {
+    var bonus = Math.min(0.6, 0.1 * (G.combo - 1));   // 연출은 크게, 보너스는 작게 — 시즌이 너무 빨리 끝나지 않게
+    G.rep = clamp(G.rep + bonus, 0, 100);
+    banner('🔥 COMBO ×' + G.combo, '연속 정확한 판정 · 평판 +' + bonus.toFixed(1), 'combo');
+    tone(1046, 0.08, 'triangle', 0.07); tone(1568, 0.14, 'triangle', 0.07, 0.07);
+  }
+}
+/* 보고서 숫자가 굴러 올라간다 */
+function countUp() {
+  document.querySelectorAll('[data-countup]').forEach(function (el) {
+    var to = +el.getAttribute('data-countup'), t0 = performance.now(), dur = 900;
+    if (document.documentElement.classList.contains('reduce-motion')) return;
+    (function step(ts) {
+      var k = Math.min(1, (ts - t0) / dur), e = 1 - Math.pow(1 - k, 3), v = Math.round(to * e / 100) * 100;
+      el.textContent = (v < 0 ? '−' : '') + won(Math.abs(v));
+      if (k < 1 && el.isConnected) requestAnimationFrame(step);
+    })(t0);
+  });
+}
+/* 네온 간판 — 뒷벽에 「HOLD'EM PUB」, 가끔 깜빡인다 */
+function makeNeonSign() {
+  var c = document.createElement('canvas'); c.width = 512; c.height = 128;
+  var x = c.getContext('2d');
+  x.font = '900 64px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  [['#ff4fd8', 28], ['#ff4fd8', 14], ['#ffe6fb', 0]].forEach(function (p) { x.shadowColor = '#ff4fd8'; x.shadowBlur = p[1]; x.fillStyle = p[0]; x.fillText("HOLD'EM PUB", 256, 60); });
+  x.shadowBlur = 0; x.strokeStyle = '#4fe3ff'; x.lineWidth = 4; x.shadowColor = '#4fe3ff'; x.shadowBlur = 16;
+  x.strokeRect(10, 10, 492, 108);
+  var m = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 1.1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true }));
+  m.position.set(1.5, 2.25, -8.83);
+  scene.add(m);
+  decor.neonSign = m;
+}
+function flickerNeon(real) {
+  var m = decor.neonSign;
+  if (!m) return;
+  flickerNeon.t = (flickerNeon.t || 0) - real;
+  if (G.blackout) { m.material.opacity = 0.08; return; }
+  if (flickerNeon.t <= 0) { flickerNeon.t = 4 + Math.random() * 8; flickerNeon.off = 0.18; }
+  if (flickerNeon.off > 0) { flickerNeon.off -= real; m.material.opacity = Math.random() < 0.5 ? 0.35 : 1; } else m.material.opacity = 1;
+}
+
 function toast(t) {
   var el = $('#toast');
   el.innerHTML = '<div class="toast">' + t + '</div>';
@@ -1121,9 +1180,9 @@ function newDay() {
     entries: 0, unique: 0, drinks: 0, noStock: 0, right: 0, wrong: 0, missed: 0, lost: 0, angry: 0,
     satSum: 0, satN: 0, repStart: G.rep, ann: 0, annMiss: 0, annWrong: 0, cleaned: 0, spillSec: 0,
     balanced: 0, balanceMiss: 0, queueLeave: 0, annByStaff: 0, regVisits: 0, depositRev: 0,
-    events: [], fines: 0, mixFee: 0
+    events: [], fines: 0, mixFee: 0, maxCombo: 0
   };
-  G.grownToday = [];
+  G.grownToday = []; G.combo = 0;
   G.evPlan = planEvents(); G.groupArr = []; G.groupBoost = 0; G.blackout = false;
   if (LIGHT.hemi) { LIGHT.hemi.intensity = 0.55; LIGHT.sun.intensity = 0.85; decor.breakerLamp.visible = false; }
   G.regulars.forEach(function (r) { r.inHouse = false; r.reserved = false; });
@@ -1722,13 +1781,13 @@ function resolveCall(task, result) {
   var cs = t.seats.filter(function (x) { return x !== null; }).map(function (id) { return G.customers[id]; });
   var at = V(t.def.cx, t.def.cz).setY(2.2);
   if (result === 'right') {
-    G.stats.right++; G.rep = clamp(G.rep + 1.5, 0, 100);
+    G.stats.right++; G.rep = clamp(G.rep + 1.5, 0, 100); comboHit(true);
     cs.forEach(function (c) { c.sat = clamp(c.sat + 8, 0, 100); });
     if (cs.length) say(pick(cs), pick(['깔끔하네요 👍', '역시 점장님', '오케이 인정']), 2.4);
     floatText(at, '평판 +1.5', 'good');
     SFX.good();
   } else if (result === 'wrong') {
-    G.stats.wrong++; G.rep = clamp(G.rep - 3, 0, 100);
+    G.stats.wrong++; G.rep = clamp(G.rep - 3, 0, 100); comboHit(false);
     cs.forEach(function (c) { c.sat = clamp(c.sat - 15, 0, 100); });
     floatText(at, '평판 −3', 'bad');
     SFX.bad();
@@ -1741,7 +1800,7 @@ function resolveCall(task, result) {
     }
     cs.filter(function (c) { return c !== angry; }).slice(0, 1).forEach(function (c) { say(c, '…😒', 2); });
   } else {
-    G.stats.missed++; G.rep = clamp(G.rep - 3, 0, 100);
+    G.stats.missed++; G.rep = clamp(G.rep - 3, 0, 100); comboHit(false);
     cs.forEach(function (c) { c.sat = clamp(c.sat - 12, 0, 100); });
     floatText(at, '평판 −3', 'bad');
     if (cs.length) say(pick(cs), '플로어 안 와요?! 😤', 3);
@@ -2402,6 +2461,7 @@ function frame(ts) {
     }
     if (G.phase === 'open' && !G.modal) stepFx(real);
     if (G.phase === 'title') cam.yaw += real * 0.07;
+    flickerNeon(real);
     if ((frame.mt = (frame.mt || 0) + real) > 0.5) { frame.mt = 0; tickMurmur(); }
   });
   ok = guard(function () {
@@ -2544,37 +2604,25 @@ function flashClock() {
 function renderHud() {
   var hud = $('#hud');
   if (!hud._built) {
+    /* 상단 바 — 꼭 필요한 넷만(시각 · 매출 · 평판 · 손님) + 버튼 넷(직원 · 목표 · 배속 · 메뉴).
+       음악 · 효과음 · 잡담 · 따라가기는 일시정지 메뉴의 빠른 토글로 옮겼다 */
     hud.innerHTML = '' +
-      '<span class="kv daytag">' + dayInfo().week + '주 ' + dayInfo().wk + ' · ' + dayInfo().short + '</span>' +
-      '<span class="kv"><b data-h="clock"></b></span>' +
-      '<span class="kv" data-h="lvbox">⏱ 다음 레벨 <b data-h="next"></b></span>' +
-      '<span class="kv m-hide">엔트리 <b data-h="entries"></b></span>' +
-      '<span class="kv">오늘 매출 <b data-h="money"></b></span>' +
-      '<span class="kv">평판 <span class="rep"><i data-h="repbar"></i></span> <b data-h="rep"></b></span>' +
-      '<span class="kv">손님 <b data-h="guests"></b></span>' +
-      '<span class="kv m-hide">음료 재고 <b data-h="stock"></b></span>' +
-      '<span class="kv m-hide" data-h="reg"></span>' +
+      '<span class="chip daytag">' + dayInfo().wk + ' · ' + dayInfo().short + '</span>' +
+      '<span class="chip clockc" data-h="lvbox"><b data-h="clock"></b><small>다음 레벨 <i data-h="next"></i></small></span>' +
+      '<span class="chip money">💰 <b data-h="money"></b></span>' +
+      '<span class="chip repc">⭐ <b data-h="rep"></b><span class="rep"><i data-h="repbar"></i></span></span>' +
+      '<span class="chip m-hide">👥 <b data-h="guests"></b></span>' +
+      '<span class="x-hide"><b data-h="entries"></b><b data-h="stock"></b><b data-h="reg"></b></span>' +
       '<span class="sp"></span>' +
       '<button class="hbtn" data-callstaff="1" title="직원 부르기">🧑‍💼</button>' +
       '<button class="hbtn" data-goals="1" title="오늘의 목표">🎯</button>' +
-      '<button class="hbtn" data-talk="1" title="손님 잡담">💬</button>' +
-      '<button class="hbtn" data-follow="1" title="점장 따라가기">📍</button>' +
-      '<button class="hbtn" data-music="1" title="배경음악 · 웅성거림">🎵</button>' +
-      '<button class="hbtn" data-mute="1" title="효과음">🔊</button>' +
-      '<button class="hbtn" data-pause="1" title="일시정지 · 메뉴 (Esc)">❚❚</button>' +
       [1, 2, 4].map(function (s) { return '<button class="hbtn m-hide" data-speed="' + s + '">' + s + '×</button>'; }).join('') +
-      '<button class="hbtn m-only" data-speedcycle="1" title="배속">1×</button>';   // 폰에서는 배속 버튼 하나 — 누를 때마다 1 → 2 → 4
+      '<button class="hbtn m-only" data-speedcycle="1" title="배속">1×</button>' +   // 폰에서는 배속 버튼 하나 — 누를 때마다 1 → 2 → 4
+      '<button class="hbtn menu" data-pause="1" title="일시정지 · 메뉴 (Esc)">☰</button>';
     hud.querySelectorAll('[data-speed]').forEach(function (b) { b.onclick = function () { G.speed = +b.getAttribute('data-speed'); G.paused = false; }; });
     hud.querySelector('[data-speedcycle]').onclick = function () { G.speed = G.speed >= 4 ? 1 : G.speed * 2; G.paused = false; };
     hud.querySelector('[data-pause]').onclick = openPause;
     hud.querySelectorAll('.hbtn').forEach(function (b) { b.setAttribute('aria-label', b.title || b.textContent); });   // 아이콘 버튼에 이름
-    hud.querySelector('[data-follow]').onclick = function () { cam.follow = !cam.follow; if (cam.follow) cam.dist = Math.min(cam.dist, 16); else fitCamera(); };
-    hud.querySelector('[data-mute]').onclick = function () { MUTED = !MUTED; toast(MUTED ? '효과음 끔' : '효과음 켬'); };
-    hud.querySelector('[data-music]').onclick = function () {
-      audioOn(); if (MUSIC.on) setMusic.last = SETTINGS.music; SETTINGS.music = MUSIC.on ? 0 : (setMusic.last || 0.7);
-      saveSettings(); applySettings(); toast(MUSIC.on ? '🎵 배경음악 켬' : '🎵 배경음악 끔');
-    };
-    hud.querySelector('[data-talk]').onclick = function () { SETTINGS.talk = !G.talkOn; saveSettings(); applySettings(); toast(G.talkOn ? '손님 잡담 켬' : '손님 잡담 끔 — 중요한 말만 뜬다'); };
     hud.querySelector('[data-callstaff]').onclick = function () { audioOn(); openHire(); };
     hud.querySelector('[data-goals]').onclick = function () {
       var s = G.stats;
@@ -2602,10 +2650,6 @@ function renderHud() {
   var sc = hud.querySelector('[data-speedcycle]'), sct = (G.speed > 4 ? 4 : G.speed) + '×';
   if (sc.textContent !== sct) sc.textContent = sct;
   sc.classList.toggle('on', !G.paused);
-  hud.querySelector('[data-follow]').classList.toggle('on', cam.follow);
-  hud.querySelector('[data-mute]').textContent = MUTED ? '🔇' : '🔊';
-  hud.querySelector('[data-music]').classList.toggle('on', MUSIC.on);
-  hud.querySelector('[data-talk]').classList.toggle('on', G.talkOn);
   renderTasks();
 }
 
@@ -2928,7 +2972,7 @@ function openCall(task) {
 
 function verdict(task, ok, why, cite, choices, correct, pickIx, extra) {
   var t = G.tables[task.table];
-  var h = '<div class="kicker">' + t.name + ' — 판정</div><div class="verdict ' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓ 깔끔한 판정' : '✗ 틀린 판정 — 테이블이 술렁인다') + '</div>';
+  var h = '<div class="stamp ' + (ok ? 'ok' : 'no') + '">' + (ok ? (G.combo >= 1 ? 'PERFECT!' : 'GOOD CALL') : 'MISS') + '</div><div class="kicker">' + t.name + ' — 판정</div><div class="verdict ' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓ 깔끔한 판정' : '✗ 틀린 판정 — 테이블이 술렁인다') + '</div>';
   if (choices) {
     h += '<div class="choices" style="margin-bottom:10px">' + choices.map(function (ch, i) {
       return '<div class="choice' + (i === correct ? ' right' : (i === pickIx ? ' wrong' : '')) + '">' + ch + '</div>';
@@ -3131,22 +3175,17 @@ function titleScreen() {
   if (corrupt) sv = null;
   var rec = loadRecords();
   showModal('<div class="titlecard"><div class="kicker">HOLD\'EM PUB MANAGER · ' + VERSION + '</div>' +
-    '<h1>홀덤펍 점장</h1>' +
-    '<p class="sub">오늘 밤, 당신의 펍에서 데일리 토너먼트가 열린다.</p></div>' +
-    '<ul class="howto">' +
-    '<li><b>👟 직접 걷는다</b> — 바닥을 탭하거나 WASD. 카운터에 서면 등록이 빨라진다</li>' +
-    '<li><b>🚨 플로어 판정</b> — 테이블이 부르면 걸어가서 판정한다 (30초)</li>' +
-    '<li><b>📢 아나운스 · ⚖️ 밸런싱 · 🧽 청소</b> — 직접 하거나 직원에게 맡긴다</li>' +
-    '<li><b>🧑‍💼 직원 채용 · 🛋️ 상점</b> — 번 돈으로 펍을 키운다</li>' +
-    '<li><b>🎯 오늘의 목표</b> — 셋을 달성하면 별 셋</li>' +
-    '</ul>' +
-    '<p class="note">매출은 참가비와 음료뿐이다. 우승 상품은 트로피와 다음 대회 시드권 — 칩 환전과 현금 시상은 없다. 판정 정답은 딜러마스터 TDA 케이스 문서를 따르며 원문 대조 전이다.</p>' +
+    '<div class="suits"><span>♠</span><span class="r">♥</span><span class="r">♦</span><span>♣</span></div>' +
+    '<h1 class="logo">홀덤펍 점장</h1>' +
+    '<p class="sub">오늘 밤, 당신의 펍에서 토너먼트가 열린다.<br>걸어 다니며 판정하고, 직원을 키우고, 동네 최고의 홀덤 명소를 만들자.</p></div>' +
+    '<div class="pitch"><span>👟 직접 걷고</span><span>🚨 판정하고</span><span>🏆 키운다</span></div>' +
     '<div class="titlebtns">' +
     (sv ? '<button class="cta" data-cont="1">이어하기 — ' + dayInfo(sv.day).week + '주차 ' + dayInfo(sv.day).wk + '요일 · ' + rankOf(sv.rep) + '</button>' : '') +
     '<button class="cta' + (sv ? ' ghost' : '') + '" data-go="1">' + (sv ? '새로 시작' : '오픈 준비') + '</button></div>' +
     (corrupt ? '<p class="warn">저장 데이터가 손상돼 이어할 수 없다 — 새로 시작하면 덮어쓴다.</p>' : '') +
     (rec.seasons || rec.bankrupt ? '<p class="note recline">🏅 기록 — 시즌 ' + rec.seasons + '번 (클리어 ' + rec.clears + ') · 최고 평판 ' + rec.bestRep + ' · 최고 자금 ' + won(rec.bestBank) + '원' + (rec.bankrupt ? ' · 폐업 ' + rec.bankrupt + '번' : '') + '</p>' : '') +
-    '<div class="titlefoot"><button class="linkbtn" data-tset="1">⚙️ 설정</button><button class="linkbtn" data-thelp="1">📖 도움말</button><button class="linkbtn" data-tcred="1">만든 사람 · 라이선스</button></div>');
+    '<div class="titlefoot"><button class="linkbtn" data-thelp="1">📖 도움말 · 하는 법</button><button class="linkbtn" data-tset="1">⚙️ 설정</button><button class="linkbtn" data-tcred="1">만든 사람</button></div>' +
+    '<p class="legal">칩 환전 · 현금 시상 없음 — 매출은 참가비와 음료뿐. 판정 근거는 TDA 케이스 문서(원문 확인 전).</p>', true);
   $('[data-tset]').onclick = function () { openSettings(titleScreen); };
   $('[data-thelp]').onclick = function () { openHelp(titleScreen); };
   $('[data-tcred]').onclick = function () { openCredits(titleScreen); };
@@ -3234,7 +3273,7 @@ function prepScreen(tab) {
   var cfg = G.cfg;
   // 해고된 딜러가 배치에 남아 있으면 비운다
   cfg.assign = cfg.assign.map(function (id) { return G.roster.some(function (s) { return s.id === id && s.role === 'dealer'; }) ? id : null; });
-  var tabs = [['shop', '상점'], ['decor', '꾸미기'], ['staff', '직원'], ['chips', '칩 · 구조'], ['drinks', '음료'], ['dealers', '딜러 배치'], ['resv', '예약'], ['regs', '단골']];
+  var tabs = [['shop', '🏪', '상점'], ['decor', '🎨', '꾸미기'], ['staff', '👥', '직원'], ['dealers', '🃏', '딜러'], ['chips', '🎲', '칩 · 구조'], ['drinks', '🍺', '음료'], ['resv', '📋', '예약'], ['regs', '⭐', '단골']];
   var info = dayInfo(), first = G.day - info.wd;
   var cal = '<div class="cal">' + WEEKDAYS.map(function (wd, i) {
     var di = dayInfo(first + i), past = i < info.wd, today = i === info.wd;
@@ -3242,12 +3281,20 @@ function prepScreen(tab) {
     return '<div class="cd' + (today ? ' today' : '') + (past ? ' past' : '') + (i >= 4 ? ' ev' + i : '') + '"><b>' + wd + '</b><span>' + di.short + '</span>' +
       (logd ? '<em>' + '★'.repeat(logd.stars) + '</em>' : '') + '</div>';
   }).join('') + '</div>';
-  var h = '<div class="kicker">' + info.week + '주차 ' + info.wk + '요일 · 17:30 · 오픈 준비</div><h2>' + info.name + '</h2>' +
-    '<p class="note" style="margin-top:-4px">' + info.desc + '</p>' + cal +
-    '<div class="bankline">자금 <b>' + won(G.bank) + '원</b> · 평판 <b>' + Math.round(G.rep) + '</b> · <span class="rank">' + rankOf(G.rep) + '</span> · 오늘 인건비 <b>' + won(wagesTotal()) + '</b></div>' +
-    seasonBar() + diffBox() + weekBox() + raiseBox() +
-    '<div class="goalbox"><b>🎯 오늘의 목표</b> (하나에 +' + won(GOAL_REWARD) + '원 · 평판 +2)<ol>' + G.goals.map(function (g) { return '<li>' + goalText(g) + '</li>'; }).join('') + '</ol></div>' +
-    '<div class="tabs">' + tabs.map(function (x) { return '<button data-tab="' + x[0] + '" class="' + (G.prepTab === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>';
+  /* 오늘 밤 카드 하나 + 목표 칩 셋 + 접힌 「이번 주」 — 위쪽을 가볍게 */
+  var wch = info.wd !== 6 ? weekChallenges() : null;
+  var wDone = wch ? wch.list.filter(function (c) { return !wcDef(c).low && wcDone(c); }).length : 0;
+  var monday = info.wd === 0 && G.day > 1;
+  var h = '<div class="hero ev' + info.wd + '"><div class="hero-l"><div class="kicker">' + info.week + '주차 ' + info.wk + '요일 · 오늘 밤</div>' +
+    '<h2>' + info.name + '</h2><p class="note">' + info.desc + '</p></div>' +
+    '<div class="hero-r"><div class="stat"><small>자금</small><b>' + won(G.bank) + '</b></div>' +
+    '<div class="stat"><small>평판 · ' + rankOf(G.rep) + '</small><b>' + Math.round(G.rep) + '</b></div></div></div>' +
+    raiseBox() +
+    '<div class="goalchips"><span class="gl">🎯 오늘 목표 <small>하나에 +' + won(GOAL_REWARD) + '</small></span>' + G.goals.map(function (g) { return '<span class="gchip">' + goalText(g) + '</span>'; }).join('') + '</div>' +
+    '<details class="weekfold"' + (monday ? ' open' : '') + '><summary>📅 이번 주 <span>시즌 ' + Math.min(SEASON_WEEKS, info.week) + '/' + SEASON_WEEKS + ' · 난이도 ' + diffLv() + '/6' +
+      (wch ? ' · 도전 ' + wDone + '/' + wch.list.length : '') + '</span></summary>' +
+      cal + seasonBar() + diffBox() + weekBox() + '<p class="note">오늘 인건비 ' + won(wagesTotal()) + '원</p></details>' +
+    '<div class="tabs">' + tabs.map(function (x) { return '<button data-tab="' + x[0] + '" class="' + (G.prepTab === x[0] ? 'on' : '') + '"><span class="ti">' + x[1] + '</span>' + x[2] + '</button>'; }).join('') + '</div>';
 
   if (G.prepTab === 'shop') {
     h += '<div class="shop">' + SHOP.map(function (it) {
@@ -3357,8 +3404,8 @@ function prepScreen(tab) {
   }
   var ready = cfg.assign.slice(0, tableCount()).every(function (x) { return x !== null && x !== undefined; });
   var stockCost = cfg.stock * STOCK_COST;
-  h += '<div class="prepfoot"><span class="note">영업 시작 시 재고 ' + won(stockCost) + '원이 나간다' + (ready ? '' : ' · <b>모든 테이블에 딜러를 배치하세요 (딜러 배치 탭)</b>') + '</span>' +
-    '<button class="cta" data-open="1"' + (ready ? '' : ' disabled') + '>영업 시작 — 18:00</button></div>';
+  h += '<div class="prepfoot"><span class="note">' + (ready ? '재고 ' + won(stockCost) + '원 · 인건비 ' + won(wagesTotal()) + '원' : '<b>모든 테이블에 딜러를 배치하세요 — 🃏 딜러 탭</b>') + '</span>' +
+    '<button class="cta go" data-open="1"' + (ready ? '' : ' disabled') + '>▶ 영업 시작 <small>18:00</small></button></div>';
   showModal(h, true);
 
   document.querySelectorAll('[data-tab]').forEach(function (b) { b.onclick = function () { prepScreen(b.getAttribute('data-tab')); }; });
@@ -3631,7 +3678,8 @@ function openDay() {
   if (G.absent.length) {
     toast('📵 노쇼 — ' + G.absent.map(function (x) { return x.name + '(' + ROLES[x.role].ko + ')'; }).join(' · ') + (msgs.length ? ' · ' + msgs.join(' · ') : '') + ' — 🧑‍💼 로 대타를 부를 수 있다');
     SFX.bad();
-  } else toast('18:00 — 영업 시작!' + (msgs.length ? ' · ' + msgs.join(' · ') : ''));
+  } else if (msgs.length) toast(msgs.join(' · '));
+  banner('18:00 OPEN', dayInfo().week + '주차 ' + dayInfo().wk + '요일 · ' + dayInfo().name, 'open');
   tip('open', '👟 바닥을 탭하면 점장이 걸어간다. 카운터 뒤에 서 있으면 등록이 빨라진다.');
   say(G.player, '오늘도 잘 부탁해요!', 2.5);
 }
@@ -3732,7 +3780,8 @@ function report(settleOk) {
   rows = rows.filter(function (r) { return r[1] !== 0 || !/보증금|믹스/.test(r[0]); });
   if (settleLoss) rows.push(['정산 오차 확인 비용', -settleLoss]);
   if (s.fines) rows.push(['벌금 (돌발 상황)', -s.fines]);
-  var starHTML = '<div class="stars">' + [0, 1, 2].map(function (i) { return '<span class="' + (i < stars ? 'on' : '') + '" style="animation-delay:' + (i * 0.25) + 's">★</span>'; }).join('') + '</div>';
+  var grade = stars === 3 && net > 0 ? 'S' : (stars >= 2 ? 'A' : (stars === 1 ? 'B' : 'C'));
+  var starHTML = '<div class="gradebox g' + grade + '"><span>' + grade + '</span></div><div class="stars">' + [0, 1, 2].map(function (i) { return '<span class="' + (i < stars ? 'on' : '') + '" style="animation-delay:' + (i * 0.25) + 's">★</span>'; }).join('') + '</div>';
   var h = '<div class="kicker">' + G.day + '일차 마감 · ' + clock(gameMin()) + '</div>' + starHTML +
     '<h2 style="text-align:center">' + ['아쉬운 밤', '무난한 밤', '좋은 밤', '완벽한 밤'][stars] + '</h2>' +
     (rankAfter !== rankBefore ? '<div class="rankup">' + (G.rep > s.repStart ? '🎉 펍 등급 상승 — ' : '펍 등급 하락 — ') + '<b>' + rankAfter + '</b></div>' : '') +
@@ -3740,11 +3789,11 @@ function report(settleOk) {
     '<h3>🎯 오늘의 목표</h3><ul class="goals">' + G.goals.map(function (g, i) { return '<li class="' + (done[i] ? 'ok' : 'no') + '">' + (done[i] ? '✓ ' : '✗ ') + goalText(g) + '</li>'; }).join('') + '</ul>' +
     (settleOk ? '<p>✓ 레지 정산이 맞았다.</p>' : '<p>✗ 레지 정산이 틀렸다 — 차액을 맞추느라 마감이 늦어졌다.</p>') +
     '<table class="rows">' + rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + (r[1] < 0 ? '−' : '') + won(Math.abs(r[1])) + '</td></tr>'; }).join('') +
-    '<tr class="total"><td>순이익</td><td>' + (net < 0 ? '−' : '') + won(Math.abs(net)) + '</td></tr>' +
+    '<tr class="total"><td>순이익</td><td><span data-countup="' + net + '">' + (net < 0 ? '−' : '') + won(Math.abs(net)) + '</span></td></tr>' +
     '<tr><td>자금</td><td>' + won(G.bank) + '</td></tr></table>' +
     '<h3>운영</h3><p>플로어 호출 — 맞음 <b>' + s.right + '</b> · 틀림 <b>' + s.wrong + '</b> · 못 감 <b>' + s.missed + '</b>' + (s.angry ? ' · 화나서 나간 손님 ' + s.angry : '') + '<br>' +
     '아나운스 ' + s.ann + '건' + (s.annByStaff ? ' (직원 ' + s.annByStaff + ')' : '') + ' · 틀림 ' + s.annWrong + ' · 놓침 ' + s.annMiss + ' · 밸런싱 ' + s.balanced + '건' + (s.balanceMiss ? ' (놓침 ' + s.balanceMiss + ')' : '') + '<br>' +
-    '청소 ' + s.cleaned + '건 · 바닥이 젖어 있던 시간 ' + Math.round(s.spillSec) + '초 · 음료 품절로 못 판 것 ' + s.noStock + '건</p>' +
+    '청소 ' + s.cleaned + '건 · 바닥이 젖어 있던 시간 ' + Math.round(s.spillSec) + '초 · 음료 품절로 못 판 것 ' + s.noStock + '건' + (s.maxCombo >= 2 ? '<br>🔥 최고 판정 콤보 ×' + s.maxCombo : '') + '</p>' +
     '<h3>손님</h3><p>평균 만족도 ' + Math.round(avgSat) + ' · 줄이 길어 돌아간 손님 ' + (s.lost + s.queueLeave) + '명 · 평판 ' + Math.round(s.repStart) + ' → <b>' + Math.round(G.rep) + '</b> (' + rankAfter + ')</p>' +
     '<p>' + (G.winner ? '🏆 우승 ' + G.winner.name + ' — 트로피와 다음 대회 시드권' : '마감까지 결판이 나지 않았다 — 남은 사람들은 다음 대회 시드권') + '</p>' +
     (grown.length ? '<p class="note">직원 성장 — ' + grown.join(' · ') + ' 능력 +1</p>' : '') +
@@ -3760,6 +3809,7 @@ function report(settleOk) {
     (G.debtDays ? '<p class="warn">⚠️ 자금 마이너스 ' + G.debtDays + '일째 — 사흘 연속이면 폐업이다</p>' : '') +
     '<button class="cta" data-next-day="1">' + (G.debtDays >= 3 ? '…' : (dayInfo(G.day + 1).wd === 6 ? '🗓️ 일요일 — 주간 정산' : '다음 날 영업 준비')) + '</button> <button class="cta ghost" data-restart="1">타이틀로</button>';
   showModal(h, true);
+  countUp();
   if (stars === 3 || rankAfter !== rankBefore && G.rep > s.repStart) { SFX.win(); confetti(V(0, 0)); } else if (stars) SFX.good();
   G.day++; G.cfg.train = null; G.cfg.chipOk = null;
   saveGame();
@@ -3861,7 +3911,7 @@ function seasonBar() {
 // ═══════════════════════════════════════════════════
 // 출시용 껍데기 — 설정 · 일시정지 · 도움말 · 기록 · 만든 사람
 // ═══════════════════════════════════════════════════
-var VERSION = '1.0';
+var VERSION = '1.1';
 var SET_KEY = 'pubsim.settings', REC_KEY = 'pubsim.records';
 var SETTINGS = { music: 0.7, sfx: 1, quality: 'auto', motion: 'auto', talk: true };
 var SET_OK = {   // 저장된 설정이 망가져 있으면 기본값을 쓴다
@@ -3925,10 +3975,23 @@ function openPause() {
   G.menu = 'pause'; G.paused = true;
   showModal('<div class="kicker">' + clock(gameMin()) + ' · 일시정지</div><h2>❚❚ 잠깐 쉬는 중</h2>' +
     '<p class="note">오늘 목표 — ' + G.goals.map(goalText).join(' · ') + '</p>' +
+    '<div class="qtog">' +
+      '<button data-music="1" class="' + (MUSIC.on ? 'on' : '') + '">🎵<small>음악</small></button>' +
+      '<button data-mute="1" class="' + (MUTED ? '' : 'on') + '">' + (MUTED ? '🔇' : '🔊') + '<small>효과음</small></button>' +
+      '<button data-talk="1" class="' + (G.talkOn ? 'on' : '') + '">💬<small>잡담</small></button>' +
+      '<button data-follow="1" class="' + (cam.follow ? 'on' : '') + '">📍<small>따라가기</small></button></div>' +
     '<div class="menu"><button class="cta" data-resume="1">▶ 계속하기</button>' +
     '<button class="cta ghost" data-mset="1">⚙️ 설정</button><button class="cta ghost" data-mhelp="1">📖 도움말</button>' +
     '<button class="cta ghost" data-mtitle="1">타이틀로</button></div>');
   $('[data-resume]').onclick = resumeGame;
+  // 빠른 토글 — 누르면 바로 바뀌고 메뉴를 다시 그린다
+  $('[data-music]').onclick = function () {
+    audioOn(); if (MUSIC.on) setMusic.last = SETTINGS.music; SETTINGS.music = MUSIC.on ? 0 : (setMusic.last || 0.7);
+    saveSettings(); applySettings(); openPause();
+  };
+  $('[data-mute]').onclick = function () { MUTED = !MUTED; openPause(); };
+  $('[data-talk]').onclick = function () { SETTINGS.talk = !G.talkOn; saveSettings(); applySettings(); openPause(); };
+  $('[data-follow]').onclick = function () { cam.follow = !cam.follow; if (cam.follow) cam.dist = Math.min(cam.dist, 16); else fitCamera(); openPause(); };
   $('[data-mset]').onclick = function () { openSettings(openPause); };
   $('[data-mhelp]').onclick = function () { openHelp(openPause); };
   $('[data-mtitle]').onclick = function () {

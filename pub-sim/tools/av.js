@@ -28,14 +28,17 @@ const SHOT = process.argv[2] === 'shot';
   await page.waitForTimeout(3000);
   out.music = await G((m0) => { const M = window.__pub.__music; return { on: M.on, beatsIn3s: M.beat - m0, murmur: M.mur ? Math.round(M.mur.gain.value * 1000) / 1000 : null, master: M.master ? M.master.gain.value : null }; }, m0);
   // 음악 상태 — 내부 값은 클로저 안이라 HUD 버튼 · AudioContext 로 본다
+  // 🎵 는 1.1 부터 일시정지 메뉴의 빠른 토글에 있다
+  await page.click('[data-pause]');
   out.hudMusic = await G(() => { const b = document.querySelector('[data-music]'); return b ? b.className : null; });
   await page.click('[data-music]');
   out.afterToggle = await G(() => document.querySelector('[data-music]').className);
   await page.click('[data-music]');
   out.afterToggle2 = await G(() => document.querySelector('[data-music]').className);
+  await page.click('[data-resume]');
   if (SHOT) {
     await G(() => { window.__pub.speed = 1; });
-    await page.click('[data-follow]');
+    await page.click('[data-pause]'); await page.click('[data-follow]'); await page.click('[data-resume]');
     await page.waitForTimeout(1500);
     await page.screenshot({ path: 'av-close.png' });
   }
