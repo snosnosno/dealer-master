@@ -588,6 +588,19 @@ details.weekfold[open] > summary { margin: 0 -10px 8px; border-bottom: 1px solid
 .dexc.got { border-color: var(--glass-line, var(--amber)); background: var(--amber-bg); }
 .dexc.got b { color: var(--ink); }
 .dexc.got .no { color: var(--amber-ink); }
+/* 1.4 — 빠른 판정 막대 · 도감 보상 · 연습실 */
+.qbar { position: relative; height: 22px; border-radius: 11px; background: rgba(255,255,255,.06); overflow: hidden; margin: 4px 0 10px; }
+.qbar i { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: linear-gradient(90deg, var(--gold-b, #E99A2C), var(--gold-a, #FFE38F)); }
+.qbar span { position: relative; padding: 0 10px; font: 700 12px/22px var(--mono); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.75); }
+.qbar.over i { width: 0 !important; }
+.qbar.over span { color: var(--ink-3); text-shadow: none; }
+.quick { margin: 0 0 8px; text-align: center; font-weight: 800; color: var(--gold-a, var(--amber)); letter-spacing: .02em; }
+.dexgifts { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 0; }
+.dexgifts span { font-size: 12px; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-3); }
+.dexgifts span.on { border-color: var(--amber); color: var(--amber-ink); background: var(--amber-bg); }
+.dexgifts b { font-family: var(--mono); }
+/* 터치 화면 — 탭한 자리의 hover 가 다음 창의 선택지에 남아 「힌트」처럼 보이지 않게 */
+@media (hover: none) { .choice:hover { border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.04); transform: none; } }
 </style>
 </head>
 <body>

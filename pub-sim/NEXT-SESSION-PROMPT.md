@@ -1,4 +1,4 @@
-# 다음 세션 프롬프트 — 홀덤펍 점장 1.3 판정 다듬기 뒤
+# 다음 세션 프롬프트 — 홀덤펍 점장 1.4 판정 놀이 뒤
 
 > 이 파일을 새 세션에 그대로 붙여 넣는다. 매번 **새로 쓴다** — 지난 지시 위에 덧붙이지 않는다.
 
@@ -6,7 +6,7 @@
 
 ## 0. 먼저 할 것
 
-1. **사용자에게 1.2 를 해 본 소감을 받는다** — `DESIGN.md` §25 「1.2 해 보고 답해 줄 것」 넷(판정 빈도 · 글 길이 · 정답이 길이로 보이나 · 이상한 케이스), §24 「1.1 해 보고 답해 줄 것」 넷. 그다음 1.0 의 — `DESIGN.md` §22 「14판 재미 게이트」 세 문항과 §23 「밸런스 메모」 · 「출시 전에 사람이 할 것」. 답이 오기 전에는 새 기능을 얹지 않는다(출시판이다 — 버그 · 밸런스 · 사람이 정한 것만).
+1. **사용자에게 1.2 를 해 본 소감을 받는다** — `DESIGN.md` §27 「1.4 해 보고 답해 줄 것」 셋(⚡ 막대 · 연습실 · 도감 보상), §25 「1.2 해 보고 답해 줄 것」 넷(판정 빈도 · 글 길이 · 정답이 길이로 보이나 · 이상한 케이스), §24 「1.1 해 보고 답해 줄 것」 넷. 그다음 1.0 의 — `DESIGN.md` §22 「14판 재미 게이트」 세 문항과 §23 「밸런스 메모」 · 「출시 전에 사람이 할 것」. 답이 오기 전에는 새 기능을 얹지 않는다(출시판이다 — 버그 · 밸런스 · 사람이 정한 것만).
    답이 없으면 묻고, 답에 맞춰 바꿀 것을 정한 뒤 시작한다. 짐작으로 새 기능을 얹지 않는다.
 2. **ECC(Everything Claude Code)** 로 진행한다.
    - 레포 브랜치 `claude/great-ramanujan-r33ul4` 의 `.claude/` 에 프로젝트 단위로 설치돼 있다(v2.2.3, 사용법 `.claude/ECC-사용법.md`).
@@ -24,8 +24,8 @@
 - 게임은 **`pub-sim/`** — 딜러마스터와 **별도 게임**. 빌드 없음, 폴더째 옮길 수 있다
   - `index.html`(스타일 · 껍데기) · `game.js`(약 3,800줄, 전부 여기, ES5 IIFE) · `vendor/three.min.js`(r149, MIT)
   - `DESIGN.md` — **설계 정본**. §9~§14 판별 피드백, §15~§20 로드맵 ③~⑦(8~12판), **§21 12판 게이트 답 → 13판 · §22 14판(주간 도전 · 쇼다운 연출) · §23 1.0 출시판(설정 · 일시정지 · 도움말 · 기록 · 오류 안전망 · QA)**. 실행 · 배포는 `README.md`
-  - `tools/` — `build-artifact.py` · `autoplay.js` · `weekend.js` · `noshow.js` · `events.js` · `staff.js` · `decor.js` · `table.js` · `av.js` · `growth.js` · `week.js` · `release.js` · `cases.js`
-- 폰 링크(비공개 Artifact): **https://claude.ai/artifact/K1UXZgBs2dT8LTZvX9X9BP** — 지금 **1.3** (판정 다듬기)
+  - `tools/` — `build-artifact.py` · `autoplay.js` · `weekend.js` · `noshow.js` · `events.js` · `staff.js` · `decor.js` · `table.js` · `av.js` · `growth.js` · `week.js` · `release.js` · `cases.js` · `drill.js`
+- 폰 링크(비공개 Artifact): **https://claude.ai/artifact/K1UXZgBs2dT8LTZvX9X9BP** — 지금 **1.4** (판정 놀이)
 
 ## 2. 지금 게임 (13판까지 — 다시 만들지 마라)
 
@@ -34,6 +34,7 @@
 - 직원 채용 · 노쇼 · 대타 · 능력 성장, 주간 캠페인(금 딥스택 · 토 메인 · 일 정산 · 8주 시즌 · 폐업), 단골 12명 · 금/토 예약
 - 8판 돌발 이벤트 7종 · 9판 직원 깊이(특성 · 사기 · 칭찬 · 인상 요청 · 교육 트리) · 10판 꾸미기(테마 3 · 장식 4 · 배치 모드)
   · 11판 테이블 깊이(실제 족보 · 보드 · PLO8 믹스 테이블) · 12판 그래픽 · 사운드(캐릭터 · 라운지 음악 · 웅성거림)
+- **1.4**: ⚡ 빠른 판정 막대(평판 +0.3) · 케이스 당사자 반응 · 도감 보상(9 · 18 · 27) · 🎯 판정 연습실(타이틀, 5문제 · 등급 · 최고 기록)
 - **1.3**: 오답에도 이유를 붙여 선택지 길이 균형 · 상황 글 한 문장씩 · 📚 판정 도감(맞힌 케이스, 기록에 남음 — 타이틀 · 일시정지)
 - **1.2**: 케이스 판정 27종(`CASES` — TDA 케이스 문서 1~30 중 동적 판정 5 · 6 · 19 제외). 플로어 호출의 절반 · 판정 교육의 절반. 이름 조사는 `fillNames` 가 받침에 맞춤
 - **1.1**: 리디자인 — 어두운 금색 스킨 · HUD 버튼 넷(☰ 메뉴에 빠른 토글) · 「오늘 밤」 카드 + 목표 칩 + 접힌 이번 주 · 아이콘 탭 · 고정 시작 버튼 · 네온 간판 · 판정 콤보 · 도장 · OPEN 배너 · 마감 등급 S/A/B/C
@@ -70,6 +71,7 @@ node tools/autoplay.js 2 perfect          # 이틀(약 5분) — errors [] · �
 node tools/weekend.js; node tools/noshow.js
 node tools/events.js [handle|timeout] [종류,…]
 node tools/cases.js [shot]   # 케이스 27건 — bad [] · mix 에 X 없음
+node tools/drill.js [shot]   # 연습실 · ⚡ 막대 · 도감 보상 (진짜 21초 기다림 포함)
 node tools/staff.js; node tools/growth.js [shot]; node tools/week.js [shot]; node tools/release.js [shot]; node tools/decor.js [shot]; node tools/table.js [shot]; node tools/av.js [shot]
 python3 tools/build-artifact.py <스크래치패드>/pub-artifact
 cp game.js <스크래치패드>/pub-artifact/game.js; mkdir -p <스크래치패드>/pub-artifact/vendor; cp vendor/three.min.js <스크래치패드>/pub-artifact/vendor/
@@ -77,10 +79,10 @@ cp game.js <스크래치패드>/pub-artifact/game.js; mkdir -p <스크래치패�
 
 - 점검 도구는 **현재 폴더에 스크린샷을 남긴다** — 스크래치패드에서 실행한다(`pub-sim/.gitignore` 가 `*.png` 를 막는다)
 - 게시: Artifact 도구로 `<스크래치패드>/pub-artifact/index.html` 을 publish, `files` 에 `{"game.js": …/pub-artifact/game.js, "vendor/three.min.js": …/pub-artifact/vendor/three.min.js}`
-  (파일은 작업 폴더나 스크래치패드 안이어야 한다), **url 은 위 링크**, `label` 은 「1.3.1 — …」 (수정은 1.3.x — game.js 의 VERSION 도 함께 올린다)
+  (파일은 작업 폴더나 스크래치패드 안이어야 한다), **url 은 위 링크**, `label` 은 「1.4.1 — …」 (수정은 1.4.x — game.js 의 VERSION 도 함께 올린다)
 - 새 대화에서는 먼저 `action: "read"` 로 읽는다. 게시된 `game.js` 를 안 읽었다고 막히면 `list`(scope files) · 레포 커밋의 sha256 과 비교해 같은 판인지 확인한다
 
 ## 6. 끝나면
 
-`DESIGN.md` 에 §27~ 로 게이트 답 · 변경 · 자동 점검 결과를 남기고, 사용자에게 링크와 다음 재미 게이트 질문을 준다.
+`DESIGN.md` 에 §28~ 로 게이트 답 · 변경 · 자동 점검 결과를 남기고, 사용자에게 링크와 다음 재미 게이트 질문을 준다.
 이 파일을 다음 세션용으로 **새로 쓴다**.

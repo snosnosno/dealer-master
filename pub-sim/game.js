@@ -317,12 +317,84 @@ function openDex(back) {
   var got = caseDex();
   showModal('<div class="kicker">판정 도감 · ' + got.length + ' / ' + CASES.length + '</div><h2>📚 맞혀 본 케이스</h2>' +
     '<p class="note">영업 중 플로어 호출로 나온 케이스를 맞히면 채워진다. 근거는 TDA 케이스 문서 — 원문 확인 전.</p>' +
+    '<div class="dexgifts">' + [9, 18, 27].map(function (k) { return '<span class="' + (got.length >= k ? 'on' : '') + '"><b>' + k + '</b> ' + DEX_GIFTS[k].t.split(' — ')[0] + '</span>'; }).join('') + '</div>' +
     '<div class="dex">' + CASES.map(function (c) {
       var ok = got.indexOf(c.n) >= 0;
       return '<div class="dexc' + (ok ? ' got' : '') + '"><span class="no">' + c.n + '</span><b>' + (ok ? c.tag : '？') + '</b><small>' + (ok ? c.rule.split(' (')[0].split(' ·')[0] : '아직') + '</small></div>';
     }).join('') + '</div>' +
     '<div class="titlebtns"><button class="cta" data-back="1">돌아가기</button></div>');
   $('[data-back]').onclick = back;
+}
+/* ⚡ 빠른 판정 — 판정 창 위에 줄어드는 막대. 실제 시간으로 잰다(판정 중 시뮬레이션은 멈춰 있다).
+   시간은 글 길이에 맞춘다 — 읽을 시간은 준다 */
+var QUICK_BONUS = 0.3;
+function quickSecs(html) { return Math.round(6 + html.replace(/<[^>]+>/g, '').length / 18); }
+function startQuickBar(secs, onEnd) {
+  var t0 = performance.now(), last = t0, bar = $('.qbar i'), lab = $('.qbar span'), box = { t0: t0 };
+  (function step() {
+    if (!bar || !bar.isConnected) return;   // 창이 닫혔거나 바뀌었다
+    var nowT = performance.now();
+    if (nowT - last > 1000) { t0 += nowT - last; box.t0 = t0; }   // 화면이 꺼졌던 시간(앱 전환 · 잠금)은 세지 않는다
+    last = nowT;
+    var left = Math.max(0, secs - (performance.now() - t0) / 1000);
+    bar.style.width = (left / secs * 100) + '%';
+    if (lab) lab.textContent = left > 0 ? '⚡ ' + Math.ceil(left) + '초' : '⚡ 시간 끝';
+    if (left > 0) requestAnimationFrame(step);
+    else { bar.parentNode.classList.add('over'); if (onEnd) onEnd(); }
+  })();
+  return box;
+}
+/* 도감 보상 — 9 · 18 · 27 건째에 한 번씩(평생 한 번) */
+var DEX_GIFTS = {
+  9: { t: '🎁 평판 +2', fn: function () { G.rep = clamp(G.rep + 2, 0, 100); } },
+  18: { t: '🖼️ 아트월 선물 — 오픈 준비 · 꾸미기에서 놓는다', fn: function () { G.decorInv.artwall = decorCount('artwall') + 1; } },
+  27: { t: '🏅 명예 플로어 칭호 · 평판 +5', fn: function () { G.rep = clamp(G.rep + 5, 0, 100); } }
+};
+/* 🎯 판정 연습실 — 타이틀에서 케이스 5문제. 문제마다 20초, 빨리 맞힐수록 점수. 도감에는 넣지 않는다 */
+var DRILL_N = 5, DRILL_S = 20;
+function drillGrade(sc) { return sc >= 650 ? 'S' : sc >= 500 ? 'A' : sc >= 350 ? 'B' : 'C'; }
+function openDrill(back) {
+  var st = { i: 0, score: 0, right: 0 }, keep = G.recentCases;
+  G.recentCases = [];   // 연습실 문제는 영업 출제 기록과 따로 — 끝나면 되돌린다
+  function quit() { G.recentCases = keep; back(); }
+  function ask() {
+    var q = caseQuestion(), order = shuffle([0, 1, 2]), correct = order.indexOf(0);
+    var opts = order.map(function (i) { return q.opts[i]; }), done = false, t0;
+    showModal('<div class="kicker">🎯 판정 연습실 · ' + (st.i + 1) + ' / ' + DRILL_N + ' · ' + st.score + '점</div><h2>' + q.title + '</h2>' + q.body +
+      '<div class="qbar"><i></i><span></span></div><div class="choices">' +
+      opts.map(function (o, i) { return '<button class="choice" data-dr="' + i + '">' + o + '</button>'; }).join('') + '</div>' +
+      '<div class="titlefoot"><button class="linkbtn" data-dquit="1">그만하기</button></div>');
+    $('[data-dquit]').onclick = function () { done = true; quit(); };
+    function answer(ix) {
+      if (done) return; done = true;
+      var el = (performance.now() - t0.t0) / 1000, ok = ix === correct;
+      var pts = ok ? 100 + Math.round(50 * Math.min(1, Math.max(0, 1 - el / DRILL_S))) : 0;   // 속도 점수 0~50
+      st.score += pts; if (ok) st.right++; st.i++;
+      if (ok) SFX.good(); else SFX.bad();
+      showModal('<div class="stamp ' + (ok ? 'ok' : 'no') + '">' + (ok ? (pts >= 135 ? 'FAST!' : 'GOOD') : (ix < 0 ? 'TIME' : 'MISS')) + '</div>' +
+        '<div class="kicker">🎯 판정 연습실 · ' + st.i + ' / ' + DRILL_N + '</div>' +
+        '<div class="verdict ' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓ 정답 +' + pts + '점' : (ix < 0 ? '⏱ 시간 초과' : '✗ 오답')) + '</div>' +
+        '<div class="choices" style="margin-bottom:10px">' + opts.map(function (o, i) {
+          return '<div class="choice' + (i === correct ? ' right' : (i === ix ? ' wrong' : '')) + '">' + o + '</div>';
+        }).join('') + '</div><p>' + q.why + '</p>' + q.cite +
+        '<button class="cta" data-dnext="1">' + (st.i < DRILL_N ? '다음 문제' : '결과 보기') + '</button>');
+      $('[data-dnext]').onclick = st.i < DRILL_N ? ask : result;
+    }
+    t0 = startQuickBar(DRILL_S, function () { answer(-1); });
+    document.querySelectorAll('[data-dr]').forEach(function (b) { b.onclick = function () { answer(+b.getAttribute('data-dr')); }; });
+  }
+  function result() {
+    var r = loadRecords(), best = r.drillBest || 0, g = drillGrade(st.score), nb = st.score > best;
+    if (nb) { r.drillBest = st.score; try { localStorage.setItem(REC_KEY, JSON.stringify(r)); } catch (e) { /* 무시 */ } }
+    if (g === 'S') SFX.win();   // 타이틀에서는 3D 효과가 멈춰 있다 — 소리만
+    showModal('<div class="titlecard"><div class="kicker">🎯 판정 연습실 결과</div><div class="gradebox g' + g + '"><span>' + g + '</span></div>' +
+      '<h2>' + st.score + '점</h2><p class="sub">' + DRILL_N + '문제 중 ' + st.right + '개 정답' + (nb ? ' · 🎉 최고 기록!' : ' · 최고 ' + best + '점') + '</p></div>' +
+      '<p class="note">빨리 맞힐수록 점수가 크다(문제당 100 + 속도 최대 50). 영업 중 판정을 맞혀야 📚 도감이 찬다.</p>' +
+      '<div class="titlebtns"><button class="cta" data-dagain="1">한 번 더</button><button class="cta ghost" data-back="1">돌아가기</button></div>', true);
+    $('[data-dagain]').onclick = function () { G.recentCases = keep; openDrill(back); };
+    $('[data-back]').onclick = quit;
+  }
+  ask();
 }
 /* 교육용 — 테이블 없이 케이스 하나 */
 function caseQuestion() {
@@ -1375,7 +1447,7 @@ function newDay() {
     entries: 0, unique: 0, drinks: 0, noStock: 0, right: 0, wrong: 0, missed: 0, lost: 0, angry: 0,
     satSum: 0, satN: 0, repStart: G.rep, ann: 0, annMiss: 0, annWrong: 0, cleaned: 0, spillSec: 0,
     balanced: 0, balanceMiss: 0, queueLeave: 0, annByStaff: 0, regVisits: 0, depositRev: 0,
-    events: [], fines: 0, mixFee: 0, maxCombo: 0
+    events: [], fines: 0, mixFee: 0, maxCombo: 0, quick: 0
   };
   G.grownToday = []; G.combo = 0;
   G.evPlan = planEvents(); G.groupArr = []; G.groupBoost = 0; G.blackout = false;
@@ -1982,7 +2054,11 @@ function resolveCall(task, result) {
   if (result === 'right') {
     G.stats.right++; G.rep = clamp(G.rep + 1.5, 0, 100); comboHit(true);
     cs.forEach(function (c) { c.sat = clamp(c.sat + 8, 0, 100); });
-    if (cs.length) say(pick(cs), pick(['깔끔하네요 👍', '역시 점장님', '오케이 인정']), 2.4);
+    var who = task.type === 'case' && task.data ? cs.filter(function (c) { return c.name === task.data.names[0]; })[0] : null;
+    if (who) say(who, pick(['아… 인정합니다 🙇', '룰이 그렇다면야', '오늘 하나 배웠네요', '다음엔 조심할게요']), 2.6);
+    var fan = cs.filter(function (c) { return c !== who; });
+    if (fan.length) say(pick(fan), G.combo >= 3 ? pick(['👏👏 오늘 플로어 미쳤다', '👏 판정 장인', '👏 이 펍 믿고 친다']) : pick(['깔끔하네요 👍', '역시 점장님', '오케이 인정']), 2.4);
+    if (G.combo >= 3) SFX.chips();
     floatText(at, '평판 +1.5', 'good');
     SFX.good();
   } else if (result === 'wrong') {
@@ -3170,8 +3246,10 @@ function openCall(task) {
     cite = SRC.under;
   }
   task.correct = correct;
-  showModal(head + '<h2>' + title + '</h2>' + body + '<div class="choices">' +
+  showModal(head + '<h2>' + title + '</h2>' + body + '<div class="qbar"><i></i><span></span></div><div class="choices">' +
     choices.map(function (ch, i) { return '<button class="choice" data-ch="' + i + '">' + ch + '</button>'; }).join('') + '</div>');
+  task.quickS = quickSecs(body + choices.join(''));
+  task.quickBox = startQuickBar(task.quickS);
   document.querySelectorAll('[data-ch]').forEach(function (b) {
     b.onclick = function () { var ix = +b.getAttribute('data-ch'); verdict(task, ix === correct, why, cite, choices, correct, ix); };
   });
@@ -3186,7 +3264,16 @@ function verdict(task, ok, why, cite, choices, correct, pickIx, extra) {
     }).join('') + '</div>';
   }
   if (extra) h += '<p>' + extra + '</p>';
-  if (ok && task.type === 'case') { var dn = markCase(task.data.id); if (dn) h += '<div class="dexnew">📚 판정 도감 +1 — ' + dn + ' / ' + CASES.length + (dn === CASES.length ? ' · 전부 모았다!' : '') + '</div>'; }
+  if (ok && task.quickS && (performance.now() - task.quickBox.t0) / 1000 <= task.quickS) {   // ⚡ 빠른 판정
+    G.rep = clamp(G.rep + QUICK_BONUS, 0, 100); G.stats.quick = (G.stats.quick || 0) + 1;
+    h += '<div class="quick">⚡ 빠른 판정 — 평판 +' + QUICK_BONUS + '</div>';
+    tone(1760, 0.08, 'triangle', 0.06, 0.25);
+  }
+  if (ok && task.type === 'case') {
+    var dn = markCase(task.data.id), gift = DEX_GIFTS[dn];
+    if (gift) gift.fn();
+    if (dn) h += '<div class="dexnew">📚 판정 도감 +1 — ' + dn + ' / ' + CASES.length + (dn === CASES.length ? ' · 전부 모았다!' : '') + (gift ? '<br>' + gift.t : '') + '</div>';
+  }
   h += '<p>' + why + '</p><div class="cite"><b>근거</b> ' + cite + '<span class="unverified">원문 확인 전</span></div>' +
     '<button class="cta" data-ok="1">테이블로 돌아간다</button>';
   showModal(h);
@@ -3389,7 +3476,9 @@ function titleScreen() {
     '<div class="pitch"><span>👟 직접 걷고</span><span>🚨 판정하고</span><span>🏆 키운다</span></div>' +
     '<div class="titlebtns">' +
     (sv ? '<button class="cta" data-cont="1">이어하기 — ' + dayInfo(sv.day).week + '주차 ' + dayInfo(sv.day).wk + '요일 · ' + rankOf(sv.rep) + '</button>' : '') +
-    '<button class="cta' + (sv ? ' ghost' : '') + '" data-go="1">' + (sv ? '새로 시작' : '오픈 준비') + '</button></div>' +
+    '<button class="cta' + (sv ? ' ghost' : '') + '" data-go="1">' + (sv ? '새로 시작' : '오픈 준비') + '</button>' +
+    '<button class="cta ghost" data-drill="1">🎯 판정 연습실 — 5문제' + (rec.drillBest ? ' · 최고 ' + rec.drillBest + '점' : '') + '</button></div>' +
+    (caseDex().length >= CASES.length ? '<p class="note recline">🏅 명예 플로어 — 판정 도감 완성</p>' : '') +
     (corrupt ? '<p class="warn">저장 데이터가 손상돼 이어할 수 없다 — 새로 시작하면 덮어쓴다.</p>' : '') +
     (rec.seasons || rec.bankrupt ? '<p class="note recline">🏅 기록 — 시즌 ' + rec.seasons + '번 (클리어 ' + rec.clears + ') · 최고 평판 ' + rec.bestRep + ' · 최고 자금 ' + won(rec.bestBank) + '원' + (rec.bankrupt ? ' · 폐업 ' + rec.bankrupt + '번' : '') + '</p>' : '') +
     '<div class="titlefoot"><button class="linkbtn" data-tdex="1">📚 판정 도감 ' + caseDex().length + '/' + CASES.length + '</button><button class="linkbtn" data-thelp="1">📖 도움말 · 하는 법</button><button class="linkbtn" data-tset="1">⚙️ 설정</button><button class="linkbtn" data-tcred="1">만든 사람</button></div>' +
@@ -3397,6 +3486,7 @@ function titleScreen() {
   $('[data-tset]').onclick = function () { openSettings(titleScreen); };
   $('[data-thelp]').onclick = function () { openHelp(titleScreen); };
   $('[data-tdex]').onclick = function () { openDex(titleScreen); };
+  $('[data-drill]').onclick = function () { audioOn(); openDrill(titleScreen); };
   $('[data-tcred]').onclick = function () { openCredits(titleScreen); };
   $('[data-go]').onclick = function () {
     audioOn();
@@ -4001,7 +4091,7 @@ function report(settleOk) {
     '<table class="rows">' + rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + (r[1] < 0 ? '−' : '') + won(Math.abs(r[1])) + '</td></tr>'; }).join('') +
     '<tr class="total"><td>순이익</td><td><span data-countup="' + net + '">' + (net < 0 ? '−' : '') + won(Math.abs(net)) + '</span></td></tr>' +
     '<tr><td>자금</td><td>' + won(G.bank) + '</td></tr></table>' +
-    '<h3>운영</h3><p>플로어 호출 — 맞음 <b>' + s.right + '</b> · 틀림 <b>' + s.wrong + '</b> · 못 감 <b>' + s.missed + '</b>' + (s.angry ? ' · 화나서 나간 손님 ' + s.angry : '') + '<br>' +
+    '<h3>운영</h3><p>플로어 호출 — 맞음 <b>' + s.right + '</b> · 틀림 <b>' + s.wrong + '</b> · 못 감 <b>' + s.missed + '</b>' + (s.quick ? ' · ⚡ 빠른 판정 <b>' + s.quick + '</b>' : '') + (s.angry ? ' · 화나서 나간 손님 ' + s.angry : '') + '<br>' +
     '아나운스 ' + s.ann + '건' + (s.annByStaff ? ' (직원 ' + s.annByStaff + ')' : '') + ' · 틀림 ' + s.annWrong + ' · 놓침 ' + s.annMiss + ' · 밸런싱 ' + s.balanced + '건' + (s.balanceMiss ? ' (놓침 ' + s.balanceMiss + ')' : '') + '<br>' +
     '청소 ' + s.cleaned + '건 · 바닥이 젖어 있던 시간 ' + Math.round(s.spillSec) + '초 · 음료 품절로 못 판 것 ' + s.noStock + '건' + (s.maxCombo >= 2 ? '<br>🔥 최고 판정 콤보 ×' + s.maxCombo : '') + '</p>' +
     '<h3>손님</h3><p>평균 만족도 ' + Math.round(avgSat) + ' · 줄이 길어 돌아간 손님 ' + (s.lost + s.queueLeave) + '명 · 평판 ' + Math.round(s.repStart) + ' → <b>' + Math.round(G.rep) + '</b> (' + rankAfter + ')</p>' +
@@ -4121,7 +4211,7 @@ function seasonBar() {
 // ═══════════════════════════════════════════════════
 // 출시용 껍데기 — 설정 · 일시정지 · 도움말 · 기록 · 만든 사람
 // ═══════════════════════════════════════════════════
-var VERSION = '1.3';
+var VERSION = '1.4';
 var SET_KEY = 'pubsim.settings', REC_KEY = 'pubsim.records';
 var SETTINGS = { music: 0.7, sfx: 1, quality: 'auto', motion: 'auto', talk: true };
 var SET_OK = {   // 저장된 설정이 망가져 있으면 기본값을 쓴다
@@ -4287,7 +4377,7 @@ G.__music = MUSIC;   // 자동 점검용
 G.__plan = planEvents; G.__type = pickType; G.__diff = diffK;   // 자동 점검용
 G.__weekly = weeklyScreen;   // 자동 점검용
 G.__case = function (tid, n) { var t = G.tables[tid], d = genCase(t); if (n) d.id = n; createCall(t, 'case', d); return d; };   // 자동 점검용
-G.__cases = CASES; G.__caseQ = caseQuestion; G.__open = openCall; G.__isMix = isMix;
+G.__cases = CASES; G.__caseQ = caseQuestion; G.__drill = openDrill; G.__open = openCall; G.__isMix = isMix;
 var confirmNew = { ok: false };   // 자동 점검이 새로 시작 확인을 건너뛸 때 쓴다
 G.__confirmNew = confirmNew;
 G.__eval = { best: best, eval5: eval5, plohi: bestPLOHigh, plolo: bestPLOLow, name: handName };   // 자동 점검용
