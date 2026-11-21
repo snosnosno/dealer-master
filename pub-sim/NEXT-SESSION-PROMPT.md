@@ -9,10 +9,9 @@
 1. **사용자에게 1.4 를 해 본 소감을 받는다** — `DESIGN.md` §27 「1.4 해 보고 답해 줄 것」 셋(⚡ 막대 · 연습실 · 도감 보상), §25 「1.2 해 보고 답해 줄 것」 넷(판정 빈도 · 글 길이 · 정답이 길이로 보이나 · 이상한 케이스), §24 「1.1 해 보고 답해 줄 것」 넷. 그다음 1.0 의 — `DESIGN.md` §22 「14판 재미 게이트」 세 문항과 §23 「밸런스 메모」 · 「출시 전에 사람이 할 것」. 답이 오기 전에는 새 기능을 얹지 않는다(출시판이다 — 버그 · 밸런스 · 사람이 정한 것만).
    답이 없으면 묻고, 답에 맞춰 바꿀 것을 정한 뒤 시작한다. 짐작으로 새 기능을 얹지 않는다.
 2. **ECC(Everything Claude Code)** 로 진행한다.
-   - 레포 브랜치 `claude/great-ramanujan-r33ul4` 의 `.claude/` 에 프로젝트 단위로 설치돼 있다(v2.2.3, 사용법 `.claude/ECC-사용법.md`).
-     그 브랜치를 체크아웃한 세션이면 에이전트(planner · code-reviewer …) · 스킬 · GateGuard 훅이 켜진다.
-   - 게임 브랜치 `claude/confident-lovelace-dmv6yd` 는 **git worktree** 로 따로 연다 — 체크아웃을 바꾸면 `.claude/` 가 사라져 훅이 깨진다:
-     `git fetch origin claude/confident-lovelace-dmv6yd && git worktree add -B claude/confident-lovelace-dmv6yd ../pub-wt origin/claude/confident-lovelace-dmv6yd`
+   - 레포의 `.claude/` 에 프로젝트 단위로 설치돼 있다(v2.2.3, 사용법 `.claude/ECC-사용법.md`) — **`main` 과 게임 브랜치 모두**에 있다(PR #2 병합).
+     어느 브랜치로 세션을 열어도 에이전트(planner · code-reviewer …) · 스킬 · GateGuard 훅이 켜진다.
+   - 세션은 게임 브랜치 `claude/confident-lovelace-dmv6yd` 로 바로 연다. worktree 는 더 필요 없다
    - ECC 가 세션에 없으면 한 줄로 알리고 같은 흐름을 기본 도구로 밟는다.
    - 흐름: **계획 → 구현 → `tools/` 자동 점검 → code-reviewer 에이전트(백그라운드로 띄우고 그동안 회귀 점검) → 지적 반영 → 커밋 · 푸시 → 게시**
    - GateGuard: 파일 첫 수정 · 새 파일 · 파괴적 명령 전에 「사실(쓰는 곳 · 바뀌는 것 · 사용자 지시 원문)」을 먼저 밝히라고 막는다. 밝힌 뒤 **같은 명령을 글자 그대로** 다시 보낸다
