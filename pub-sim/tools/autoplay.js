@@ -42,7 +42,11 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
     await page.click('[data-tab="dealers"]');
     await shot('dealers');
     await page.click('[data-open]');
-    await page.evaluate(() => { window.__pub.speed = 10; });
+    // 느린 컨테이너(소프트웨어 그래픽 ~8fps)에서는 10배속을 봇이 못 따라가 호출을 다 놓친다 — fps 를 재서 배속을 고른다. AP_SPEED 로 고정 가능
+    const fps = await page.evaluate(() => new Promise(r => { let n = 0; const t = performance.now(); (function f() { n++; if (performance.now() - t < 1000) requestAnimationFrame(f); else r(n); })(); }));
+    const speed = +process.env.AP_SPEED || (fps < 20 ? 3 : 10);
+    seen.speed = speed; seen.fps = fps;
+    await page.evaluate((s) => { window.__pub.speed = s; }, speed);
     for (let i = 0; i < 30000; i++) {
       const st = await page.evaluate(() => {
         const G = window.__pub, q = s => !!document.querySelector(s);
@@ -99,7 +103,7 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
         const id = await page.evaluate((lazy) => { const order = { announce: 0, call: 1, event: 2, balance: 3, spill: 4 }; const ts = window.__pub.tasks.filter(k => !lazy || k.kind === 'call').sort((a, b) => order[a.kind] - order[b.kind]); return ts.length ? ts[0].id : null; }, lazy);
         if (id === null) { await page.waitForTimeout(25); continue; }
         seen.taskClicks = (seen.taskClicks || 0) + 1;
-        try { await page.locator(`[data-task="${id}"]`).click({ timeout: 1500 }); } catch (e) { seen.clickMiss = (seen.clickMiss || 0) + 1; }
+        try { await page.locator(`[data-task="${id}"]`).click({ timeout: 5000 }); } catch (e) { seen.clickMiss = (seen.clickMiss || 0) + 1; }
       } else if (!st.walking && P) {
         await page.evaluate(() => window.__pub.goCounter());
         await page.waitForTimeout(40);
