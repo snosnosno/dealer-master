@@ -22,7 +22,7 @@
 - 레포 `snosnosno/dealer-master`, 브랜치 **`claude/confident-lovelace-dmv6yd`** (여기에 커밋 · 푸시)
 - 게임은 **`pub-sim/`** — 딜러마스터와 **별도 게임**. 빌드 없음, 폴더째 옮길 수 있다
   - `index.html`(스타일 · 껍데기) · `game.js`(약 4,400줄, 전부 여기, ES5 IIFE) · `vendor/three.min.js`(r149, MIT)
-  - `DESIGN.md` — **설계 정본**. §9~§14 판별 피드백, §15~§20 로드맵 ③~⑦(8~12판), **§21 12판 게이트 답 → 13판 · §22 14판(주간 도전 · 쇼다운 연출) · §23 1.0 출시판(설정 · 일시정지 · 도움말 · 기록 · 오류 안전망 · QA)**. 실행 · 배포는 `README.md`
+  - `DESIGN.md` — **설계 정본**. §9~§14 판별 피드백, §15~§20 로드맵 ③~⑦(8~12판), **§21 12판 게이트 답 → 13판 · §22 14판(주간 도전 · 쇼다운 연출) · §23 1.0 출시판(설정 · 일시정지 · 도움말 · 기록 · 오류 안전망 · QA) · §24 1.1 리디자인 · §25 1.2 케이스 판정 27종 · §26 1.3 판정 다듬기(선택지 길이 · 상황 줄 나눔 · 판정 도감) · §27 1.4 판정 놀이(⚡ 빠른 판정 · 도감 보상 · 연습실)**. 실행 · 배포는 `README.md`
   - `tools/` — `build-artifact.py` · `autoplay.js` · `weekend.js` · `noshow.js` · `events.js` · `staff.js` · `decor.js` · `table.js` · `av.js` · `growth.js` · `week.js` · `release.js` · `cases.js` · `drill.js`
 - 폰 링크(비공개 Artifact): **https://claude.ai/artifact/K1UXZgBs2dT8LTZvX9X9BP** — 지금 **1.4** (판정 놀이)
 
