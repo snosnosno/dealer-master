@@ -4211,7 +4211,7 @@ function seasonBar() {
 // ═══════════════════════════════════════════════════
 // 출시용 껍데기 — 설정 · 일시정지 · 도움말 · 기록 · 만든 사람
 // ═══════════════════════════════════════════════════
-var VERSION = '1.4.1';
+var VERSION = '1.4.2';
 var SET_KEY = 'pubsim.settings', REC_KEY = 'pubsim.records';
 var SETTINGS = { music: 0.7, sfx: 1, quality: 'auto', motion: 'auto', talk: true };
 var SET_OK = {   // 저장된 설정이 망가져 있으면 기본값을 쓴다

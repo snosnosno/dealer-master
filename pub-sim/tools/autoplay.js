@@ -1,4 +1,4 @@
-// 자동 플레이 — node tools/autoplay.js <일수> <perfect|random> [shot]
+// 자동 플레이 — node tools/autoplay.js <일수> <perfect|human|random> [shot]   (human: HUMAN_ACC=0.75 기본)
 // 1일차 영업 중 대타 딜러를 부르고, 2일차는 판정 호출만 하는 「게으른 점장」. 결과 JSON 을 출력한다.
 const path = require('path');
 const PAGE = 'file://' + path.resolve(__dirname, '..', 'index.html');
@@ -13,6 +13,13 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
   await page.goto(PAGE);
   await page.waitForTimeout(600);
   const P = MODE === 'perfect';
+  // human: 사람처럼 4번 중 3번 맞힌다(HUMAN_ACC 로 바꿈) — 밸런스를 perfect(위) · random(아래) 사이에서 잰다
+  const ACC = P ? 1 : MODE === 'human' ? (+process.env.HUMAN_ACC || 0.75) : 0;
+  const pickIx = (c, n, randomIx) => {
+    if (MODE === 'random') return randomIx;
+    if (Math.random() < ACC) return c;
+    return (c + 1 + Math.floor(Math.random() * (n - 1))) % n;   // 틀릴 땐 오답 중에서
+  };
   const seen = {}; const reports = []; let shots = {};
   const shot = async (n) => { if (SHOT && !shots[n]) { shots[n] = 1; await page.screenshot({ path: `v2-${n}.png` }); } };
   await shot('title'); await page.click('[data-go]');
@@ -37,7 +44,7 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
     await shot('chips');
     await page.click('[data-chipq]');
     const cq = await page.evaluate(() => window.__pub.current.correct);
-    await page.locator('[data-cq]').nth(P ? cq : 0).click();
+    await page.locator('[data-cq]').nth(pickIx(cq, await page.locator('[data-cq]').count(), 0)).click();
     await page.click('[data-back]');
     await page.click('[data-tab="dealers"]');
     await shot('dealers');
@@ -77,23 +84,23 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
       if (st.ch) { seen.call = (seen.call || 0) + 1; await shot('call');
         const c = await page.evaluate(() => window.__pub.current.correct);
         const n = await page.locator('[data-ch]').count();
-        await page.locator('[data-ch]').nth(P ? c : Math.floor(Math.random() * n)).click();
+        await page.locator('[data-ch]').nth(pickIx(c, n, Math.floor(Math.random() * n))).click();
       } else if (st.ev) { seen.event = (seen.event || 0) + 1; await shot('event');
         const c = await page.evaluate(() => window.__pub.current.correct);
         const n = await page.locator('[data-ev]').count();
-        await page.locator('[data-ev]').nth(P ? c : Math.floor(Math.random() * n)).click();
+        await page.locator('[data-ev]').nth(pickIx(c, n, Math.floor(Math.random() * n))).click();
       } else if (st.ok) { await page.click('[data-ok]'); }
       else if (st.ms) { seen.pos = (seen.pos || 0) + 1; await shot('pos');
         const p = await page.evaluate(() => window.__pub.current.data.pos);
-        if (P) { await page.click(`[data-ms="${p.btn}"]`); if (p.sbLive) await page.click(`[data-ms="${p.sbSeat}"]`); else await page.click('[data-nosb]'); await page.click(`[data-ms="${p.bb}"]`); }
+        if (MODE !== 'random' && Math.random() < ACC) { await page.click(`[data-ms="${p.btn}"]`); if (p.sbLive) await page.click(`[data-ms="${p.sbSeat}"]`); else await page.click('[data-nosb]'); await page.click(`[data-ms="${p.bb}"]`); }
         else { for (const s of [0, 1, 2]) await page.click(`[data-ms="${s}"]`); }
         await page.click('[data-confirm]');
       } else if (st.an) { seen.ann = (seen.ann || 0) + 1; await shot('announce');
         const c = await page.evaluate(() => window.__pub.current.correct);
-        await page.locator('[data-an]').nth(P ? c : 0).click();
+        await page.locator('[data-an]').nth(pickIx(c, await page.locator('[data-an]').count(), 0)).click();
       } else if (st.stl) { await shot('settle');
         const c = await page.evaluate(() => window.__pub.current.correct);
-        await page.locator('[data-st]').nth(P ? c : 0).click();
+        await page.locator('[data-st]').nth(pickIx(c, await page.locator('[data-st]').count(), 0)).click();
       } else if (await page.$('[data-place]')) { await page.click('[data-place]'); seen.placed = (seen.placed || 0) + 1; }
       else if (st.close) { await page.click('[data-close]'); }
       else if (st.modal) { await page.waitForTimeout(20); }
@@ -104,7 +111,7 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
         if (id === null) { await page.waitForTimeout(25); continue; }
         seen.taskClicks = (seen.taskClicks || 0) + 1;
         try { await page.locator(`[data-task="${id}"]`).click({ timeout: 5000 }); } catch (e) { seen.clickMiss = (seen.clickMiss || 0) + 1; }
-      } else if (!st.walking && P) {
+      } else if (!st.walking && MODE !== 'random') {
         await page.evaluate(() => window.__pub.goCounter());
         await page.waitForTimeout(40);
       } else await page.waitForTimeout(25);
