@@ -1,4 +1,4 @@
-# 다음 세션 프롬프트 — 홀덤펍 점장 1.4.1 뒤
+# 다음 세션 프롬프트 — 홀덤펍 점장 1.4.2 뒤
 
 > 이 파일을 새 세션에 그대로 붙여 넣는다. 매번 **새로 쓴다** — 지난 지시 위에 덧붙이지 않는다.
 
@@ -19,11 +19,11 @@
 
 - 레포 `snosnosno/dealer-master`. 게임은 **`pub-sim/`** — 딜러마스터와 **별도 게임**, 빌드 없음
   - `index.html` · `game.js`(약 4,400줄, ES5 IIFE) · `vendor/three.min.js`(r149, MIT)
-  - `DESIGN.md` — 설계 정본(§9~§28). 실행 · 배포는 `README.md`
+  - `DESIGN.md` — 설계 정본(§9~§29). 실행 · 배포는 `README.md`
   - `tools/` — `build-artifact.py` · `autoplay.js` · `weekend.js` · `noshow.js` · `events.js` · `staff.js` · `decor.js` · `table.js` · `av.js` · `growth.js` · `week.js` · `release.js` · `cases.js` · `drill.js`
 - **브랜치**: 1.4 까지는 `claude/confident-lovelace-dmv6yd`. 1.4.1 은 세션 브랜치 `claude/wizardly-turing-61nkca` 에 있다(1.4 를 병합한 뒤 커밋).
   새 세션이 또 다른 브랜치로 열리면: 그 세션이 푸시할 수 있는 브랜치에 **`claude/wizardly-turing-61nkca` 를 병합**하고 거기서 일한다. 어느 쪽이 최신인지는 `git log` 로 확인
-- 폰 링크(비공개 Artifact): **https://claude.ai/artifact/K1UXZgBs2dT8LTZvX9X9BP** — 지금 **1.4.1**(Version 22)
+- 폰 링크(비공개 Artifact): **https://claude.ai/artifact/K1UXZgBs2dT8LTZvX9X9BP** — 지금 **1.4.2**
 
 ## 2. 지금 게임 (1.4.1 까지 — 다시 만들지 마라)
 
@@ -32,6 +32,7 @@
 - 8판 돌발 7종 · 9판 직원 깊이 · 10판 꾸미기 · 11판 테이블(족보 · 보드 · PLO8) · 12판 그래픽 · 사운드 · 13판 성장 길 넷 + 난이도 곡선 · 14판 주간 도전 · 쇼다운 연출
 - 1.0 설정 · 일시정지 · 도움말 · 기록 · 오류 안전망 · 1.1 리디자인 · 1.2 케이스 판정 27종 · 1.3 도감 · 1.4 ⚡ 막대 · 연습실 · 도감 보상
 - **1.4.1**: 선택지 길이로 정답이 보이던 것 — 케이스 · 응대 교육 · 돌발(다툼 · 환전)의 **오답 문장**을 늘려 맞췄다(§28). 정답 문장은 그대로
+- **1.4.2**: 작은 폰(높이 640 이하) 판정 창 촘촘하게 · 시즌 자금 목표 500만 → 1,500만(§29) · 자동 플레이 `human` 모드
 
 ## 3. 다음 후보
 
@@ -42,8 +43,7 @@
 - 판정 확장은 **원문 대조를 마친 TDA 규칙만**(`docs/superpowers/plans/2026-11-16-nlh-sandbox-analysis.md` §9). 밸런싱 이동 좌석 · 새 손님 버튼~BB · 헤즈업 버튼 · 팟 리밋 레이즈는 출제하지 않는다
 
 사람 없이 잴 수 있는 것(「추천으로」일 때):
-- **시즌이 너무 쉬운가** — 고친 자동 플레이(배속 3)에서 정답만 고르는 점장이 1일차 평판 98, **1주차 금요일에 시즌 목표(평판 85 + 자금 500만)를 넘는다**(시즌은 8주, 1.0 QA 는 1주차 끝 274만). 사람은 느리지만 가장 먼저 물어볼 밸런스 질문이다 — §28. 손볼 곳: 시즌 목표치 · 케이스 · 콤보 · ⚡ 평판 · 평일 순이익
-- 상황 글 길이(케이스 중앙값 60자 · 최장 7번 123자) — 폰 한 화면에 들어가는지 스크린샷으로
+- **시즌 자금 목표 1,500만(1.4.2, §29)이 맞나** — 4번 중 3번 맞히는 봇(`autoplay.js 7 human`)도 1주차에 옛 목표 500만을 넘어 올렸다. 8주 전체는 안 돌려 봤다(하루 약 10분). 사람 답이 먼저, 없으면 `human` 14일을 백그라운드로(2시간 넘으면 7일씩 나눠서) 돌려 주당 증가를 본다. 평판은 4일차에 100 — 평판 상승 속도(케이스 · 콤보 · ⚡)도 후보
 - 실제 3D 에셋은 사용자가 「나중에」 — 먼저 꺼내지 않는다
 
 ## 4. 지켜야 할 것
@@ -62,7 +62,7 @@
 ```bash
 cd pub-sim
 node -e "new Function(require('fs').readFileSync('game.js','utf8'))"   # 문법
-node tools/autoplay.js 2 perfect          # errors [] · 두 날 모두 우승자 · 판정 못 감 0 에 가깝게
+node tools/autoplay.js 2 perfect          # errors [] · 두 날 모두 우승자 · 판정 못 감 0 에 가깝게 (밸런스는 human 모드로)
 node tools/weekend.js; node tools/noshow.js
 node tools/events.js [handle|timeout] [종류,…]
 node tools/cases.js [shot]   # bad [] · mix 에 X 없음
@@ -80,4 +80,4 @@ cp game.js <스크래치패드>/pub-artifact/game.js; mkdir -p <스크래치패�
 
 ## 6. 끝나면
 
-`DESIGN.md` 에 §29~ 로 게이트 답 · 변경 · 자동 점검 결과를 남기고, 사용자에게 링크와 다음 재미 게이트 질문을 준다. 이 파일을 다음 세션용으로 **새로 쓴다**.
+`DESIGN.md` 에 §30~ 로 게이트 답 · 변경 · 자동 점검 결과를 남기고, 사용자에게 링크와 다음 재미 게이트 질문을 준다. 이 파일을 다음 세션용으로 **새로 쓴다**.
