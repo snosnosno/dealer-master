@@ -387,8 +387,9 @@ function openDrill(back) {
     var r = loadRecords(), best = r.drillBest || 0, g = drillGrade(st.score), nb = st.score > best;
     if (nb) { r.drillBest = st.score; try { localStorage.setItem(REC_KEY, JSON.stringify(r)); } catch (e) { /* 무시 */ } }
     if (g === 'S') SFX.win();   // 타이틀에서는 3D 효과가 멈춰 있다 — 소리만
+    var achNew = checkAch('drill');
     showModal('<div class="titlecard"><div class="kicker">🎯 판정 연습실 결과</div><div class="gradebox g' + g + '"><span>' + g + '</span></div>' +
-      '<h2>' + st.score + '점</h2><p class="sub">' + DRILL_N + '문제 중 ' + st.right + '개 정답' + (nb ? ' · 🎉 최고 기록!' : ' · 최고 ' + best + '점') + '</p></div>' +
+      '<h2>' + st.score + '점</h2><p class="sub">' + DRILL_N + '문제 중 ' + st.right + '개 정답' + (nb ? ' · 🎉 최고 기록!' : ' · 최고 ' + best + '점') + '</p></div>' + achHtml(achNew) +
       '<p class="note">빨리 맞힐수록 점수가 크다(문제당 100 + 속도 최대 50). 영업 중 판정을 맞혀야 📚 도감이 찬다.</p>' +
       '<div class="titlebtns"><button class="cta" data-dagain="1">한 번 더</button><button class="cta ghost" data-back="1">돌아가기</button></div>', true);
     $('[data-dagain]').onclick = function () { G.recentCases = keep; openDrill(back); };
@@ -3478,14 +3479,15 @@ function titleScreen() {
     (sv ? '<button class="cta" data-cont="1">이어하기 — ' + dayInfo(sv.day).week + '주차 ' + dayInfo(sv.day).wk + '요일 · ' + rankOf(sv.rep) + '</button>' : '') +
     '<button class="cta' + (sv ? ' ghost' : '') + '" data-go="1">' + (sv ? '새로 시작' : '오픈 준비') + '</button>' +
     '<button class="cta ghost" data-drill="1">🎯 판정 연습실 — 5문제' + (rec.drillBest ? ' · 최고 ' + rec.drillBest + '점' : '') + '</button></div>' +
-    (caseDex().length >= CASES.length ? '<p class="note recline">🏅 명예 플로어 — 판정 도감 완성</p>' : '') +
+    (achTitle() ? '<p class="note recline">🎖️ 칭호 — <b>' + achTitle().ic + ' ' + achTitle().ko + '</b></p>' : (caseDex().length >= CASES.length ? '<p class="note recline">🏅 명예 플로어 — 판정 도감 완성</p>' : '')) +
     (corrupt ? '<p class="warn">저장 데이터가 손상돼 이어할 수 없다 — 새로 시작하면 덮어쓴다.</p>' : '') +
     (rec.seasons || rec.bankrupt ? '<p class="note recline">🏅 기록 — 시즌 ' + rec.seasons + '번 (클리어 ' + rec.clears + ') · 최고 평판 ' + rec.bestRep + ' · 최고 자금 ' + won(rec.bestBank) + '원' + (rec.bankrupt ? ' · 폐업 ' + rec.bankrupt + '번' : '') + '</p>' : '') +
-    '<div class="titlefoot"><button class="linkbtn" data-tdex="1">📚 판정 도감 ' + caseDex().length + '/' + CASES.length + '</button><button class="linkbtn" data-thelp="1">📖 도움말 · 하는 법</button><button class="linkbtn" data-tset="1">⚙️ 설정</button><button class="linkbtn" data-tcred="1">만든 사람</button></div>' +
+    '<div class="titlefoot"><button class="linkbtn" data-tdex="1">📚 판정 도감 ' + caseDex().length + '/' + CASES.length + '</button><button class="linkbtn" data-tach="1">🎖️ 업적 ' + ACHS.filter(function (a) { return achGot()[a.id]; }).length + '/' + ACHS.length + '</button><button class="linkbtn" data-thelp="1">📖 도움말 · 하는 법</button><button class="linkbtn" data-tset="1">⚙️ 설정</button><button class="linkbtn" data-tcred="1">만든 사람</button></div>' +
     '<p class="legal">칩 환전 · 현금 시상 없음 — 매출은 참가비와 음료뿐. 판정 근거는 TDA 케이스 문서(원문 확인 전).</p>', true);
   $('[data-tset]').onclick = function () { openSettings(titleScreen); };
   $('[data-thelp]').onclick = function () { openHelp(titleScreen); };
   $('[data-tdex]').onclick = function () { openDex(titleScreen); };
+  $('[data-tach]').onclick = function () { openAch(titleScreen); };
   $('[data-drill]').onclick = function () { audioOn(); openDrill(titleScreen); };
   $('[data-tcred]').onclick = function () { openCredits(titleScreen); };
   $('[data-go]').onclick = function () {
@@ -4081,11 +4083,13 @@ function report(settleOk) {
   if (settleLoss) rows.push(['정산 오차 확인 비용', -settleLoss]);
   if (s.fines) rows.push(['벌금 (돌발 상황)', -s.fines]);
   var grade = stars === 3 && net > 0 ? 'S' : (stars >= 2 ? 'A' : (stars === 1 ? 'B' : 'C'));
+  var achNew = checkAch('day', { s: s, stars: stars, grade: grade, net: net, avgSat: avgSat, winner: G.winner });
   var starHTML = '<div class="gradebox g' + grade + '"><span>' + grade + '</span></div><div class="stars">' + [0, 1, 2].map(function (i) { return '<span class="' + (i < stars ? 'on' : '') + '" style="animation-delay:' + (i * 0.25) + 's">★</span>'; }).join('') + '</div>';
   var h = '<div class="kicker">' + G.day + '일차 마감 · ' + clock(gameMin()) + '</div>' + starHTML +
     '<h2 style="text-align:center">' + ['아쉬운 밤', '무난한 밤', '좋은 밤', '완벽한 밤'][stars] + '</h2>' +
     (rankAfter !== rankBefore ? '<div class="rankup">' + (G.rep > s.repStart ? '🎉 펍 등급 상승 — ' : '펍 등급 하락 — ') + '<b>' + rankAfter + '</b></div>' : '') +
     (gentle ? '<p class="note" style="text-align:center">🌱 첫 사흘 — 손님들이 너그럽다. 평판 하락이 절반으로 줄었다</p>' : '') +
+    achHtml(achNew) +
     '<h3>🎯 오늘의 목표</h3><ul class="goals">' + G.goals.map(function (g, i) { return '<li class="' + (done[i] ? 'ok' : 'no') + '">' + (done[i] ? '✓ ' : '✗ ') + goalText(g) + '</li>'; }).join('') + '</ul>' +
     (settleOk ? '<p>✓ 레지 정산이 맞았다.</p>' : '<p>✗ 레지 정산이 틀렸다 — 차액을 맞추느라 마감이 늦어졌다.</p>') +
     '<table class="rows">' + rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + (r[1] < 0 ? '−' : '') + won(Math.abs(r[1])) + '</td></tr>'; }).join('') +
@@ -4110,7 +4114,7 @@ function report(settleOk) {
     '<button class="cta" data-next-day="1">' + (G.debtDays >= 3 ? '…' : (dayInfo(G.day + 1).wd === 6 ? '🗓️ 일요일 — 주간 정산' : '다음 날 영업 준비')) + '</button> <button class="cta ghost" data-restart="1">타이틀로</button>';
   showModal(h, true);
   countUp();
-  if (stars === 3 || rankAfter !== rankBefore && G.rep > s.repStart) { SFX.win(); confetti(V(0, 0)); } else if (stars) SFX.good();
+  if (stars === 3 || rankAfter !== rankBefore && G.rep > s.repStart) { SFX.win(); confetti(V(0, 0)); } else if (stars || achNew.length) SFX.good();
   G.day++; G.cfg.train = null; G.cfg.chipOk = null;
   saveGame();
   $('[data-next-day]').onclick = function () {
@@ -4173,7 +4177,8 @@ function weeklyScreen() {
   }).join('');
   var seasonDone = w >= SEASON_WEEKS;
   var cleared = G.rep >= 85 && G.bank >= SEASON_GOAL_BANK;
-  var h = '<div class="kicker">' + w + '주차 일요일 · 휴무</div><h2>🗓️ 주간 정산</h2>' +
+  var achNew = checkAch('week', { chN: ch ? chN : 0, weekNet: sum - WEEKLY_RENT });
+  var h = '<div class="kicker">' + w + '주차 일요일 · 휴무</div><h2>🗓️ 주간 정산</h2>' + achHtml(achNew) +
     '<table class="rows">' + rows +
     '<tr><td>임대료 (주간)</td><td>−' + won(WEEKLY_RENT) + '</td></tr>' +
     '<tr class="total"><td>이번 주 합계</td><td>' + (sum - WEEKLY_RENT < 0 ? '−' : '') + won(Math.abs(sum - WEEKLY_RENT)) + '</td></tr>' +
@@ -4211,7 +4216,7 @@ function seasonBar() {
 // ═══════════════════════════════════════════════════
 // 출시용 껍데기 — 설정 · 일시정지 · 도움말 · 기록 · 만든 사람
 // ═══════════════════════════════════════════════════
-var VERSION = '1.4.2';
+var VERSION = '1.5-dev';
 var SET_KEY = 'pubsim.settings', REC_KEY = 'pubsim.records';
 var SETTINGS = { music: 0.7, sfx: 1, quality: 'auto', motion: 'auto', talk: true };
 var SET_OK = {   // 저장된 설정이 망가져 있으면 기본값을 쓴다
@@ -4281,10 +4286,11 @@ function openPause() {
       '<button data-talk="1" class="' + (G.talkOn ? 'on' : '') + '">💬<small>잡담</small></button>' +
       '<button data-follow="1" class="' + (cam.follow ? 'on' : '') + '">📍<small>따라가기</small></button></div>' +
     '<div class="menu"><button class="cta" data-resume="1">▶ 계속하기</button>' +
-    '<button class="cta ghost" data-mset="1">⚙️ 설정</button><button class="cta ghost" data-mhelp="1">📖 도움말</button><button class="cta ghost" data-mdex="1">📚 판정 도감</button>' +
+    '<button class="cta ghost" data-mset="1">⚙️ 설정</button><button class="cta ghost" data-mhelp="1">📖 도움말</button><button class="cta ghost" data-mdex="1">📚 판정 도감</button><button class="cta ghost" data-mach="1">🎖️ 업적</button>' +
     '<button class="cta ghost" data-mtitle="1">타이틀로</button></div>');
   $('[data-resume]').onclick = resumeGame;
   $('[data-mdex]').onclick = function () { openDex(openPause); };
+  $('[data-mach]').onclick = function () { openAch(openPause); };
   // 빠른 토글 — 누르면 바로 바뀌고 메뉴를 다시 그린다
   $('[data-music]').onclick = function () {
     audioOn(); if (MUSIC.on) setMusic.last = SETTINGS.music; SETTINGS.music = MUSIC.on ? 0 : (setMusic.last || 0.7);
@@ -4342,6 +4348,84 @@ function recordRun(kind) {
   r.bestRep = Math.max(r.bestRep, Math.round(G.rep)); r.bestBank = Math.max(r.bestBank, Math.round(G.bank));
   try { localStorage.setItem(REC_KEY, JSON.stringify(r)); } catch (e) { /* 무시 */ }
 }
+/* 🎖️ 업적 · 칭호 (1.5) — 이미 재는 숫자만 조건으로. 보상은 명예뿐(칭호) — 밸런스를 건드리지 않는다.
+   k: day(마감) · run(지금 펍 상태, 마감 때) · life(기록) · week(일요일) · season(시즌 끝). 기록(pubsim.records)의 ach 에 남는다 */
+var ACHS = [
+  { id: 'first_close', k: 'day', ic: '🌙', ko: '첫 마감', d: '첫 영업을 끝까지 마쳤다', t: function () { return true; } },
+  { id: 'first_win', k: 'day', ic: '🏆', ko: '첫 트로피', d: '우승자를 배출했다', t: function (c) { return !!c.winner; } },
+  { id: 'perfect', k: 'day', ic: '⭐', ko: '완벽한 밤', d: '오늘의 목표 셋을 다 이뤘다', t: function (c) { return c.stars === 3; } },
+  { id: 'grade_s', k: 'day', ic: '🥇', ko: 'S 등급', d: '목표 셋 + 흑자로 마감 S', t: function (c) { return c.grade === 'S'; } },
+  { id: 'flawless', k: 'day', ic: '🧑‍⚖️', ko: '무결점 플로어', d: '하루 판정 5건 이상, 틀림 · 못 감 0', t: function (c) { return c.s.right >= 5 && !c.s.wrong && !c.s.missed; } },
+  { id: 'combo5', k: 'day', ic: '🔥', ko: '콤보 ×5', d: '판정 5연속 정답', t: function (c) { return c.s.maxCombo >= 5; } },
+  { id: 'combo10', k: 'day', ic: '☄️', ko: '콤보 ×10', d: '판정 10연속 정답', t: function (c) { return c.s.maxCombo >= 10; } },
+  { id: 'quick10', k: 'day', ic: '⚡', ko: '번개 플로어', d: '하루 ⚡ 빠른 판정 10번', t: function (c) { return c.s.quick >= 10; } },
+  { id: 'announcer', k: 'day', ic: '📢', ko: '정시 아나운서', d: '직접 아나운스 10건 이상, 틀림 · 놓침 0', t: function (c) { return c.s.ann - c.s.annByStaff >= 10 && !c.s.annWrong && !c.s.annMiss; } },
+  { id: 'dry', k: 'day', ic: '🧽', ko: '뽀송한 바닥', d: '청소 3건 이상, 젖은 시간 30초 이하', t: function (c) { return c.s.cleaned >= 3 && c.s.spillSec <= 30; } },
+  { id: 'packed', k: 'day', ic: '🪑', ko: '만석', d: '하루 엔트리 40건', t: function (c) { return c.s.entries >= 40; } },
+  { id: 'busybar', k: 'day', ic: '🍹', ko: '바쁜 바', d: '하루 음료 60잔', t: function (c) { return c.s.drinks >= 60; } },
+  { id: 'noleave', k: 'day', ic: '🚪', ko: '한 명도 안 놓쳤다', d: '엔트리 20건 이상, 줄이 길어 돌아간 손님 0', t: function (c) { return c.s.entries >= 20 && !(c.s.lost + c.s.queueLeave); } },
+  { id: 'fixer', k: 'day', ic: '🛠️', ko: '돌발 해결사', d: '하루 돌발 상황 3건을 깔끔하게', t: function (c) { return c.s.events.filter(function (e) { return e.ok === true; }).length >= 3; } },
+  { id: 'million', k: 'day', ic: '💰', ko: '백만 원의 밤', d: '하루 순이익 100만', t: function (c) { return c.net >= 1000000; } },
+  { id: 'smile', k: 'day', ic: '😊', ko: '웃는 얼굴들', d: '평균 만족도 85', t: function (c) { return c.avgSat >= 85; } },
+  { id: 'famous', k: 'run', ic: '🌟', ko: '홀덤 명소', d: '평판 85 — 동네의 명소', t: function () { return G.rep >= 85; } },
+  { id: 'legend', k: 'run', ic: '👑', ko: '전설의 펍', d: '평판 100', t: function () { return G.rep >= 99.5; } },
+  { id: 'bank10', k: 'run', ic: '🏦', ko: '천만 원', d: '자금 1,000만', t: function () { return G.bank >= 10000000; } },
+  { id: 'team8', k: 'run', ic: '🤝', ko: '든든한 팀', d: '직원 8명', t: function () { return G.roster.length >= 8; } },
+  { id: 'regs50', k: 'run', ic: '💞', ko: '모두의 단골집', d: '남은 단골 10명 이상이 모두 ♥50', t: function () { var L = G.regulars.filter(function (r) { return !r.gone; }); return L.length >= 10 && L.every(function (r) { return r.aff >= 50; }); } },
+  { id: 'regs95', k: 'run', ic: '💖', ko: '찐단골', d: '단골 한 명이 ♥95', t: function () { return G.regulars.some(function (r) { return !r.gone && r.aff >= 95; }); } },
+  { id: 'table3', k: 'run', ic: '🎲', ko: '세 번째 테이블', d: '3번 테이블을 들였다', t: function () { return !!G.owned.table3; } },
+  { id: 'shopall', k: 'run', ic: '🛒', ko: '다 갖췄다', d: '상점 물건을 모두 샀다', t: function () { return SHOP.every(function (i) { return !!G.owned[i.id]; }); } },
+  { id: 'dex9', k: 'life', ic: '📚', ko: '판정 수집가', d: '판정 도감 9건', t: function () { return caseDex().length >= 9; } },
+  { id: 'dex27', k: 'life', ic: '🏅', ko: '명예 플로어', d: '판정 도감 27건 완성', t: function () { return caseDex().length >= CASES.length; } },
+  { id: 'drill_s', k: 'life', ic: '🎯', ko: '연습실 S', d: '판정 연습실 650점', t: function () { return (loadRecords().drillBest || 0) >= 650; } },
+  { id: 'week3', k: 'week', ic: '🗓️', ko: '도전 완주', d: '주간 도전 셋을 다 깼다', t: function (c) { return c.chN === 3; } },
+  { id: 'week5m', k: 'week', ic: '📈', ko: '오백만 주간', d: '한 주 합계(임대료 뒤) 500만', t: function (c) { return c.weekNet >= 5000000; } },
+  { id: 'clear', k: 'season', ic: '🏆', ko: '시즌 클리어', d: '시즌 목표를 이뤘다', t: function (c) { return !!c.cleared; } },
+  { id: 'season8', k: 'season', ic: '🗺️', ko: '8주 완주', d: '폐업 없이 시즌 8주를 마쳤다', t: function (c) { return !!c.firstEnd; } }
+];
+var ACH_BY = {}; ACHS.forEach(function (a) { ACH_BY[a.id] = a; });
+var ACH_WHEN = { day: ['day', 'run', 'life'], week: ['week', 'run', 'life'], drill: ['life'], season: ['season', 'run', 'life'] };
+function achGot() { var r = loadRecords(); return (r.ach && typeof r.ach === 'object' && !Array.isArray(r.ach)) ? r.ach : {}; }
+/* 새로 딴 업적을 기록에 남기고 돌려준다. 저장이 막히면 빈 목록(띄우지 않는다) */
+function checkAch(when, c) {
+  var r = loadRecords(), got = achGot(), kinds = ACH_WHEN[when] || [], fresh = [];
+  ACHS.forEach(function (a) {
+    if (got[a.id] || kinds.indexOf(a.k) < 0) return;
+    var ok = false;
+    try { ok = !!a.t(c || {}); } catch (e) { ok = false; }   // 조건 하나가 깨져도 마감은 막지 않는다
+    if (ok) { got[a.id] = G.day || 1; fresh.push(a); }
+  });
+  if (!fresh.length) return [];
+  r.ach = got;
+  try { localStorage.setItem(REC_KEY, JSON.stringify(r)); } catch (e) { return []; }
+  return fresh;
+}
+function achHtml(fresh) {
+  if (!fresh.length) return '';
+  return '<div class="achnew"><b>🎖️ 새 업적</b>' + fresh.map(function (a) { return '<span>' + a.ic + ' ' + a.ko + '</span>'; }).join('') + '</div>';
+}
+function achTitle() { var r = loadRecords(), a = ACH_BY[r.title]; return a && achGot()[a.id] ? a : null; }
+function openAch(back) {
+  var got = achGot(), n = ACHS.filter(function (a) { return got[a.id]; }).length, cur = achTitle();
+  showModal('<div class="kicker">업적 · ' + n + ' / ' + ACHS.length + '</div><h2>🎖️ 업적과 칭호</h2>' +
+    '<p class="note">딴 업적을 누르면 그 이름이 칭호가 되어 타이틀에 걸린다. 업적은 명예뿐 — 돈 · 평판은 주지 않는다.</p>' +
+    '<p class="achcur">칭호 — <b>' + (cur ? cur.ic + ' ' + cur.ko : '없음') + '</b></p>' +
+    '<div class="ach">' + ACHS.map(function (a) {
+      var ok = !!got[a.id];
+      return '<button class="achc' + (ok ? ' got' : '') + (cur && cur.id === a.id ? ' on' : '') + '"' + (ok ? ' data-atitle="' + a.id + '"' : ' disabled') + '>' +
+        '<span class="ic">' + (ok ? a.ic : '🔒') + '</span><b>' + a.ko + '</b><small>' + a.d + '</small></button>';
+    }).join('') + '</div>' +
+    '<div class="titlebtns"><button class="cta" data-back="1">돌아가기</button></div>');
+  document.querySelectorAll('[data-atitle]').forEach(function (b) {
+    b.onclick = function () {
+      var r = loadRecords(), id = b.getAttribute('data-atitle');
+      r.title = r.title === id ? null : id;   // 같은 걸 다시 누르면 칭호를 내린다
+      try { localStorage.setItem(REC_KEY, JSON.stringify(r)); } catch (e) { /* 무시 */ }
+      openAch(back);
+    };
+  });
+  $('[data-back]').onclick = back;
+}
 /* Esc — 일시정지 열고 닫기 */
 window.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape') return;
@@ -4351,8 +4435,9 @@ window.addEventListener('keydown', function (e) {
 
 function seasonEnd(cleared, firstEnd) {
   if (firstEnd) recordRun(cleared ? 'clear' : 'season');   // 8주차 일요일에 한 번만 — 계속 운영하는 주는 세지 않는다
+  var achNew = checkAch('season', { cleared: cleared, firstEnd: firstEnd });
   showModal('<div class="titlecard"><div class="kicker">시즌 ' + SEASON_WEEKS + '주 끝</div><h1>' + (cleared ? '🏆 시즌 클리어!' : '시즌 종료') + '</h1>' +
-    '<p class="sub">' + (cleared ? '당신의 펍은 이 동네의 홀덤 명소가 됐다.' : '목표에는 닿지 못했다 — 하지만 펍은 계속된다.') + '</p></div>' +
+    '<p class="sub">' + (cleared ? '당신의 펍은 이 동네의 홀덤 명소가 됐다.' : '목표에는 닿지 못했다 — 하지만 펍은 계속된다.') + '</p></div>' + achHtml(achNew) +
     '<p>평판 <b>' + Math.round(G.rep) + '</b> (' + rankOf(G.rep) + ') · 자금 <b>' + won(G.bank) + '원</b> · 직원 ' + G.roster.length + '명</p>' +
     '<div class="titlebtns"><button class="cta" data-more="1">계속 운영하기</button><button class="cta ghost" data-new="1">새 시즌 — 처음부터</button></div>', true);
   if (cleared) { SFX.win(); confetti(V(0, 0)); }
@@ -4377,7 +4462,7 @@ G.__music = MUSIC;   // 자동 점검용
 G.__plan = planEvents; G.__type = pickType; G.__diff = diffK;   // 자동 점검용
 G.__weekly = weeklyScreen;   // 자동 점검용
 G.__case = function (tid, n) { var t = G.tables[tid], d = genCase(t); if (n) d.id = n; createCall(t, 'case', d); return d; };   // 자동 점검용
-G.__cases = CASES; G.__caseQ = caseQuestion; G.__drill = openDrill; G.__open = openCall; G.__isMix = isMix;
+G.__cases = CASES; G.__caseQ = caseQuestion; G.__drill = openDrill; G.__open = openCall; G.__achs = ACHS; G.__checkAch = checkAch; G.__openAch = openAch; G.__achGot = achGot;G.__isMix = isMix;
 var confirmNew = { ok: false };   // 자동 점검이 새로 시작 확인을 건너뛸 때 쓴다
 G.__confirmNew = confirmNew;
 G.__eval = { best: best, eval5: eval5, plohi: bestPLOHigh, plolo: bestPLOLow, name: handName };   // 자동 점검용

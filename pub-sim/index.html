@@ -601,6 +601,19 @@ details.weekfold[open] > summary { margin: 0 -10px 8px; border-bottom: 1px solid
 .dexgifts b { font-family: var(--mono); }
 /* 터치 화면 — 탭한 자리의 hover 가 다음 창의 선택지에 남아 「힌트」처럼 보이지 않게 */
 @media (hover: none) { .choice:hover { border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.04); transform: none; } }
+/* 1.5 — 업적 · 칭호 */
+.achnew { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; margin: 6px 0 10px; padding: 8px 10px; border-radius: 12px; background: var(--amber-bg); border: 1px solid var(--amber); }
+.achnew b { color: var(--amber-ink); font-size: 13px; }
+.achnew span { font-size: 12.5px; font-weight: 800; padding: 3px 9px; border-radius: 99px; background: rgba(0,0,0,.25); color: var(--ink); }
+.achcur { margin: 0 0 8px; }
+.ach { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; margin: 8px 0 14px; max-height: 52vh; overflow-y: auto; }
+.achc { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 8px; min-height: 84px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.03); color: var(--ink-3); font-family: inherit; cursor: default; }
+.achc .ic { font-size: 20px; line-height: 1.1; }
+.achc b { font-size: 13px; line-height: 1.25; word-break: keep-all; }
+.achc small { font-size: 11px; line-height: 1.35; word-break: keep-all; }
+.achc.got { border-color: var(--glass-line); background: var(--amber-bg); color: var(--ink); cursor: pointer; }
+.achc.got small { color: var(--ink-2); }
+.achc.on { border-color: var(--amber); box-shadow: 0 0 0 2px var(--amber) inset; }
 /* 1.4.2 — 작은 폰(높이 640 이하, iPhone SE 등)에서 긴 케이스의 마지막 선택지가 화면 밖으로 밀려 ⚡ 시간 중에 스크롤해야 했다 — 판정 창을 촘촘하게 */
 @media (max-height: 640px) {
   .modal { padding-top: 14px; padding-bottom: 14px; }   /* 좌우는 그대로 — .prepfoot 의 음수 여백이 좌우 패딩에 맞춰져 있다 */
