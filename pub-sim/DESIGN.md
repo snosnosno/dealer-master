@@ -879,6 +879,7 @@ GateGuard 훅이 파일 첫 수정 · 파괴적 명령마다 사실 확인을 �
 
 - 새 도구 셋: `tools/ach.js` · `tools/spot.js` · `tools/rival.js` — bad [] · errors []
 - 기존 도구 전부 errors [] (cases · drill · week · release · staff · growth · decor · table · av · weekend · noshow · events handle/timeout)
+- `autoplay.js 2 human`(1.5): 오류 0 · 두 날 모두 우승자 · 1일차 🔍 딜러 실수 3건 맞힘 · 마감 보고서에 「새 업적」(첫 마감 · 홀덤 명소) · 클릭 58 중 2 빗나감. **7일 실행은 컨테이너 재시작으로 두 번 끊겨 못 했다** — 라이벌의 실제 주간 승패는 사람 플레이 · 다음 세션 몫. 게시 Version 24
 - `tools/noshow.js` 고침: 주간 도전이 뽑힐 때 저장이 생겨(14판~) 「새로 시작」이 덮어쓰기 확인 창을 띄우는데, 도구가 그걸 몰라 멈췄다 — 1.5 이전부터의 도구 문제
 
 ### 1.5 해 보고 답해 줄 것
