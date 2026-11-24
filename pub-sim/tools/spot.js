@@ -47,6 +47,8 @@ const SHOT = process.argv[2] === 'shot';
         const num = +q.opts[q.correct].replace(/[^0-9]/g, '');
         if (num !== want) out.badSide.push({ d: [d.a, d.b, d.c, d.ask], num, want });
         if (!(d.a < d.b && d.b <= d.c)) out.badSide.push('order');
+        const nums = choices.map(c => +c.replace(/[^0-9]/g, '')), rank = nums.slice().sort((x, y) => x - y).indexOf(nums[correct]);
+        out.rank = out.rank || [0, 0, 0]; out.rank[rank]++;
       }
     }
     return out;
@@ -57,10 +59,14 @@ const SHOT = process.argv[2] === 'shot';
   if (gen.win < 180 || gen.side < 100) bad.push('mix ' + gen.win + '/' + gen.side);
   if (gen.close / gen.win < 0.6) bad.push('close too rare ' + gen.close);
   if (gen.longest / gen.n > 0.45) bad.push('correct often longest ' + gen.longest);
+  if (gen.rank.some(r => r < gen.side * 0.18)) bad.push('pot answer rank not mixed ' + JSON.stringify(gen.rank));   // 「가장 작은 수」가 늘 답이면 안 된다
+  if (gen.pos[3] === gen.chop && gen.chop > 5) bad.push('chop always last');
 
   // 2. 실제 호출 창 — 맞힘
   const openOne = async () => G(() => { const P = window.__pub; P.tasks.filter(k => k.kind === 'call').forEach(k => { P.tables[k.table].call = null; }); P.tasks = P.tasks.filter(k => k.kind !== 'call'); const task = P.__spotCall(0); P.__open(task); return true; });
   await openOne();
+  const label = await G(() => (document.querySelector('#calls') || {}).innerText || '');
+  if (label.indexOf('undefined') >= 0 || label.indexOf('딜러 실수') < 0) bad.push('task label ' + label);
   const fit = await G(() => { const md = document.querySelector('.modal'), last = [...document.querySelectorAll('[data-ch]')].pop().getBoundingClientRect(); return { scrolls: md.scrollHeight > md.clientHeight + 2, lastBottom: Math.round(last.bottom), vh: innerHeight, cards: document.querySelectorAll('.pc').length }; });
   if (SHOT) await page.screenshot({ path: 'spot-call.png' });
   const before = await G(() => ({ right: window.__pub.stats.right, spot: window.__pub.stats.spot || 0 }));
@@ -89,6 +95,6 @@ const SHOT = process.argv[2] === 'shot';
     await G(() => document.querySelectorAll('[data-ch]')[0].click()); await page.waitForTimeout(80); await page.click('[data-ok]');
   }
   if (worst > 2) bad.push('scrolls on iPhone SE by ' + worst + 'px');
-  console.log(JSON.stringify({ gen: { n: gen.n, win: gen.win, side: gen.side, chop: gen.chop, close: gen.close, pos: gen.pos, longest: gen.longest }, fit, worstOverflow: worst, bad, errors }, null, 1));
+  console.log(JSON.stringify({ gen: { n: gen.n, win: gen.win, side: gen.side, chop: gen.chop, close: gen.close, pos: gen.pos, rank: gen.rank, longest: gen.longest }, fit, worstOverflow: worst, bad, errors }, null, 1));
   await browser.close();
 })();

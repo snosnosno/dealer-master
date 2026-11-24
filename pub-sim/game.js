@@ -2034,7 +2034,7 @@ function spotQuestion(d) {
   var N3 = d.names;
   if (d.kind === 'win') {
     var chop = d.wins.length > 1;
-    var opts = [0, 1, 2].map(function (i) { return N3[i] + '의 팟'; }).concat(['찹 — 나눠 가진다']);
+    var opts = [0, 1, 2].map(function (i) { return N3[i] + '의 팟'; }).concat(['찹 — 나눈다']);   // 찹은 이름 선택지와 길이를 맞춘다
     var correct = chop ? 3 : d.wins[0];
     var body = '<p>리버까지 셋이 갔다. 딜러가 팟을 <b>' + N3[d.pushTo] + '</b>에게 밀려는데 다른 손님이 "잠깐만요" 한다.</p>' +
       '<div class="pboard"><small>보드</small>' + d.board.map(cardHtml).join('') + '</div>' +
@@ -2044,13 +2044,18 @@ function spotQuestion(d) {
       (chop ? '가장 좋은 다섯 장이 똑같다 — <b>' + d.wins.map(function (i) { return N3[i]; }).join(' · ') + ' 찹</b>. 보드가 이기는 카드면 홀카드는 상관없다.'
         : '<b>' + N3[d.wins[0]] + '</b>의 다섯 장이 가장 높다. 같은 족보면 위 「비교」 순서대로 한 장씩 견준다(키커).') +
       (d.pushTo === d.wins[0] && !chop ? ' 딜러가 맞게 밀었다 — 이의는 틀렸다.' : '');
-    return { title: '팟이 엉뚱한 사람에게 가나?', body: body, opts: opts, correct: correct, why: why };
+    return { title: '팟이 엉뚱한 사람에게 가나?', body: body, opts: opts, correct: correct, why: why, shuffle: true };
   }
   var main = 3 * d.a, side = 2 * (d.b - d.a), back = d.c - d.b, ask = d.ask === 'main';
   var right = ask ? main : side;
-  var wrongs = ask ? [2 * d.a + d.b, d.a + d.b + d.c, 3 * d.b] : [3 * (d.b - d.a), d.b - d.a, 2 * (d.b - d.a) + (back || (d.b - d.a))];
-  var vals = [right].concat(wrongs.filter(function (v, i, A) { return v !== right && v > 0 && A.indexOf(v) === i; })).slice(0, 3);
-  while (vals.length < 3) vals.push(right + (vals.length) * 1000);
+  /* 오답은 정답보다 작은 것 · 큰 것을 섞는다 — 「가장 작은 수」 · 「가운데 수」가 답이 되지 않게(정답의 크기 순위가 고르게) */
+  var ok = function (v) { return v > 0 && v !== right; };
+  var lowP = (ask ? [2 * d.a, right - 1000, right - 1500] : [d.b - d.a, right - 1000, right - 500]).filter(ok);
+  var highP = (ask ? [2 * d.a + d.b, d.a + 2 * d.b, 3 * d.b, right + 1000] : [3 * (d.b - d.a), right + (back || 1000), 2 * d.b - d.a, right + 1500]).filter(ok);
+  var nLow = rnd(3), wrongs = shuffle(lowP).slice(0, nLow);
+  shuffle(highP).forEach(function (v) { if (wrongs.length < 2 && wrongs.indexOf(v) < 0) wrongs.push(v); });
+  shuffle(lowP).forEach(function (v) { if (wrongs.length < 2 && wrongs.indexOf(v) < 0) wrongs.push(v); });
+  var vals = [right].concat(wrongs.slice(0, 2));
   var bodyS = '<p>' + N3[2] + josa(N3[2], '이', '가') + ' <b>' + won(d.c) + '</b>을 베팅했다. ' + N3[0] + josa(N3[0], '은', '는') + ' <b>' + won(d.a) + '</b> 올인, ' +
     N3[1] + josa(N3[1], '은', '는') + ' <b>' + won(d.b) + '</b> 올인으로 받았다.</p><p class="note">이 베팅만 센다 — 블라인드 · 앞선 칩은 빼고.</p>' +
     '<p>딜러가 팟을 나누다 손이 멈췄다.</p><p class="caseq"><b>' + (ask ? '메인 팟' : '사이드 팟') + '은 얼마인가?</b></p>';
@@ -2990,7 +2995,7 @@ function renderHud() {
 }
 
 var TASK_TXT = {
-  call: function (k) { return { t: '플로어! — ' + G.tables[k.table].name, d: k.type === 'case' ? CASES_BY[k.data.id].tag : { pos: '버튼 · 블라인드 이의', btn: '버튼 위치 오류', cnt: '카드 장수 이상', under: '레이즈 금액 이의' }[k.type], ic: '🚨' }; },
+  call: function (k) { return { t: '플로어! — ' + G.tables[k.table].name, d: k.type === 'case' ? CASES_BY[k.data.id].tag : { pos: '버튼 · 블라인드 이의', btn: '버튼 위치 오류', cnt: '카드 장수 이상', under: '레이즈 금액 이의', spot: '🔍 딜러 실수 의심' }[k.type] || '판정 요청', ic: '🚨' }; },
   announce: function (k) { return { t: '아나운스', d: { level: '블라인드 레벨 업', regwarn: '레지 마감 30분 전', regclose: '레지 마감', final: '파이널 테이블' }[k.type], ic: '📢' }; },
   balance: function (k) { return { t: '밸런싱 — ' + G.tables[k.table].name, d: G.tables[k.table].name + ' → ' + G.tables[k.to].name + ' 한 명', ic: '⚖️' }; },
   spill: function () { return { t: '청소', d: '음료가 쏟아졌다', ic: '🧽' }; },
@@ -3578,6 +3583,8 @@ function titleScreen() {
     G.weekCh = sv.weekCh && sv.weekCh.list && sv.weekCh.list.every(function (c) { return wcDef(c); }) ? sv.weekCh : null;
     G.rival = sv.rival && typeof sv.rival === 'object' && typeof sv.rival.wins === 'number' ? sv.rival : { wins: 0, losses: 0, last: null, move: null };   // 1.4 저장은 라이벌이 없다
     if (G.rival.move && G.rival.move.type && !RIVAL_MOVES[G.rival.move.type]) G.rival.move = null;
+    if (typeof G.rival.losses !== 'number') G.rival.losses = 0;
+    if (G.rival.last && (typeof G.rival.last.me !== 'number' || typeof G.rival.last.them !== 'number')) G.rival.last = null;
     G.theme = THEMES[sv.theme] ? sv.theme : 'classic'; G.themes = sv.themes || { classic: true }; G.decorInv = sv.decorInv || {};
     var cnt = {};
     G.placed = (sv.placed || []).filter(function (p) {   // 망가진 저장 — 좌표가 이상하거나 산 것보다 많이 놓인 것은 버린다
@@ -3634,7 +3641,7 @@ var RIVAL_MOVES = {
   poach_staff: { ic: '🕴️', head: '이직 제안을 했다', lose: '일요일까지 사기 60 아래면 떠난다', cost: 0, counter: '붙잡는다 — 일당 +2만 · 사기 +10' }
 };
 function rivalState() { if (!G.rival || typeof G.rival !== 'object') G.rival = { wins: 0, losses: 0, last: null, move: null }; return G.rival; }
-function rivalBase(week) { return Math.round(195 + 24 * (week - 1)); }
+function rivalBase(week) { return Math.round(170 + 20 * (week - 1)); }   // 1.0 QA 1주차 실측 181명 · 사람형 봇 261명 — 1주차는 이길 만하고, 8주차 310명은 3번 테이블이 있어야 버겁지 않다
 function genRivalMove() {
   var R = rivalState(), w = dayInfo().week;
   if (w < 2 || (R.move && R.move.week === w)) return;
@@ -3643,10 +3650,11 @@ function genRivalMove() {
   var types = ['clash', 'discount'];
   var reg = G.regulars.filter(function (r) { return !r.gone; }).sort(function (a, b) { return a.aff - b.aff; })[0];
   var dl = G.roster.filter(function (s) { return s.role === 'dealer'; }).sort(function (a, b) { return b.skill - a.skill; })[0];
-  if (reg) types.push('poach_reg');
+  if (reg && reg.aff < 60) types.push('poach_reg');   // 모두 ♥60 이상이면 빼가기는 아무 일도 못 한다 — 내지 않는다
   if (dl && roleCount('dealer') >= 3) types.push('poach_staff');   // 딜러가 둘뿐이면 내지 않는다 — 영업이 막힌다
   var type = pick(types);
   R.move = { week: w, type: type, status: 'open', target: type === 'poach_reg' ? reg.id : (type === 'poach_staff' ? dl.id : null) };
+  saveGame();   // 새로고침으로 수를 다시 뽑지 못하게
 }
 function rivalTargetName(m) {
   if (m.type === 'poach_reg') { var r = G.regulars[m.target]; return r ? r.name : ''; }
