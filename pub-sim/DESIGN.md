@@ -880,3 +880,9 @@ GateGuard 훅이 파일 첫 수정 · 파괴적 명령마다 사실 확인을 �
 - 새 도구 셋: `tools/ach.js` · `tools/spot.js` · `tools/rival.js` — bad [] · errors []
 - 기존 도구 전부 errors [] (cases · drill · week · release · staff · growth · decor · table · av · weekend · noshow · events handle/timeout)
 - `tools/noshow.js` 고침: 주간 도전이 뽑힐 때 저장이 생겨(14판~) 「새로 시작」이 덮어쓰기 확인 창을 띄우는데, 도구가 그걸 몰라 멈췄다 — 1.5 이전부터의 도구 문제
+
+### 1.5 해 보고 답해 줄 것
+
+1. 🥊 라이벌 — 일요일 대결이 한 주를 버티게 하나? 월요일 수(막기/두기)가 고민되나, 귀찮나? 이기기 쉬운가 어려운가
+2. 🔍 딜러 실수 — 카드를 보고 족보를 가리는 게 재밌나, 어렵나? 너무 자주/드물게 나오나
+3. 🎖️ 업적 — 칭호를 걸고 싶은 게 있나? 따기 쉬운 것 · 불가능해 보이는 것
