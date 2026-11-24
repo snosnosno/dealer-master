@@ -24,6 +24,7 @@ const { chromium } = require('playwright');
   await page.evaluate(() => { window.__pub.phase = 'title'; });
   await page.reload(); await page.waitForTimeout(500);
   await page.click('[data-go]');
+  if (await page.$('[data-new-yes]')) await page.click('[data-new-yes]');   // 주간 도전이 뽑힐 때 저장이 생긴다(14판~) — 덮어쓰기 확인
   await page.evaluate(() => { const G = window.__pub; G.day = 2; G.roster.find(x => x.id === 1).rel = 0; G.roster.find(x => x.id === 3).rel = 0; });
   await page.click('[data-tab="dealers"]');
   await page.click('[data-open]');
