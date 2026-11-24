@@ -1983,7 +1983,7 @@ function startHand(t) {
   }
   if (chance(Math.min(0.85, (0.06 + miss * 0.4) * mixK))) {
     /* 믹스(팟 리밋) 테이블은 레이즈 금액 판정을 내지 않는다 — 원문 대조 전 */
-    var types = isMix(t) ? ['btn', 'cnt', 'case', 'case', 'case'] : ['btn', 'cnt', 'under', 'case', 'case', 'case', 'case', 'case'];   // 케이스 판정 27건이 가장 많이 나온다
+    var types = isMix(t) ? ['btn', 'cnt', 'case', 'case', 'case'] : ['btn', 'cnt', 'under', 'case', 'case', 'case', 'case', 'case', 'spot', 'spot'];   // 케이스 판정 27건이 가장 많이 나온다 · 🔍 딜러 실수는 홀덤만(약 20%)
     var type = pick(types.filter(function (x) { return x === 'case' || x !== G.lastCall; }));   // 같은 종류 판정을 연달아 내지 않는다
     if (type === 'btn' && seated(t) < 4) type = 'cnt';
     createCall(t, type, genIncident(t, type));
@@ -2000,8 +2000,68 @@ function isSA(acts) {
   var chips = acts.filter(function (a) { return a.kind !== 'fold' && a.kind !== 'check'; }).length;
   return acts.length >= 3 || (acts.length >= 2 && chips >= 1);
 }
+/* 🔍 딜러 실수 잡기 (1.5) — TDA 규칙이 아니라 족보 · 셈. 홀덤 테이블에서만.
+   win: 리버까지 간 셋의 진짜 족보로 누가 이기나(키커 · 찹이 나오게 비슷한 패를 더 고른다)
+   side: 올인 셋의 메인 · 사이드 팟 금액 */
+function cardHtml(c) { return '<span class="pc' + (SUITS[c.s].red ? ' r' : '') + '">' + CARD_RANKS[c.r].replace('T', '10') + SUITS[c.s].s + '</span>'; }
+function scoreRanks(sc) { return sc.slice(1).map(function (r) { return CARD_RANKS[r].replace('T', '10'); }).join(' · '); }
+function spotNames(t) {
+  var names = shuffle(t.seats.filter(function (x) { return x !== null; }).map(function (id) { return G.customers[id].name; }));
+  var extra = shuffle(NAMES.filter(function (n) { return names.indexOf(n) < 0; }));
+  while (names.length < 3) names.push(extra.pop());
+  return names.slice(0, 3);
+}
+function genSpot(t) {
+  var names = spotNames(t);
+  if (chance(0.62)) {
+    var deal = null;
+    for (var k = 0; k < 120 && !deal; k++) {
+      var deck = newDeck(), board = deck.splice(0, 5), holes = [0, 1, 2].map(function () { return deck.splice(0, 2); });
+      var sc = holes.map(function (h) { return best(h.concat(board)); });
+      var order = [0, 1, 2].sort(function (a, b) { return cmp(sc[b], sc[a]); });
+      var close = sc[order[0]][0] === sc[order[1]][0];   // 1 · 2등이 같은 족보 — 키커 · 찹 싸움
+      if (close || k > 80) deal = { board: board, holes: holes, sc: sc, order: order };
+    }
+    var top = deal.sc[deal.order[0]], wins = [0, 1, 2].filter(function (i) { return cmp(deal.sc[i], top) === 0; });
+    var pushTo = chance(0.3) ? wins[0] : deal.order[wins.length];   // 딜러가 맞게 밀 때도 있다 — 손님 이의가 틀릴 수도
+    if (pushTo === undefined) pushTo = deal.order[2];
+    return { kind: 'win', names: names, board: deal.board, holes: deal.holes, sc: deal.sc, wins: wins, pushTo: pushTo };
+  }
+  var u = 500, a = (6 + rnd(15)) * u, b = a + (4 + rnd(12)) * u, c = b + (chance(0.5) ? 0 : (3 + rnd(8)) * u);
+  return { kind: 'side', names: names, a: a, b: b, c: c, ask: chance(0.5) ? 'main' : 'side' };
+}
+function spotQuestion(d) {
+  var N3 = d.names;
+  if (d.kind === 'win') {
+    var chop = d.wins.length > 1;
+    var opts = [0, 1, 2].map(function (i) { return N3[i] + '의 팟'; }).concat(['찹 — 나눠 가진다']);
+    var correct = chop ? 3 : d.wins[0];
+    var body = '<p>리버까지 셋이 갔다. 딜러가 팟을 <b>' + N3[d.pushTo] + '</b>에게 밀려는데 다른 손님이 "잠깐만요" 한다.</p>' +
+      '<div class="pboard"><small>보드</small>' + d.board.map(cardHtml).join('') + '</div>' +
+      '<div class="pholes">' + [0, 1, 2].map(function (i) { return '<div><small>' + N3[i] + '</small>' + d.holes[i].map(cardHtml).join('') + '</div>'; }).join('') + '</div>' +
+      '<p class="caseq"><b>이 팟은 누구 것인가?</b></p>';
+    var why = [0, 1, 2].map(function (i) { return N3[i] + ' — ' + handName(d.sc[i]) + ' (비교 ' + scoreRanks(d.sc[i]) + ')'; }).join('<br>') + '<br>' +
+      (chop ? '가장 좋은 다섯 장이 똑같다 — <b>' + d.wins.map(function (i) { return N3[i]; }).join(' · ') + ' 찹</b>. 보드가 이기는 카드면 홀카드는 상관없다.'
+        : '<b>' + N3[d.wins[0]] + '</b>의 다섯 장이 가장 높다. 같은 족보면 위 「비교」 순서대로 한 장씩 견준다(키커).') +
+      (d.pushTo === d.wins[0] && !chop ? ' 딜러가 맞게 밀었다 — 이의는 틀렸다.' : '');
+    return { title: '팟이 엉뚱한 사람에게 가나?', body: body, opts: opts, correct: correct, why: why };
+  }
+  var main = 3 * d.a, side = 2 * (d.b - d.a), back = d.c - d.b, ask = d.ask === 'main';
+  var right = ask ? main : side;
+  var wrongs = ask ? [2 * d.a + d.b, d.a + d.b + d.c, 3 * d.b] : [3 * (d.b - d.a), d.b - d.a, 2 * (d.b - d.a) + (back || (d.b - d.a))];
+  var vals = [right].concat(wrongs.filter(function (v, i, A) { return v !== right && v > 0 && A.indexOf(v) === i; })).slice(0, 3);
+  while (vals.length < 3) vals.push(right + (vals.length) * 1000);
+  var bodyS = '<p>' + N3[2] + josa(N3[2], '이', '가') + ' <b>' + won(d.c) + '</b>을 베팅했다. ' + N3[0] + josa(N3[0], '은', '는') + ' <b>' + won(d.a) + '</b> 올인, ' +
+    N3[1] + josa(N3[1], '은', '는') + ' <b>' + won(d.b) + '</b> 올인으로 받았다.</p><p class="note">이 베팅만 센다 — 블라인드 · 앞선 칩은 빼고.</p>' +
+    '<p>딜러가 팟을 나누다 손이 멈췄다.</p><p class="caseq"><b>' + (ask ? '메인 팟' : '사이드 팟') + '은 얼마인가?</b></p>';
+  var whyS = '메인 팟 = 가장 작은 올인 ' + won(d.a) + ' × 3명 = <b>' + won(main) + '</b> (셋 다 다툰다).<br>' +
+    '사이드 팟 = (' + won(d.b) + ' − ' + won(d.a) + ') × 2명 = <b>' + won(side) + '</b> (' + N3[1] + ' · ' + N3[2] + '만 다툰다).' +
+    (back ? '<br>' + N3[2] + '의 나머지 ' + won(back) + '은 아무도 받지 못했으니 돌려준다 — 팟에 넣지 않는다.' : '');
+  return { title: '팟을 어떻게 나누나?', body: bodyS, opts: vals.map(function (v) { return won(v) + '원'; }), correct: 0, why: whyS, shuffle: true };
+}
 function genIncident(t, type) {
   if (type === 'case') return genCase(t);
+  if (type === 'spot') { var sp = genSpot(t); sp.q = spotQuestion(sp); sp.order = sp.q.shuffle ? shuffle(sp.q.opts.map(function (o, i) { return i; })) : sp.q.opts.map(function (o, i) { return i; }); return sp; }
   var lv = BLINDS[level()];
   var order = preflopOrder(t);
   if (type === 'under') {
@@ -3217,6 +3277,13 @@ function openCall(task) {
     correct = d.order.indexOf(0);
     why = fn(cs.why);
     cite = '케이스 ' + cs.n + ' · ' + cs.rule;
+  } else if (task.type === 'spot') {   // 🔍 딜러 실수 잡기 — 족보 · 셈
+    title = '🔍 ' + d.q.title;
+    body = d.q.body;
+    choices = d.order.map(function (i) { return d.q.opts[i]; });
+    correct = d.order.indexOf(d.q.correct);
+    why = d.q.why;
+    cite = '족보 · 팟 셈 — 대회 규정이 아니라 계산이다';
   } else if (task.type === 'btn') {
     title = '버튼이 잘못 놓였다';
     body = '<p>손님: "버튼이 한 칸 지나쳤어요. 원래 ' + seatNo(d.shouldBe) + ' 차례예요." 확인해 보니 맞다.</p>' + actsHTML(d.acts);
@@ -3275,7 +3342,8 @@ function verdict(task, ok, why, cite, choices, correct, pickIx, extra) {
     if (gift) gift.fn();
     if (dn) h += '<div class="dexnew">📚 판정 도감 +1 — ' + dn + ' / ' + CASES.length + (dn === CASES.length ? ' · 전부 모았다!' : '') + (gift ? '<br>' + gift.t : '') + '</div>';
   }
-  h += '<p>' + why + '</p><div class="cite"><b>근거</b> ' + cite + '<span class="unverified">원문 확인 전</span></div>' +
+  if (ok && task.type === 'spot') G.stats.spot = (G.stats.spot || 0) + 1;
+  h += '<p>' + why + '</p><div class="cite"><b>근거</b> ' + cite + (task.type === 'spot' ? '' : '<span class="unverified">원문 확인 전</span>') + '</div>' +
     '<button class="cta" data-ok="1">테이블로 돌아간다</button>';
   showModal(h);
   $('[data-ok]').onclick = function () {
@@ -4095,7 +4163,7 @@ function report(settleOk) {
     '<table class="rows">' + rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + (r[1] < 0 ? '−' : '') + won(Math.abs(r[1])) + '</td></tr>'; }).join('') +
     '<tr class="total"><td>순이익</td><td><span data-countup="' + net + '">' + (net < 0 ? '−' : '') + won(Math.abs(net)) + '</span></td></tr>' +
     '<tr><td>자금</td><td>' + won(G.bank) + '</td></tr></table>' +
-    '<h3>운영</h3><p>플로어 호출 — 맞음 <b>' + s.right + '</b> · 틀림 <b>' + s.wrong + '</b> · 못 감 <b>' + s.missed + '</b>' + (s.quick ? ' · ⚡ 빠른 판정 <b>' + s.quick + '</b>' : '') + (s.angry ? ' · 화나서 나간 손님 ' + s.angry : '') + '<br>' +
+    '<h3>운영</h3><p>플로어 호출 — 맞음 <b>' + s.right + '</b> · 틀림 <b>' + s.wrong + '</b> · 못 감 <b>' + s.missed + '</b>' + (s.quick ? ' · ⚡ 빠른 판정 <b>' + s.quick + '</b>' : '') + (s.spot ? ' · 🔍 딜러 실수 잡음 <b>' + s.spot + '</b>' : '') + (s.angry ? ' · 화나서 나간 손님 ' + s.angry : '') + '<br>' +
     '아나운스 ' + s.ann + '건' + (s.annByStaff ? ' (직원 ' + s.annByStaff + ')' : '') + ' · 틀림 ' + s.annWrong + ' · 놓침 ' + s.annMiss + ' · 밸런싱 ' + s.balanced + '건' + (s.balanceMiss ? ' (놓침 ' + s.balanceMiss + ')' : '') + '<br>' +
     '청소 ' + s.cleaned + '건 · 바닥이 젖어 있던 시간 ' + Math.round(s.spillSec) + '초 · 음료 품절로 못 판 것 ' + s.noStock + '건' + (s.maxCombo >= 2 ? '<br>🔥 최고 판정 콤보 ×' + s.maxCombo : '') + '</p>' +
     '<h3>손님</h3><p>평균 만족도 ' + Math.round(avgSat) + ' · 줄이 길어 돌아간 손님 ' + (s.lost + s.queueLeave) + '명 · 평판 ' + Math.round(s.repStart) + ' → <b>' + Math.round(G.rep) + '</b> (' + rankAfter + ')</p>' +
@@ -4358,6 +4426,7 @@ var ACHS = [
   { id: 'flawless', k: 'day', ic: '🧑‍⚖️', ko: '무결점 플로어', d: '하루 판정 5건 이상, 틀림 · 못 감 0', t: function (c) { return c.s.right >= 5 && !c.s.wrong && !c.s.missed; } },
   { id: 'combo5', k: 'day', ic: '🔥', ko: '콤보 ×5', d: '판정 5연속 정답', t: function (c) { return c.s.maxCombo >= 5; } },
   { id: 'combo10', k: 'day', ic: '☄️', ko: '콤보 ×10', d: '판정 10연속 정답', t: function (c) { return c.s.maxCombo >= 10; } },
+  { id: 'spotter', k: 'day', ic: '🔍', ko: '족보 감별사', d: '하루 딜러 실수를 3번 잡았다', t: function (c) { return (c.s.spot || 0) >= 3; } },
   { id: 'quick10', k: 'day', ic: '⚡', ko: '번개 플로어', d: '하루 ⚡ 빠른 판정 10번', t: function (c) { return c.s.quick >= 10; } },
   { id: 'announcer', k: 'day', ic: '📢', ko: '정시 아나운서', d: '직접 아나운스 10건 이상, 틀림 · 놓침 0', t: function (c) { return c.s.ann - c.s.annByStaff >= 10 && !c.s.annWrong && !c.s.annMiss; } },
   { id: 'dry', k: 'day', ic: '🧽', ko: '뽀송한 바닥', d: '청소 3건 이상, 젖은 시간 30초 이하', t: function (c) { return c.s.cleaned >= 3 && c.s.spillSec <= 30; } },
@@ -4462,7 +4531,7 @@ G.__music = MUSIC;   // 자동 점검용
 G.__plan = planEvents; G.__type = pickType; G.__diff = diffK;   // 자동 점검용
 G.__weekly = weeklyScreen;   // 자동 점검용
 G.__case = function (tid, n) { var t = G.tables[tid], d = genCase(t); if (n) d.id = n; createCall(t, 'case', d); return d; };   // 자동 점검용
-G.__cases = CASES; G.__caseQ = caseQuestion; G.__drill = openDrill; G.__open = openCall; G.__achs = ACHS; G.__checkAch = checkAch; G.__openAch = openAch; G.__achGot = achGot;G.__isMix = isMix;
+G.__cases = CASES; G.__caseQ = caseQuestion; G.__drill = openDrill; G.__open = openCall; G.__spotGen = function (tid) { return genIncident(G.tables[tid || 0], 'spot'); }; G.__spotCall = function (tid) { var t = G.tables[tid || 0]; createCall(t, 'spot', genIncident(t, 'spot')); return t.call; }; G.__best = best; G.__cmp = cmp;G.__achs = ACHS; G.__checkAch = checkAch; G.__openAch = openAch; G.__achGot = achGot;G.__isMix = isMix;
 var confirmNew = { ok: false };   // 자동 점검이 새로 시작 확인을 건너뛸 때 쓴다
 G.__confirmNew = confirmNew;
 G.__eval = { best: best, eval5: eval5, plohi: bestPLOHigh, plolo: bestPLOLow, name: handName };   // 자동 점검용

@@ -601,6 +601,14 @@ details.weekfold[open] > summary { margin: 0 -10px 8px; border-bottom: 1px solid
 .dexgifts b { font-family: var(--mono); }
 /* 터치 화면 — 탭한 자리의 hover 가 다음 창의 선택지에 남아 「힌트」처럼 보이지 않게 */
 @media (hover: none) { .choice:hover { border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.04); transform: none; } }
+/* 1.5 — 🔍 딜러 실수 잡기: 보드 · 홀카드 */
+.pc { display: inline-block; min-width: 34px; margin: 0 3px 0 0; padding: 4px 5px; border-radius: 6px; background: #f4efe0; color: #14110d; font: 800 15px/1.1 var(--mono); text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.pc.r { color: #c4302b; }
+.pboard, .pholes > div { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; margin: 4px 0; }
+.pboard small, .pholes small { min-width: 64px; font-size: 12px; font-weight: 800; color: var(--ink-2); }
+.pboard { padding: 6px 8px; border-radius: 10px; background: rgba(23,132,95,.22); border: 1px solid rgba(67,214,158,.25); }
+.pholes { margin: 4px 0 8px; }
+.pboard small { min-width: 34px; }   /* 다섯 장이 작은 폰에서도 한 줄에 */
 /* 1.5 — 업적 · 칭호 */
 .achnew { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; margin: 6px 0 10px; padding: 8px 10px; border-radius: 12px; background: var(--amber-bg); border: 1px solid var(--amber); }
 .achnew b { color: var(--amber-ink); font-size: 13px; }
