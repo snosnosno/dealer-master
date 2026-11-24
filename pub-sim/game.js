@@ -2830,7 +2830,7 @@ function simulate(dt) {
       spawnCustomer();
       var feeK = G.cfg.fee === 20000 ? 0.75 : (G.cfg.fee === 50000 ? 1.6 : 1);
       var repK = clamp(1.6 - G.rep / 100, 0.55, 1.4) * (G.owned.interior ? 0.87 : 1);
-      G.nextArrival = (5 + Math.random() * 6) * feeK * repK * (tableCount() === 3 ? 0.78 : 1) / dayInfo().arrivalK;
+      G.nextArrival = (5 + Math.random() * 6) * feeK * repK * (tableCount() === 3 ? 0.78 : 1) / (dayInfo().arrivalK * rivalArrK());
     }
   }
   stepPlayerKeys(dt);
@@ -3507,7 +3507,7 @@ function saveGame() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       v: 2, ver: VERSION, day: G.day, rep: G.rep, bank: G.bank, owned: G.owned, roster: G.roster, staffSeq: G.staffSeq, weekLog: G.weekLog, debtDays: G.debtDays, regulars: G.regulars,
-      theme: G.theme, themes: G.themes, decorInv: G.decorInv, placed: G.placed, wins: G.wins, weekCh: G.weekCh,
+      theme: G.theme, themes: G.themes, decorInv: G.decorInv, placed: G.placed, wins: G.wins, weekCh: G.weekCh, rival: G.rival,
       cfg: { fee: G.cfg.fee, stack: G.cfg.stack, level: G.cfg.level, price: G.cfg.price, stock: G.cfg.stock, assign: G.cfg.assign, resCap: G.cfg.resCap, resDeposit: G.cfg.resDeposit }
     }));
   } catch (e) { /* 저장이 막힌 브라우저 — 이어하기만 안 될 뿐이다 */ }
@@ -3527,6 +3527,7 @@ function resetGame() {
   G.cfg = { fee: 30000, stack: 1, level: 1, price: 1, stock: 60, chipOk: null, assign: [1, 2, null], train: null, resCap: 1, resDeposit: true };
   G.goalsDay = null; G.candDay = null; G.tips = {}; G.praiseDay = null; G.raiseDayChecked = null; G.raiseReq = null;
   G.theme = 'classic'; G.themes = { classic: true }; G.decorInv = {}; G.placed = []; G.wins = 0; G.weekLog = []; G.debtDays = 0; G.regulars = makeRegulars(); G.weekCh = null;
+  G.rival = { wins: 0, losses: 0, last: null, move: null };
   applyDecor();
 }
 
@@ -3575,6 +3576,8 @@ function titleScreen() {
     G.day = sv.day; G.rep = sv.rep; G.bank = sv.bank; G.owned = sv.owned || {}; G.roster = sv.roster || startRoster(); G.staffSeq = sv.staffSeq || 50;
     G.weekLog = sv.weekLog || []; G.debtDays = sv.debtDays || 0; G.regulars = sv.regulars || makeRegulars();
     G.weekCh = sv.weekCh && sv.weekCh.list && sv.weekCh.list.every(function (c) { return wcDef(c); }) ? sv.weekCh : null;
+    G.rival = sv.rival && typeof sv.rival === 'object' && typeof sv.rival.wins === 'number' ? sv.rival : { wins: 0, losses: 0, last: null, move: null };   // 1.4 저장은 라이벌이 없다
+    if (G.rival.move && G.rival.move.type && !RIVAL_MOVES[G.rival.move.type]) G.rival.move = null;
     G.theme = THEMES[sv.theme] ? sv.theme : 'classic'; G.themes = sv.themes || { classic: true }; G.decorInv = sv.decorInv || {};
     var cnt = {};
     G.placed = (sv.placed || []).filter(function (p) {   // 망가진 저장 — 좌표가 이상하거나 산 것보다 많이 놓인 것은 버린다
@@ -3621,6 +3624,91 @@ function raiseBox() {
     '<b>' + won(s.wage) + ' → ' + won(s.wage + rq.amt) + '</b>' +
     '<div class="rqbtns"><button class="cta" data-rq="1">올려 준다 (사기 +20)</button><button class="cta ghost" data-rq="0">이번엔 어렵다 (사기 −15)</button></div></div>';
 }
+/* 🥊 라이벌 펍 (1.5) — 길 건너 「로열 라운지」. 영업 중엔 아무것도 늘지 않는다: 오픈 준비에서 수를 막을지 정하고, 일요일에 한 주 손님 수로 겨룬다.
+   라이벌 손님 수는 주마다 오른다(후반이 어렵다). 합법 운영 그대로 — 라이벌도 우리도 참가비 · 음료 · 트로피뿐 */
+var RIVAL = '로열 라운지';
+var RIVAL_MOVES = {
+  clash: { ic: '📣', head: '이번 토요일 같은 시간에 「로열 메인 이벤트」를 건다', lose: '토요일 손님 −15%', cost: 300000, counter: '맞불 홍보 — 단골에게 토요일 안내' },
+  discount: { ic: '🏷️', head: '평일(월~목) 참가비를 깎는다', lose: '평일 손님 −10%', cost: 200000, counter: '평일 홍보 — 동네 전단 · 음료 시음' },
+  poach_reg: { ic: '💌', head: '「한번 와 보라」며 연락했다', lose: '일요일까지 ♥60 아래면 라이벌로 옮긴다', cost: 30000, counter: '안부 연락 — 다음 방문 음료 한 잔 (♥ +12)' },
+  poach_staff: { ic: '🕴️', head: '이직 제안을 했다', lose: '일요일까지 사기 60 아래면 떠난다', cost: 0, counter: '붙잡는다 — 일당 +2만 · 사기 +10' }
+};
+function rivalState() { if (!G.rival || typeof G.rival !== 'object') G.rival = { wins: 0, losses: 0, last: null, move: null }; return G.rival; }
+function rivalBase(week) { return Math.round(195 + 24 * (week - 1)); }
+function genRivalMove() {
+  var R = rivalState(), w = dayInfo().week;
+  if (w < 2 || (R.move && R.move.week === w)) return;
+  R.move = { week: w, type: null, status: 'none' };
+  if (!chance(0.8)) return;
+  var types = ['clash', 'discount'];
+  var reg = G.regulars.filter(function (r) { return !r.gone; }).sort(function (a, b) { return a.aff - b.aff; })[0];
+  var dl = G.roster.filter(function (s) { return s.role === 'dealer'; }).sort(function (a, b) { return b.skill - a.skill; })[0];
+  if (reg) types.push('poach_reg');
+  if (dl && roleCount('dealer') >= 3) types.push('poach_staff');   // 딜러가 둘뿐이면 내지 않는다 — 영업이 막힌다
+  var type = pick(types);
+  R.move = { week: w, type: type, status: 'open', target: type === 'poach_reg' ? reg.id : (type === 'poach_staff' ? dl.id : null) };
+}
+function rivalTargetName(m) {
+  if (m.type === 'poach_reg') { var r = G.regulars[m.target]; return r ? r.name : ''; }
+  if (m.type === 'poach_staff') { var s = G.roster.filter(function (x) { return x.id === m.target; })[0]; return s ? s.name : ''; }
+  return '';
+}
+function rivalBox() {
+  var R = rivalState(), w = dayInfo().week, m = R.move && R.move.week === w ? R.move : null;
+  var rec = (R.wins + R.losses) ? ' · 시즌 <b>' + R.wins + '승 ' + R.losses + '패</b>' : '';
+  var last = R.last ? ' · 지난주 손님 우리 ' + R.last.me + ' : ' + R.last.them : '';
+  if (w < 2 && !R.last) return '<div class="rivalbox"><b>🥊 ' + RIVAL + '</b> — 길 건너에 새 홀덤펍이 문을 열었다. 일요일마다 <b>한 주 손님 수</b>로 겨룬다(이기면 평판 +2, 지면 −1).</div>';
+  var h = '<div class="rivalbox"><b>🥊 ' + RIVAL + '</b>' + rec + last + ' · 이번 주 목표치 약 <b>' + rivalBase(w) + '</b>명';
+  if (m && m.type) {
+    var M = RIVAL_MOVES[m.type], who = rivalTargetName(m);
+    h += '<div class="rmove">' + M.ic + ' ' + (who ? '<b>' + who + '</b>' + (m.type === 'poach_staff' ? '(딜러)' : '(단골)') + ' — ' : '') + RIVAL + josa(RIVAL, '이', '가') + ' ' + M.head + '. <span class="note">그냥 두면: ' + M.lose + '</span></div>';
+    if (m.status === 'open') {
+      var poor = M.cost > G.bank;
+      h += '<div class="rqbtns"><button class="cta" data-rv="1"' + (poor ? ' disabled' : '') + '>' + M.counter + (M.cost ? ' (' + won(M.cost) + '원)' : '') + '</button><button class="cta ghost" data-rv="0">그냥 둔다</button></div>';
+    } else h += '<div class="note">' + (m.status === 'countered' ? '✓ 막았다' : '— 그냥 두기로 했다') + '</div>';
+  }
+  return h + '</div>';
+}
+function rivalDecide(counter) {
+  var R = rivalState(), m = R.move;
+  if (!m || m.status !== 'open') return;
+  var M = RIVAL_MOVES[m.type];
+  if (!counter) { m.status = 'ignored'; toast('🥊 ' + RIVAL + '의 수를 그냥 두기로 했다'); return; }
+  if (M.cost > G.bank) return;
+  G.bank -= M.cost; m.status = 'countered';
+  if (m.type === 'poach_reg') { var r = G.regulars[m.target]; if (r) r.aff = clamp(r.aff + 12, 0, 100); }
+  if (m.type === 'poach_staff') { var s = G.roster.filter(function (x) { return x.id === m.target; })[0]; if (s) { s.wage += 20000; addMorale(s, 10); } }
+  toast('🥊 막았다 — ' + M.counter); SFX.good();
+}
+/* 영업 중 손님 도착 — 라이벌 수를 그냥 뒀으면 그날만 줄어든다(1 = 그대로) */
+function rivalArrK() {
+  var R = G.rival, m = R && R.move, info = dayInfo();
+  if (!m || m.week !== info.week || m.status === 'countered' || !m.type) return 1;   // 정하지 않고 열어도 「그냥 둠」
+  if (m.type === 'clash' && info.wd === 5) return 0.85;
+  if (m.type === 'discount' && info.wd <= 3) return 0.9;
+  return 1;
+}
+/* 일요일 — 대결 결과 · 빼가기 결과. 돌려주는 글은 주간 정산 화면에 */
+function rivalSettle(w) {
+  var R = rivalState(), m = R.move && R.move.week === w ? R.move : null, lines = [];
+  var me = G.weekLog.reduce(function (t, d) { return t + d.entries; }, 0);
+  var boost = m && m.type && m.status !== 'countered' && (m.type === 'clash' || m.type === 'discount') ? 1.08 : 1;
+  var them = Math.round(rivalBase(w) * boost * (0.94 + Math.random() * 0.12));
+  var win = me > them;
+  if (win) { R.wins++; G.rep = clamp(G.rep + 2, 0, 100); } else { R.losses++; G.rep = clamp(G.rep - 1, 0, 100); }
+  R.last = { week: w, me: me, them: them, win: win };
+  if (m && m.type === 'poach_reg' && m.status !== 'countered') {
+    var r = G.regulars[m.target];
+    if (r && !r.gone && r.aff < 60) { r.gone = true; lines.push('💔 단골 ' + r.name + ' — ' + RIVAL + '로 옮겼다'); }
+    else if (r) lines.push('💌 ' + r.name + josa(r.name, '은', '는') + ' 그래도 우리 펍에 남았다');
+  }
+  if (m && m.type === 'poach_staff' && m.status !== 'countered') {
+    var s = G.roster.filter(function (x) { return x.id === m.target; })[0];
+    if (s && morale(s) < 60 && roleCount('dealer') >= 3) { G.roster = G.roster.filter(function (x) { return x !== s; }); G.cfg.assign = G.cfg.assign.map(function (id) { return id === s.id ? null : id; }); lines.push('🕴️ 딜러 ' + s.name + ' — ' + RIVAL + '로 떠났다'); }
+    else if (s) lines.push('🕴️ ' + s.name + josa(s.name, '은', '는') + ' 제안을 거절하고 남았다');
+  }
+  return { win: win, me: me, them: them, lines: lines };
+}
 function roleCount(role) { return G.roster.filter(function (s) { return s.role === role; }).length; }
 function staffLine(s) {
   var stat = s.role === 'dealer' ? '정확도 ' + s.skill + ' · 속도 ' + Math.round(s.speed * 100) : '능력 ' + s.skill;
@@ -3638,6 +3726,7 @@ function prepScreen(tab) {
   pickGoals();
   genCandidates();
   genRaiseRequest();
+  genRivalMove();
   G.prepTab = tab || G.prepTab || 'shop';
   var cfg = G.cfg;
   // 해고된 딜러가 배치에 남아 있으면 비운다
@@ -3658,7 +3747,7 @@ function prepScreen(tab) {
     '<h2>' + info.name + '</h2><p class="note">' + info.desc + '</p></div>' +
     '<div class="hero-r"><div class="stat"><small>자금</small><b>' + won(G.bank) + '</b></div>' +
     '<div class="stat"><small>평판 · ' + rankOf(G.rep) + '</small><b>' + Math.round(G.rep) + '</b></div></div></div>' +
-    raiseBox() +
+    raiseBox() + rivalBox() +
     '<div class="goalchips"><span class="gl">🎯 오늘 목표 <small>하나에 +' + won(GOAL_REWARD) + '</small></span>' + G.goals.map(function (g) { return '<span class="gchip">' + goalText(g) + '</span>'; }).join('') + '</div>' +
     '<details class="weekfold"' + (monday ? ' open' : '') + '><summary>📅 이번 주 <span>시즌 ' + Math.min(SEASON_WEEKS, info.week) + '/' + SEASON_WEEKS + ' · 난이도 ' + diffLv() + '/6' +
       (wch ? ' · 도전 ' + wDone + '/' + wch.list.length : '') + '</span></summary>' +
@@ -3816,6 +3905,9 @@ function prepScreen(tab) {
       toast('💵 ' + s.name + ' 일당 ' + won(s.wage) + ' — 사기 ' + Math.round(s.morale)); SFX.cash();
       prepScreen('staff');
     };
+  });
+  document.querySelectorAll('[data-rv]').forEach(function (b) {
+    b.onclick = function () { rivalDecide(b.getAttribute('data-rv') === '1'); prepScreen(); };
   });
   document.querySelectorAll('[data-rq]').forEach(function (b) {
     b.onclick = function () {
@@ -4235,6 +4327,7 @@ function weeklyScreen() {
     G.bank += chN * WEEK_CH_REWARD; G.rep = clamp(G.rep + chN * 2, 0, 100);
     if (chN === 3) { gift = w >= 3 ? 'sofa' : 'plant'; G.decorInv[gift] = decorCount(gift) + 1; }
   }
+  var rv = rivalSettle(w);   // 🥊 대결 · 빼가기 — 휴무 사기 +6 보다 먼저(토요일까지의 사기로 정한다)
   G.roster.forEach(function (st) { addMorale(st, 6); });   // 일요일 휴무 — 쉬고 오면 사기 +6
   var sum = G.weekLog.reduce(function (t, d) { return t + d.net; }, 0);
   var stars = G.weekLog.reduce(function (t, d) { return t + d.stars; }, 0);
@@ -4245,7 +4338,7 @@ function weeklyScreen() {
   }).join('');
   var seasonDone = w >= SEASON_WEEKS;
   var cleared = G.rep >= 85 && G.bank >= SEASON_GOAL_BANK;
-  var achNew = checkAch('week', { chN: ch ? chN : 0, weekNet: sum - WEEKLY_RENT });
+  var achNew = checkAch('week', { chN: ch ? chN : 0, weekNet: sum - WEEKLY_RENT, rivalWin: rv.win });
   var h = '<div class="kicker">' + w + '주차 일요일 · 휴무</div><h2>🗓️ 주간 정산</h2>' + achHtml(achNew) +
     '<table class="rows">' + rows +
     '<tr><td>임대료 (주간)</td><td>−' + won(WEEKLY_RENT) + '</td></tr>' +
@@ -4253,6 +4346,9 @@ function weeklyScreen() {
     '<tr><td>자금</td><td>' + won(G.bank) + '</td></tr></table>' +
     '<p>이번 주 별 <b>' + stars + '</b>/' + G.weekLog.length * 3 + ' · 엔트리 ' + entries + '건' + (best ? ' · 최고의 날 ' + best.wk + '요일 ' + best.name : '') + '</p>' +
     '<p class="note">🛌 휴무 — 직원 모두 사기 +6</p>' +
+    '<h3>🥊 ' + RIVAL + '와 대결</h3><div class="rivalres ' + (rv.win ? 'win' : 'lose') + '"><span>우리 <b>' + rv.me + '</b></span><em>' + (rv.win ? '이겼다' : '졌다') + '</em><span>' + RIVAL + ' <b>' + rv.them + '</b></span></div>' +
+    '<p class="note" style="text-align:center">한 주 손님(엔트리) · ' + (rv.win ? '평판 +2' : '평판 −1') + ' · 시즌 ' + G.rival.wins + '승 ' + G.rival.losses + '패</p>' +
+    (rv.lines.length ? '<p>' + rv.lines.join('<br>') + '</p>' : '') +
     (ch ? '<h3>🗓️ 이번 주 도전 ' + chN + '/3</h3><ul class="goals">' + ch.list.map(function (c, i) { return '<li class="' + (chDone[i] ? 'ok' : 'no') + '">' + (chDone[i] ? '✓ ' : '✗ ') + wcText(c, true) + '</li>'; }).join('') + '</ul>' +
       '<p>' + (chN ? '보상 +' + won(chN * WEEK_CH_REWARD) + '원 · 평판 +' + chN * 2 : '보상 없음') + (gift ? ' · 🎁 ' + DECOR_ITEMS[gift].ic + ' ' + DECOR_ITEMS[gift].ko + ' 하나 — 꾸미기 탭에서 놓는다' : '') + '</p>' : '') +
     seasonBar() +
@@ -4382,11 +4478,13 @@ var HELP = [
   ['🗓️ 하루 · 한 주', '오픈 준비(17:30)에서 상점 · 꾸미기 · 직원 · 칩 구조 · 음료 · 딜러 배치를 정하고 <b>영업 시작</b>. 18:00~02:00 영업(1배속 6분) 뒤 레지 정산 · 보고서. 월~목 데일리 · 금 딥스택 · 토 메인 이벤트(참가비 2배 · 레지 24:00) · 일요일은 휴무 · 주간 정산(임대료). 8주가 한 시즌 — 목표는 <b>홀덤 명소(평판 85) + 자금 1,500만</b>. 자금이 사흘 연속 마이너스면 폐업.'],
   ['👟 점장 · 할 일', '바닥을 탭하거나 WASD 로 걷는다. 오른쪽(폰은 아래) 할 일 목록을 누르면 그 자리로 걸어가 처리한다. 카운터 뒤에 서 있으면 등록이 빨라진다. 🚨 판정 30초 · 📢 아나운스 · ⚖️ 밸런싱 · 🧽 청소 · ⚡ 돌발 상황.'],
   ['🚨 플로어 판정 넷', '<b>버튼 위치 오류 · 카드 장수 이상</b> — 실질 액션(블라인드 뒤 액션 둘 중 칩이 하나라도 들어갔거나 액션이 셋) 전이면 미스딜, 뒤면 버튼은 그대로 · 장수 틀린 좌석만 데드. <b>레이즈 금액 미달</b> — 다음 카드 전이면 최소 레이즈까지 채우고, 깔렸으면 그대로. <b>버튼 · 블라인드</b> — BB 는 반드시 다음 사람에게 한 칸, SB 는 지난 BB 자리(탈락이면 없음), 버튼은 지난 SB 자리(비었으면 데드 버튼). 근거는 TDA 케이스 문서로 <b>원문 확인 전</b>이다.'],
+  ['🔍 딜러 실수 잡기', '가끔 딜러가 팟을 밀다 멈춘다. <b>누가 이겼나</b> — 보드 다섯 장과 각자의 홀카드로 가장 좋은 다섯 장을 만들고, 같은 족보면 높은 카드부터 한 장씩(키커) 견준다. 다섯 장이 똑같으면 찹. <b>팟 나누기</b> — 메인 팟은 가장 작은 올인 × 사람 수, 사이드 팟은 남은 사람끼리. 아무도 받지 못한 베팅은 돌려준다. 규정이 아니라 계산이라 「원문 확인 전」이 붙지 않는다.'],
   ['📢 아나운스', '레벨이 바뀌는 그 시각에 뜬다. 8초 안에 맞게 안내하면 정시 보너스. 구조표에서 지금 시각의 줄을 읽는다. 레지 마감 30분 전 · 레지 마감(총 칩 = 엔트리 × 스타팅) · 파이널 테이블.'],
   ['🧑‍💼 직원', '딜러 · 홀 서버 · 카운터 · 청소 · 플로어 보조. 출근율만큼 나오고 노쇼하면 🧑‍💼 로 대타. <b>사기</b>가 60 아래면 느려지고 20 아래면 그만둔다 — 과로를 피하고 하루 한 번 칭찬한다. 딜러 <b>교육 트리</b>(판정 · 속도 · 응대)는 교육 · 실전 경험 · 멘토 · 세미나로 오른다. 판정 2단계 = 믹스 자격.'],
   ['⚡ 돌발 상황', '단체 손님 · 인플루언서 · 정전(왼쪽 벽 차단기) · 딜러 다툼 · 칩 환전 요구 · 취객 · 위생 점검. 주가 갈수록 잦아진다.'],
   ['🎨 꾸미기 · 테이블', '테마와 장식을 사서 배치 모드에서 놓는다 — 장식 반경 3 손님 만족이 오른다. 테이블에서는 실제 카드로 승자가 정해지고, 큰 족보는 테이블 위에 크게 뜬다. 믹스 테이블(PLO8)은 상점에서.'],
   ['🎯 목표 · 도전', '오늘의 목표 셋 = 별 셋. 이번 주 도전 셋은 일요일에 보상(셋 다면 장식). 난이도는 6주에 걸쳐 조금씩 오른다.'],
+  ['🥊 라이벌 · 업적', '길 건너 「' + RIVAL + '」와 일요일마다 <b>한 주 손님 수</b>를 겨룬다(이기면 평판 +2, 지면 −1). 라이벌 손님은 주마다 는다. 2주차부터 월요일에 라이벌이 수를 하나 둔다 — 토요일 맞불 · 평일 할인 · 단골 · 딜러 빼가기. 오픈 준비에서 막을지(돈이 든다) 그냥 둘지 정한다. 🎖️ 업적은 명예뿐 — 딴 것 하나를 칭호로 걸 수 있다.'],
   ['⚖️ 합법 운영', '매출은 참가비 · 음료(· 예약 보증금 · 믹스 참가비)뿐이다. 우승 상품은 트로피와 다음 대회 시드권. <b>칩을 현금이나 상품권으로 바꿔 주지 않는다</b> — 게임 안에서도 마찬가지다.']
 ];
 function openHelp(back) {
@@ -4449,6 +4547,8 @@ var ACHS = [
   { id: 'drill_s', k: 'life', ic: '🎯', ko: '연습실 S', d: '판정 연습실 650점', t: function () { return (loadRecords().drillBest || 0) >= 650; } },
   { id: 'week3', k: 'week', ic: '🗓️', ko: '도전 완주', d: '주간 도전 셋을 다 깼다', t: function (c) { return c.chN === 3; } },
   { id: 'week5m', k: 'week', ic: '📈', ko: '오백만 주간', d: '한 주 합계(임대료 뒤) 500만', t: function (c) { return c.weekNet >= 5000000; } },
+  { id: 'rival1', k: 'week', ic: '🥊', ko: '첫 승리', d: RIVAL + '를 한 주 손님 수로 이겼다', t: function (c) { return !!c.rivalWin; } },
+  { id: 'rival5', k: 'week', ic: '🏟️', ko: '동네 1등', d: '한 시즌에 ' + RIVAL + '를 다섯 번 이겼다', t: function () { return !!G.rival && G.rival.wins >= 5; } },
   { id: 'clear', k: 'season', ic: '🏆', ko: '시즌 클리어', d: '시즌 목표를 이뤘다', t: function (c) { return !!c.cleared; } },
   { id: 'season8', k: 'season', ic: '🗺️', ko: '8주 완주', d: '폐업 없이 시즌 8주를 마쳤다', t: function (c) { return !!c.firstEnd; } }
 ];
@@ -4508,6 +4608,7 @@ function seasonEnd(cleared, firstEnd) {
   showModal('<div class="titlecard"><div class="kicker">시즌 ' + SEASON_WEEKS + '주 끝</div><h1>' + (cleared ? '🏆 시즌 클리어!' : '시즌 종료') + '</h1>' +
     '<p class="sub">' + (cleared ? '당신의 펍은 이 동네의 홀덤 명소가 됐다.' : '목표에는 닿지 못했다 — 하지만 펍은 계속된다.') + '</p></div>' + achHtml(achNew) +
     '<p>평판 <b>' + Math.round(G.rep) + '</b> (' + rankOf(G.rep) + ') · 자금 <b>' + won(G.bank) + '원</b> · 직원 ' + G.roster.length + '명</p>' +
+    (G.rival && G.rival.wins + G.rival.losses ? '<p>🥊 ' + RIVAL + '와 주간 대결 <b>' + G.rival.wins + '승 ' + G.rival.losses + '패</b> — ' + (G.rival.wins > G.rival.losses ? '동네 손님은 우리 편이다' : '다음 시즌엔 이기자') + '</p>' : '') +
     '<div class="titlebtns"><button class="cta" data-more="1">계속 운영하기</button><button class="cta ghost" data-new="1">새 시즌 — 처음부터</button></div>', true);
   if (cleared) { SFX.win(); confetti(V(0, 0)); }
   $('[data-more]').onclick = function () { prepScreen('shop'); };
@@ -4529,9 +4630,9 @@ G.saveGameNow = function () { saveGame(); };   // 자동 점검용
 G.placeAt = placeAtForTest;                    // 자동 점검용
 G.__music = MUSIC;   // 자동 점검용
 G.__plan = planEvents; G.__type = pickType; G.__diff = diffK;   // 자동 점검용
-G.__weekly = weeklyScreen;   // 자동 점검용
+G.__weekly = weeklyScreen; G.__prep = prepScreen; G.__save = saveGame;   // 자동 점검용
 G.__case = function (tid, n) { var t = G.tables[tid], d = genCase(t); if (n) d.id = n; createCall(t, 'case', d); return d; };   // 자동 점검용
-G.__cases = CASES; G.__caseQ = caseQuestion; G.__drill = openDrill; G.__open = openCall; G.__spotGen = function (tid) { return genIncident(G.tables[tid || 0], 'spot'); }; G.__spotCall = function (tid) { var t = G.tables[tid || 0]; createCall(t, 'spot', genIncident(t, 'spot')); return t.call; }; G.__best = best; G.__cmp = cmp;G.__achs = ACHS; G.__checkAch = checkAch; G.__openAch = openAch; G.__achGot = achGot;G.__isMix = isMix;
+G.__cases = CASES; G.__caseQ = caseQuestion; G.__drill = openDrill; G.__open = openCall; G.__rival = { gen: genRivalMove, decide: rivalDecide, settle: rivalSettle, arrK: rivalArrK, base: rivalBase, moves: RIVAL_MOVES };G.__spotGen = function (tid) { return genIncident(G.tables[tid || 0], 'spot'); }; G.__spotCall = function (tid) { var t = G.tables[tid || 0]; createCall(t, 'spot', genIncident(t, 'spot')); return t.call; }; G.__best = best; G.__cmp = cmp;G.__achs = ACHS; G.__checkAch = checkAch; G.__openAch = openAch; G.__achGot = achGot;G.__isMix = isMix;
 var confirmNew = { ok: false };   // 자동 점검이 새로 시작 확인을 건너뛸 때 쓴다
 G.__confirmNew = confirmNew;
 G.__eval = { best: best, eval5: eval5, plohi: bestPLOHigh, plolo: bestPLOLow, name: handName };   // 자동 점검용
