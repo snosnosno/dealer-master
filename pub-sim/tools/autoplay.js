@@ -13,6 +13,10 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
   await page.goto(PAGE);
   await page.waitForTimeout(600);
   const P = MODE === 'perfect';
+  // AP_LOG=파일 — 하루 · 일요일마다 한 줄씩 덧붙인다(컨테이너가 재시작돼도 지난 날 결과가 남는다)
+  const apLog = (o) => { if (process.env.AP_LOG) try { require('fs').appendFileSync(process.env.AP_LOG, JSON.stringify(o) + '\n'); } catch (e) { /* 무시 */ } };
+  // AP_RIVAL=counter|ignore — 라이벌의 수를 막는 봇 / 그냥 두는 봇(기본: 정하지 않음 = 그냥 둠)
+  const AP_RIVAL = process.env.AP_RIVAL;
   // human: 사람처럼 4번 중 3번 맞힌다(HUMAN_ACC 로 바꿈) — 밸런스를 perfect(위) · random(아래) 사이에서 잰다
   const ACC = P ? 1 : MODE === 'human' ? (+process.env.HUMAN_ACC || 0.75) : 0;
   const pickIx = (c, n, randomIx) => {
@@ -27,6 +31,8 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
     // 일요일 주간 정산이 떠 있으면 넘긴다 (도전 보상 · 임대료)
     if (await page.$('[data-week]')) {
       seen.weekly = await page.evaluate(() => document.querySelector('.modal').innerText.slice(0, 600));
+      seen.rival = await page.evaluate(() => window.__pub.rival && JSON.parse(JSON.stringify(window.__pub.rival)));
+      apLog({ sunday: true, rival: seen.rival, bank: await page.evaluate(() => window.__pub.bank), rep: await page.evaluate(() => Math.round(window.__pub.rep)) });
       await page.click('[data-week]');
     }
     // 오픈 준비
@@ -40,6 +46,10 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
       await page.click('[data-tab="shop"]');
     }
     if (day === 1) { const b = page.locator('[data-buy="shuffler"]'); if (await b.isEnabled()) await b.click(); }
+    if (AP_RIVAL && await page.$('[data-rv]')) {   // 라이벌의 수 — 막기 버튼이 돈이 모자라 꺼져 있으면 그냥 둔다
+      const want = AP_RIVAL === 'counter' && await page.locator('[data-rv="1"]').isEnabled() ? '1' : '0';
+      await page.click(`[data-rv="${want}"]`); seen.rivalDecisions = (seen.rivalDecisions || '') + want;
+    }
     await page.click('[data-tab="chips"]');
     await shot('chips');
     await page.click('[data-chipq]');
@@ -64,6 +74,8 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
       if (st.nd) {
         await shot('report');
         reports.push(await page.evaluate(() => ({ absent: window.__pub.absent.map(x => x.name + ':' + x.role), temps: window.__pub.temps.map(x => x.name + ':' + x.role), dealers: window.__pub.dealers.length, s: Object.assign({}, window.__pub.stats), rep: Math.round(window.__pub.rep), bank: window.__pub.bank, winner: window.__pub.winner && window.__pub.winner.name, txt: document.querySelector('.modal').innerText.slice(0, 900) })));
+        const R = reports[reports.length - 1];
+        apLog({ day: day + 1, rep: R.rep, bank: R.bank, winner: R.winner, entries: R.s.entries, right: R.s.right, wrong: R.s.wrong, missed: R.s.missed, spot: R.s.spot || 0, errors: errors.length });
         await page.click('[data-next-day]');
         break;
       }
