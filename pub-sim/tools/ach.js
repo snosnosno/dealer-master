@@ -40,7 +40,7 @@ const SHOT = process.argv[2] === 'shot';
   // 3. 업적 화면 — 칭호 고르기 · 내리기
   await G(() => window.__pub.__openAch(() => {}));
   const scr = await G(() => ({ got: document.querySelectorAll('.achc.got').length, all: document.querySelectorAll('.achc').length, locked: document.querySelectorAll('.achc[disabled]').length }));
-  expect('screen', scr.all === 34 && scr.got >= 13 && scr.locked === scr.all - scr.got, scr);
+  expect('screen', scr.all === 38 && scr.got >= 13 && scr.locked === scr.all - scr.got, scr);
   if (SHOT) await page.screenshot({ path: 'ach-screen.png' });
   await page.click('[data-atitle="perfect"]');
   const t1 = await G(() => ({ cur: document.querySelector('.achcur').innerText, on: !!document.querySelector('.achc.on[data-atitle="perfect"]'), rec: JSON.parse(localStorage.getItem('pubsim.records')).title }));
@@ -53,10 +53,10 @@ const SHOT = process.argv[2] === 'shot';
   await page.reload(); await page.waitForTimeout(500);
   const title = await G(() => ({ line: (document.querySelector('.recline') || {}).innerText || '', btn: (document.querySelector('[data-tach]') || {}).innerText || '' }));
   expect('title-line', title.line.indexOf('S 등급') >= 0, title);
-  expect('title-btn', /업적 1[0-9]\/34/.test(title.btn), title);
+  expect('title-btn', /업적 1[0-9]\/38/.test(title.btn), title);
   if (SHOT) await page.screenshot({ path: 'ach-title.png' });
   await page.click('[data-tach]');
-  expect('title-open', await G(() => document.querySelectorAll('.achc').length === 34));
+  expect('title-open', await G(() => document.querySelectorAll('.achc').length === 38));
   await page.click('[data-back]');
   // 5. 손상된 기록(ach 가 배열) — 깨지지 않고 새로 센다
   await G(() => localStorage.setItem('pubsim.records', JSON.stringify({ seasons: 0, clears: 0, bestRep: 0, bestBank: 0, bankrupt: 0, ach: [1, 2], title: 'nope' })));
@@ -74,7 +74,7 @@ const SHOT = process.argv[2] === 'shot';
   await page.waitForTimeout(300);
   const pauseBtn = await G(() => !!document.querySelector('[data-mach]'));
   expect('pause-btn', pauseBtn);
-  if (pauseBtn) { await page.click('[data-mach]'); expect('pause-open', await G(() => document.querySelectorAll('.achc').length === 34)); await page.click('[data-back]'); expect('pause-back', await G(() => !!document.querySelector('[data-resume]'))); }
+  if (pauseBtn) { await page.click('[data-mach]'); expect('pause-open', await G(() => document.querySelectorAll('.achc').length === 38)); await page.click('[data-back]'); expect('pause-back', await G(() => !!document.querySelector('[data-resume]'))); }
   console.log(JSON.stringify({ day, wk, se, dr, scr, title, broken, bad, errors }, null, 1));
   await browser.close();
 })();

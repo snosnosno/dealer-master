@@ -1251,6 +1251,8 @@ function dayInfo(day) {
   var base = { wd: wd, week: week, wk: WEEKDAYS[wd], name: '데일리', short: '데일리', arrivalK: 1, feeMul: 1, stack: null, regClose: 23 * 60, repMul: 1,
     desc: '평일 데일리 토너먼트' };
   if (wd === 4) return Object.assign(base, { name: '금요 딥스택', short: '딥스택', arrivalK: 1.35, stack: 2, desc: '스타팅 50,000 고정 · 손님 +35% · 오래 간다' });
+  if (wd === 5 && week === SEASON_WEEKS) return Object.assign(base, { name: '🏆 시즌 챔피언십', short: '챔피언십', arrivalK: 1.6, feeMul: 2, regClose: 24 * 60, repMul: 1.5, champ: true,
+    desc: '시즌 포인트 상위 단골 여섯이 모두 온다 · 참가비 2배 · 레지 마감 24:00 · 우승자가 시즌 챔피언' });
   if (wd === 5) return Object.assign(base, { name: '토요 메인 이벤트', short: '메인 이벤트', arrivalK: 1.6, feeMul: 2, regClose: 24 * 60, repMul: 1.5,
     desc: '참가비 2배 · 손님 +60% · 레지 마감 24:00 · 평판이 1.5배로 움직인다' });
   if (wd === 6) return Object.assign(base, { name: '휴무', short: '휴무', desc: '주간 정산 · 임대료' });
@@ -1356,6 +1358,94 @@ function regDone(c) {
   r.aff = clamp(r.aff + d, 0, 100);
   G.regDelta.push({ name: r.name, d: d });
   if (r.aff < 15 && !r.gone) { r.gone = true; log('💔 단골 ' + r.name + ' — 발길을 끊었다', 'bad'); }
+  r.pts = (r.pts || 0) + 1;   // 🏆 시즌 포인트 — 방문 +1
+}
+/* 📖 단골 이야기 (1.6) — 단골 여섯에게 3막. 방문 · ♥가 차면 오픈 준비에 짧은 장면이 뜨고(하루 하나), 대답을 고른다.
+   정답이 있는 문제가 아니다 — 대답마다 작은 효과가 다르다. 3막을 마치면 장식 선물. {fav} 는 좋아하는 음료 */
+var STORY_NEED = [{ v: 2, aff: 0 }, { v: 5, aff: 60 }, { v: 8, aff: 75 }];
+var STORIES = {
+  0: { title: '떨리는 첫 대회', gift: 'trophy', acts: [
+    { t: '"처음 대회 나왔을 땐 손이 떨려서 칩을 쏟았어요. 저 계속 와도 되죠?"', a: [['"물론이죠 — 모르는 건 플로어를 부르세요"', '든든하네요!', { aff: 6 }], ['"딜러에게 천천히 안내하라고 해 둘게요"', '감사합니다 🙏', { morale: 3 }]] },
+    { t: '"어제 처음으로 파이널 테이블까지 갔어요! 근데 블라인드가 오르니까 머리가 하얘지더라고요."', a: [['"아나운스를 더 또렷하게 할게요"', '그럼 저도 귀를 쫑긋!', { aff: 6 }], ['"다음엔 끝까지 갈 거예요 — 응원할게요"', '네, 꼭이요!', { rep: 1 }]] },
+    { t: '"사장님… 저 트로피 받았어요! 처음 왔던 바로 이 펍에서요."', a: [['"진열장에 사진도 같이 걸어요"', '와, 영광이에요 🏆', { aff: 10 }], ['"오늘 음료는 제가 축하로 낼게요"', '최고의 밤이에요!', { aff: 6, rep: 1 }]] }
+  ] },
+  1: { title: '동네 소개글', gift: 'artwall', acts: [
+    { t: '"여기 조명 예뻐서 사진 찍어도 돼요? 다른 손님 얼굴은 안 나오게 할게요."', a: [['"그럼요 — 카드 앞면만 안 찍히게요"', '네, 조심할게요 📸', { aff: 6 }], ['"바 쪽 조명이 더 예뻐요"', '오, 진짜네요!', { aff: 3, rep: 1 }]] },
+    { t: '"동네 소개글에 여기를 썼더니 친구들이 궁금해해요."', a: [['"친구분들 오시면 자리 챙길게요"', '다들 좋아하겠다!', { aff: 6 }], ['"토요일 메인 이벤트를 알려 주세요"', '공지 퍼 갈게요 📣', { rep: 1 }]] },
+    { t: '"소개글이 동네 인기 글이 됐어요! 사진 하나 액자로 선물할게요 — 벽에 걸어 주세요."', a: [['"가장 잘 보이는 곳에 걸게요"', '감동이에요 🖼️', { aff: 10 }], ['"사진 속 날짜도 같이 적어 둘게요"', '추억이 되겠네요', { aff: 6, rep: 1 }]] }
+  ] },
+  2: { title: '딜러였던 손님', gift: 'sofa', acts: [
+    { t: '"저 예전에 딜러였어요. 셔플 소리만 들어도 손이 근질거려요."', a: [['"가끔 우리 딜러들 셔플 좀 봐 주세요"', '좋죠, 재밌겠다', { morale: 3 }], ['"오늘은 손님으로 편히 즐기세요"', '그럼 오늘은 치기만!', { aff: 6 }]] },
+    { t: '"2번 테이블 딜러, 칩 미는 손이 좋아요. 한마디 칭찬해 줘도 될까요?"', a: [['"그럼요 — 칭찬은 힘이 되죠"', '(딜러가 활짝 웃는다)', { morale: 5 }], ['"끝나고 따로 얘기해 주세요"', '그게 더 좋겠네요', { aff: 6 }]] },
+    { t: '"다녀 본 펍 중에 여기가 제일 정확해요. 쉬는 자리에 소파 하나 놓으라고 보탤게요."', a: [['"딜러들 쉬는 자리에 둘게요"', '다들 고생하니까요 🛋️', { aff: 6, morale: 4 }], ['"손님 대기석에 둘게요"', '기다림도 즐겁게!', { aff: 10 }]] }
+  ] },
+  3: { title: '길 건너에서 온 손님', gift: 'plant', acts: [
+    { t: '"길 건너 로열 라운지에서 넘어왔어요. 거긴 판정이 오락가락해서요."', a: [['"여기선 애매하면 꼭 플로어를 부르세요"', '그 말 듣고 싶었어요', { aff: 6 }], ['"편하게 쳐 보시고 말해 주세요"', '네, 두고 볼게요 😏', { rep: 1 }]] },
+    { t: '"어제 사이드팟을 딜러가 헷갈렸는데, 사장님이 바로 잡더라고요."', a: [['"셈은 늘 다시 세요 — 그게 원칙이죠"', '그래서 믿고 쳐요', { aff: 6 }], ['"딜러도 금방 배워요"', '다들 손이 빨라졌어요', { morale: 3 }]] },
+    { t: '"이제 여기가 제 홈 펍이에요. 테이블 옆에 화분 하나 놓아 드릴게요."', a: [['"고마워요 — 잘 키울게요"', '🪴 물은 제가 가끔!', { aff: 10 }], ['"로열 라운지 얘기는 이제 그만!"', '하하, 그래요', { aff: 6, rep: 1 }]] }
+  ] },
+  4: { title: '금요일의 낙', gift: 'plant', acts: [
+    { t: '"금요일 퇴근하고 딥스택 오는 게 일주일 낙이에요."', a: [['"금요일엔 자리 하나 챙겨 둘게요"', '와, 단골 대접!', { aff: 6 }], ['"천천히 오래 즐기세요"', '그게 딥스택 맛이죠', { rep: 1 }]] },
+    { t: '"회사 동료들이 저보고 포커 선생님이래요. 규칙은 다 여기서 배웠는데."', a: [['"모르는 건 언제든 물어보세요"', '든든해요 😄', { aff: 6 }], ['"동료분들도 한번 데려오세요"', '진짜 데려올게요!', { rep: 1 }]] },
+    { t: '"동료들이랑 같이 왔어요! 이건 개업 축하 화분 — 늦었지만요."', a: [['"늦어도 반가워요 — 입구에 둘게요"', '🪴 딱이네요', { aff: 10 }], ['"동료분들 첫 음료는 서비스!"', '다들 감동했어요', { aff: 6, rep: 1 }]] }
+  ] },
+  5: { title: '바의 단골', gift: 'sofa', acts: [
+    { t: '"여기 음료는 늘 시원해서 좋아요. 제 거 기억하세요?"', a: [['"그럼요 — {fav} 맞죠?"', '역시! 🥰', { aff: 6 }], ['"다음엔 꼭 기억해 둘게요"', '기대할게요~', { aff: 3, rep: 1 }]] },
+    { t: '"바 자리가 편해서 기다리는 시간이 안 지루해요."', a: [['"바 좌석을 더 늘려 볼게요"', '그럼 더 자주 올래요', { aff: 6 }], ['"서버들에게 전해 줄게요"', '다들 친절해요', { morale: 3 }]] },
+    { t: '"바 옆에 둘 소파 하나 보탤게요! 제 자리 맡아 두는 거예요 ㅎㅎ"', a: [['"이름표도 붙여 둘게요"', '농담이었는데… 좋아요!', { aff: 10 }], ['"모두의 자리로 둘게요"', '그게 더 멋지네요 🛋️', { aff: 6, rep: 1 }]] }
+  ] }
+};
+function storyNext() {
+  if (G.storyDay === G.day) return null;   // 하루에 한 장면
+  for (var i = 0; i < G.regulars.length; i++) {
+    var r = G.regulars[i], S = STORIES[r.id], k = r.story || 0;
+    if (!S || r.gone || k >= 3) continue;
+    if (r.visits >= STORY_NEED[k].v && r.aff >= STORY_NEED[k].aff) return { r: r, S: S, k: k };
+  }
+  return null;
+}
+function storyBox() {
+  var n = storyNext();
+  if (!n) return '';
+  var act = n.S.acts[n.k], fav = function (x) { return x.replace('{fav}', n.r.fav); };
+  return '<div class="storybox"><div class="kicker">📖 단골 이야기 · ' + n.r.name + ' — 「' + n.S.title + '」 ' + (n.k + 1) + '막</div>' +
+    '<p>' + n.r.name + ': ' + fav(act.t) + '</p><div class="rqbtns">' +
+    act.a.map(function (x, i) { return '<button class="cta' + (i ? ' ghost' : '') + '" data-sty="' + i + '">' + fav(x[0]) + '</button>'; }).join('') + '</div></div>';
+}
+function storyPick(i) {
+  var n = storyNext();
+  if (!n) return;
+  var x = n.S.acts[n.k].a[i];
+  if (!x) return;
+  var fx = x[2] || {};
+  if (fx.aff) n.r.aff = clamp(n.r.aff + fx.aff, 0, 100);
+  if (fx.rep) G.rep = clamp(G.rep + fx.rep, 0, 100);
+  if (fx.morale) G.roster.forEach(function (s) { addMorale(s, fx.morale); });
+  n.r.story = n.k + 1; G.storyDay = G.day;
+  var msg = '📖 ' + n.r.name + ': "' + x[1] + '"';
+  if (n.r.story === 3 && n.S.gift && DECOR_ITEMS[n.S.gift]) {
+    G.decorInv[n.S.gift] = decorCount(n.S.gift) + 1;
+    msg += ' · 🎁 ' + DECOR_ITEMS[n.S.gift].ic + ' ' + DECOR_ITEMS[n.S.gift].ko + ' 선물 — 꾸미기에서 놓는다';
+  }
+  toast(msg); SFX.good();
+  saveGame();
+}
+/* 🏆 시즌 포인트 · 챔피언십 (1.6) — 단골은 방문 +1 · 우승 +10. 8주차 토요일은 시즌 챔피언십 — 상위 여섯이 모두 온다 */
+var CHAMP_N = 6;
+function champTop(n) {
+  return G.regulars.filter(function (r) { return !r.gone; }).sort(function (a, b) { return (b.pts || 0) - (a.pts || 0) || b.aff - a.aff; }).slice(0, n || CHAMP_N);
+}
+function champSchedule() {
+  G.champArr = dayInfo().champ ? champTop().map(function (r, i) { return { at: 3 + i * 5, id: r.id }; }) : [];
+}
+function champStep() {
+  if (!G.champArr || !G.champArr.length) return;
+  G.champArr = G.champArr.filter(function (f) {
+    if (G.simT < f.at) return true;
+    var r = G.regulars[f.id];
+    if (r && !r.gone && !r.inHouse && regOpen()) { var c = spawnCustomer({ reg: r }); say(c, '🏆 챔피언십 왔습니다!', 2.4); }
+    return false;
+  });
 }
 /* 인플루언서 — 나갈 때 만족도로 평판이 크게 움직인다 */
 function vipDone(c) {
@@ -1455,6 +1545,7 @@ function newDay() {
   if (LIGHT.hemi) { LIGHT.hemi.intensity = 0.55; LIGHT.sun.intensity = 0.85; decor.breakerLamp.visible = false; }
   G.regulars.forEach(function (r) { r.inHouse = false; r.reserved = false; });
   G.regDelta = []; G.friends = []; G.resv = null;
+  champSchedule();
   G.chipIssueAt = G.cfg.chipOk === false ? 60 + Math.random() * 120 : null;
 
   applyDecor();
@@ -2882,6 +2973,7 @@ function simulate(dt) {
     log('칩 세팅 오류가 드러났다', 'bad');
   }
   G.friends = G.friends.filter(function (f) { if (G.simT < f.at) return true; spawnCustomer({ friend: f.by }); return false; });
+  champStep();
   var R = G.resv;
   if (R) {
     R.arrivals = R.arrivals.filter(function (a) {
@@ -3512,7 +3604,7 @@ function saveGame() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       v: 2, ver: VERSION, day: G.day, rep: G.rep, bank: G.bank, owned: G.owned, roster: G.roster, staffSeq: G.staffSeq, weekLog: G.weekLog, debtDays: G.debtDays, regulars: G.regulars,
-      theme: G.theme, themes: G.themes, decorInv: G.decorInv, placed: G.placed, wins: G.wins, weekCh: G.weekCh, rival: G.rival,
+      theme: G.theme, themes: G.themes, decorInv: G.decorInv, placed: G.placed, wins: G.wins, weekCh: G.weekCh, rival: G.rival, storyDay: G.storyDay || 0, champion: G.champion || null,
       cfg: { fee: G.cfg.fee, stack: G.cfg.stack, level: G.cfg.level, price: G.cfg.price, stock: G.cfg.stock, assign: G.cfg.assign, resCap: G.cfg.resCap, resDeposit: G.cfg.resDeposit }
     }));
   } catch (e) { /* 저장이 막힌 브라우저 — 이어하기만 안 될 뿐이다 */ }
@@ -3533,6 +3625,7 @@ function resetGame() {
   G.goalsDay = null; G.candDay = null; G.tips = {}; G.praiseDay = null; G.raiseDayChecked = null; G.raiseReq = null;
   G.theme = 'classic'; G.themes = { classic: true }; G.decorInv = {}; G.placed = []; G.wins = 0; G.weekLog = []; G.debtDays = 0; G.regulars = makeRegulars(); G.weekCh = null;
   G.rival = { wins: 0, losses: 0, last: null, move: null };
+  G.storyDay = 0; G.champion = null; G.champArr = [];
   applyDecor();
 }
 
@@ -3584,6 +3677,9 @@ function titleScreen() {
     G.rival = sv.rival && typeof sv.rival === 'object' && typeof sv.rival.wins === 'number' ? sv.rival : { wins: 0, losses: 0, last: null, move: null };   // 1.4 저장은 라이벌이 없다
     if (G.rival.move && G.rival.move.type && !RIVAL_MOVES[G.rival.move.type]) G.rival.move = null;
     if (typeof G.rival.losses !== 'number') G.rival.losses = 0;
+    G.storyDay = typeof sv.storyDay === 'number' ? sv.storyDay : 0;   // 1.5 이전 저장은 없다
+    G.champion = sv.champion && typeof sv.champion.name === 'string' ? sv.champion : null;
+    G.regulars.forEach(function (r) { if (typeof r.pts !== 'number') r.pts = 0; if (typeof r.story !== 'number' || r.story < 0 || r.story > 3) r.story = 0; });
     if (G.rival.last && (typeof G.rival.last.me !== 'number' || typeof G.rival.last.them !== 'number')) G.rival.last = null;
     G.theme = THEMES[sv.theme] ? sv.theme : 'classic'; G.themes = sv.themes || { classic: true }; G.decorInv = sv.decorInv || {};
     var cnt = {};
@@ -3755,7 +3851,7 @@ function prepScreen(tab) {
     '<h2>' + info.name + '</h2><p class="note">' + info.desc + '</p></div>' +
     '<div class="hero-r"><div class="stat"><small>자금</small><b>' + won(G.bank) + '</b></div>' +
     '<div class="stat"><small>평판 · ' + rankOf(G.rep) + '</small><b>' + Math.round(G.rep) + '</b></div></div></div>' +
-    raiseBox() + rivalBox() +
+    raiseBox() + rivalBox() + storyBox() +
     '<div class="goalchips"><span class="gl">🎯 오늘 목표 <small>하나에 +' + won(GOAL_REWARD) + '</small></span>' + G.goals.map(function (g) { return '<span class="gchip">' + goalText(g) + '</span>'; }).join('') + '</div>' +
     '<details class="weekfold"' + (monday ? ' open' : '') + '><summary>📅 이번 주 <span>시즌 ' + Math.min(SEASON_WEEKS, info.week) + '/' + SEASON_WEEKS + ' · 난이도 ' + diffLv() + '/6' +
       (wch ? ' · 도전 ' + wDone + '/' + wch.list.length : '') + '</span></summary>' +
@@ -3829,10 +3925,15 @@ function prepScreen(tab) {
     }
   } else if (G.prepTab === 'regs') {
     var regs = G.regulars.slice().sort(function (a, b) { return (a.gone ? 1 : 0) - (b.gone ? 1 : 0) || b.aff - a.aff; });
+    var top = champTop(5);
     h += '<p class="note">단골은 발밑에 <b>금색 고리</b>가 있다. 만족하고 가면 호감이 오르고, 호감이 높으면 친구를 데려온다. 좋아하는 음료를 10초 안에 내면 더 좋아한다. 호감이 바닥나면 발길을 끊는다.</p>' +
+      '<div class="ptsbox"><b>🏆 시즌 포인트</b> <span class="note">방문 +1 · 우승 +10 — ' + SEASON_WEEKS + '주차 토요일 <b>시즌 챔피언십</b>에 상위 ' + CHAMP_N + '명이 모두 온다</span><ol>' +
+      top.map(function (r) { return '<li><b>' + r.name + '</b> ' + (r.pts || 0) + '점</li>'; }).join('') + '</ol>' +
+      (G.champion ? '<div class="note">🏆 시즌 챔피언 — ' + G.champion.name + ' (' + G.champion.week + '주차)</div>' : '') + '</div>' +
       '<div class="shop">' + regs.map(function (r) {
+        var S = STORIES[r.id], k = r.story || 0;
         return '<div class="item' + (r.gone ? ' gone' : '') + '"><div><b>' + r.name + '</b> <span class="role">' + CUST_TYPES[r.type].ko + '</span> ' + r.fav +
-          '<div class="note">방문 ' + r.visits + '회' + (r.gone ? ' · 💔 발길을 끊었다' : '') + '</div></div>' +
+          '<div class="note">방문 ' + r.visits + '회 · ' + (r.pts || 0) + '점' + (S ? ' · 📖 「' + S.title + '」 ' + k + '/3' : '') + (r.gone ? ' · 💔 발길을 끊었다' : '') + '</div></div>' +
           '<div class="aff"><i style="width:' + r.aff + '%"></i></div></div>';
       }).join('') + '</div>';
   } else if (G.prepTab === 'drinks') {
@@ -3913,6 +4014,9 @@ function prepScreen(tab) {
       toast('💵 ' + s.name + ' 일당 ' + won(s.wage) + ' — 사기 ' + Math.round(s.morale)); SFX.cash();
       prepScreen('staff');
     };
+  });
+  document.querySelectorAll('[data-sty]').forEach(function (b) {
+    b.onclick = function () { storyPick(+b.getAttribute('data-sty')); prepScreen(); };
   });
   document.querySelectorAll('[data-rv]').forEach(function (b) {
     b.onclick = function () { rivalDecide(b.getAttribute('data-rv') === '1'); prepScreen(); };
@@ -4251,7 +4355,11 @@ function report(settleOk) {
   if (settleLoss) rows.push(['정산 오차 확인 비용', -settleLoss]);
   if (s.fines) rows.push(['벌금 (돌발 상황)', -s.fines]);
   var grade = stars === 3 && net > 0 ? 'S' : (stars >= 2 ? 'A' : (stars === 1 ? 'B' : 'C'));
-  var achNew = checkAch('day', { s: s, stars: stars, grade: grade, net: net, avgSat: avgSat, winner: G.winner });
+  // 🏆 시즌 포인트 · 챔피언 — 단골이 우승하면 +10. 챔피언십 날 우승자는 시즌 챔피언
+  var champDay = !!dayInfo().champ, wReg = G.winner && G.winner.reg ? G.winner.reg : null;
+  if (wReg) wReg.pts = (wReg.pts || 0) + 10;
+  if (champDay && G.winner) { G.champion = { name: G.winner.name, week: dayInfo().week, reg: !!wReg }; if (wReg) wReg.aff = clamp(wReg.aff + 15, 0, 100); }
+  var achNew = checkAch('day', { s: s, stars: stars, grade: grade, net: net, avgSat: avgSat, winner: G.winner, champ: champDay, champReg: champDay && !!wReg });
   var starHTML = '<div class="gradebox g' + grade + '"><span>' + grade + '</span></div><div class="stars">' + [0, 1, 2].map(function (i) { return '<span class="' + (i < stars ? 'on' : '') + '" style="animation-delay:' + (i * 0.25) + 's">★</span>'; }).join('') + '</div>';
   var h = '<div class="kicker">' + G.day + '일차 마감 · ' + clock(gameMin()) + '</div>' + starHTML +
     '<h2 style="text-align:center">' + ['아쉬운 밤', '무난한 밤', '좋은 밤', '완벽한 밤'][stars] + '</h2>' +
@@ -4267,7 +4375,8 @@ function report(settleOk) {
     '아나운스 ' + s.ann + '건' + (s.annByStaff ? ' (직원 ' + s.annByStaff + ')' : '') + ' · 틀림 ' + s.annWrong + ' · 놓침 ' + s.annMiss + ' · 밸런싱 ' + s.balanced + '건' + (s.balanceMiss ? ' (놓침 ' + s.balanceMiss + ')' : '') + '<br>' +
     '청소 ' + s.cleaned + '건 · 바닥이 젖어 있던 시간 ' + Math.round(s.spillSec) + '초 · 음료 품절로 못 판 것 ' + s.noStock + '건' + (s.maxCombo >= 2 ? '<br>🔥 최고 판정 콤보 ×' + s.maxCombo : '') + '</p>' +
     '<h3>손님</h3><p>평균 만족도 ' + Math.round(avgSat) + ' · 줄이 길어 돌아간 손님 ' + (s.lost + s.queueLeave) + '명 · 평판 ' + Math.round(s.repStart) + ' → <b>' + Math.round(G.rep) + '</b> (' + rankAfter + ')</p>' +
-    '<p>' + (G.winner ? '🏆 우승 ' + G.winner.name + ' — 트로피와 다음 대회 시드권' : '마감까지 결판이 나지 않았다 — 남은 사람들은 다음 대회 시드권') + '</p>' +
+    (champDay ? '<div class="champline">' + (G.winner ? '🏆 <b>시즌 챔피언 — ' + G.winner.name + '</b>' + (wReg ? ' (단골 · ♥ +15)' : ' (시즌 밖 손님의 깜짝 우승)') : '챔피언십 결판이 나지 않았다 — 공동 시드권') + '</div>' : '') +
+    '<p>' + (G.winner ? '🏆 우승 ' + G.winner.name + (wReg ? ' (시즌 포인트 +10)' : '') + ' — 트로피와 다음 대회 시드권' : '마감까지 결판이 나지 않았다 — 남은 사람들은 다음 대회 시드권') + '</p>' +
     (grown.length ? '<p class="note">직원 성장 — ' + grown.join(' · ') + ' 능력 +1</p>' : '') +
     (G.grownToday.length ? '<p>🎓 단계 상승 — ' + G.grownToday.join(' · ') + '</p>' : '') +
     (mentored.length ? '<p class="note">🤝 멘토링 — ' + mentored.join(' · ') + '</p>' : '') +
@@ -4388,7 +4497,7 @@ function seasonBar() {
 // ═══════════════════════════════════════════════════
 // 출시용 껍데기 — 설정 · 일시정지 · 도움말 · 기록 · 만든 사람
 // ═══════════════════════════════════════════════════
-var VERSION = '1.5';
+var VERSION = '1.6';
 var SET_KEY = 'pubsim.settings', REC_KEY = 'pubsim.records';
 var SETTINGS = { music: 0.7, sfx: 1, quality: 'auto', motion: 'auto', talk: true };
 var SET_OK = {   // 저장된 설정이 망가져 있으면 기본값을 쓴다
@@ -4492,6 +4601,7 @@ var HELP = [
   ['⚡ 돌발 상황', '단체 손님 · 인플루언서 · 정전(왼쪽 벽 차단기) · 딜러 다툼 · 칩 환전 요구 · 취객 · 위생 점검. 주가 갈수록 잦아진다.'],
   ['🎨 꾸미기 · 테이블', '테마와 장식을 사서 배치 모드에서 놓는다 — 장식 반경 3 손님 만족이 오른다. 테이블에서는 실제 카드로 승자가 정해지고, 큰 족보는 테이블 위에 크게 뜬다. 믹스 테이블(PLO8)은 상점에서.'],
   ['🎯 목표 · 도전', '오늘의 목표 셋 = 별 셋. 이번 주 도전 셋은 일요일에 보상(셋 다면 장식). 난이도는 6주에 걸쳐 조금씩 오른다.'],
+  ['📖 단골 이야기 · 🏆 챔피언십', '단골 여섯에게는 이야기가 있다 — 자주 오고 ♥가 오르면 오픈 준비에 짧은 장면이 뜬다(하루 하나, 3막). 대답에 정답은 없고 효과가 조금씩 다르다. 3막을 마치면 장식을 선물한다. 단골은 방문 +1 · 우승 +10 으로 <b>시즌 포인트</b>를 쌓고(단골 탭), <b>' + SEASON_WEEKS + '주차 토요일 시즌 챔피언십</b>에는 상위 ' + CHAMP_N + '명이 모두 온다. 그날 우승자가 시즌 챔피언 — 시상은 트로피와 시드권.'],
   ['🥊 라이벌 · 업적', '길 건너 「' + RIVAL + '」와 일요일마다 <b>한 주 손님 수</b>를 겨룬다(이기면 평판 +2, 지면 −1). 라이벌 손님은 주마다 는다. 2주차부터 월요일에 라이벌이 수를 하나 둔다 — 토요일 맞불 · 평일 할인 · 단골 · 딜러 빼가기. 오픈 준비에서 막을지(돈이 든다) 그냥 둘지 정한다. 🎖️ 업적은 명예뿐 — 딴 것 하나를 칭호로 걸 수 있다.'],
   ['⚖️ 합법 운영', '매출은 참가비 · 음료(· 예약 보증금 · 믹스 참가비)뿐이다. 우승 상품은 트로피와 다음 대회 시드권. <b>칩을 현금이나 상품권으로 바꿔 주지 않는다</b> — 게임 안에서도 마찬가지다.']
 ];
@@ -4555,6 +4665,10 @@ var ACHS = [
   { id: 'drill_s', k: 'life', ic: '🎯', ko: '연습실 S', d: '판정 연습실 650점', t: function () { return (loadRecords().drillBest || 0) >= 650; } },
   { id: 'week3', k: 'week', ic: '🗓️', ko: '도전 완주', d: '주간 도전 셋을 다 깼다', t: function (c) { return c.chN === 3; } },
   { id: 'week5m', k: 'week', ic: '📈', ko: '오백만 주간', d: '한 주 합계(임대료 뒤) 500만', t: function (c) { return c.weekNet >= 5000000; } },
+  { id: 'champ', k: 'day', ic: '🎪', ko: '챔피언십 개최', d: '시즌 챔피언십에서 챔피언을 배출했다', t: function (c) { return !!c.champ && !!c.winner; } },
+  { id: 'champreg', k: 'day', ic: '🥇', ko: '우리 단골이 챔피언', d: '단골이 시즌 챔피언이 됐다', t: function (c) { return !!c.champReg; } },
+  { id: 'story3', k: 'run', ic: '📖', ko: '이야기 끝까지', d: '단골 한 명의 이야기 3막을 다 봤다', t: function () { return G.regulars.some(function (r) { return (r.story || 0) >= 3; }); } },
+  { id: 'story6', k: 'run', ic: '📚', ko: '동네 이야기꾼', d: '단골 여섯의 이야기를 모두 끝까지', t: function () { return Object.keys(STORIES).every(function (id) { var r = G.regulars[+id]; return r && (r.story || 0) >= 3; }); } },
   { id: 'rival1', k: 'week', ic: '🥊', ko: '첫 승리', d: RIVAL + '를 한 주 손님 수로 이겼다', t: function (c) { return !!c.rivalWin; } },
   { id: 'rival5', k: 'week', ic: '🏟️', ko: '동네 1등', d: '한 시즌에 ' + RIVAL + '를 다섯 번 이겼다', t: function () { return !!G.rival && G.rival.wins >= 5; } },
   { id: 'clear', k: 'season', ic: '🏆', ko: '시즌 클리어', d: '시즌 목표를 이뤘다', t: function (c) { return !!c.cleared; } },
@@ -4616,6 +4730,7 @@ function seasonEnd(cleared, firstEnd) {
   showModal('<div class="titlecard"><div class="kicker">시즌 ' + SEASON_WEEKS + '주 끝</div><h1>' + (cleared ? '🏆 시즌 클리어!' : '시즌 종료') + '</h1>' +
     '<p class="sub">' + (cleared ? '당신의 펍은 이 동네의 홀덤 명소가 됐다.' : '목표에는 닿지 못했다 — 하지만 펍은 계속된다.') + '</p></div>' + achHtml(achNew) +
     '<p>평판 <b>' + Math.round(G.rep) + '</b> (' + rankOf(G.rep) + ') · 자금 <b>' + won(G.bank) + '원</b> · 직원 ' + G.roster.length + '명</p>' +
+    (G.champion && G.champion.week === SEASON_WEEKS ? '<p>🏆 시즌 챔피언 <b>' + G.champion.name + '</b>' + (G.champion.reg ? ' — 우리 단골' : '') + '</p>' : '') +
     (G.rival && G.rival.wins + G.rival.losses ? '<p>🥊 ' + RIVAL + '와 주간 대결 <b>' + G.rival.wins + '승 ' + G.rival.losses + '패</b> — ' + (G.rival.wins > G.rival.losses ? '동네 손님은 우리 편이다' : '다음 시즌엔 이기자') + '</p>' : '') +
     '<div class="titlebtns"><button class="cta" data-more="1">계속 운영하기</button><button class="cta ghost" data-new="1">새 시즌 — 처음부터</button></div>', true);
   if (cleared) { SFX.win(); confetti(V(0, 0)); }
@@ -4639,6 +4754,7 @@ G.placeAt = placeAtForTest;                    // 자동 점검용
 G.__music = MUSIC;   // 자동 점검용
 G.__plan = planEvents; G.__type = pickType; G.__diff = diffK;   // 자동 점검용
 G.__weekly = weeklyScreen; G.__prep = prepScreen; G.__save = saveGame;   // 자동 점검용
+G.__story = { next: storyNext, pick: storyPick, all: STORIES, need: STORY_NEED }; G.__champ = { top: champTop, schedule: champSchedule, step: champStep }; G.__report = report;   // 자동 점검용 (1.6)
 G.__case = function (tid, n) { var t = G.tables[tid], d = genCase(t); if (n) d.id = n; createCall(t, 'case', d); return d; };   // 자동 점검용
 G.__cases = CASES; G.__caseQ = caseQuestion; G.__drill = openDrill; G.__open = openCall; G.__rival = { gen: genRivalMove, decide: rivalDecide, settle: rivalSettle, arrK: rivalArrK, base: rivalBase, moves: RIVAL_MOVES };G.__spotGen = function (tid) { return genIncident(G.tables[tid || 0], 'spot'); }; G.__spotCall = function (tid) { var t = G.tables[tid || 0]; createCall(t, 'spot', genIncident(t, 'spot')); return t.call; }; G.__best = best; G.__cmp = cmp;G.__achs = ACHS; G.__checkAch = checkAch; G.__openAch = openAch; G.__achGot = achGot;G.__isMix = isMix;
 var confirmNew = { ok: false };   // 자동 점검이 새로 시작 확인을 건너뛸 때 쓴다
