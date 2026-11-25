@@ -1251,8 +1251,8 @@ function dayInfo(day) {
   var base = { wd: wd, week: week, wk: WEEKDAYS[wd], name: '데일리', short: '데일리', arrivalK: 1, feeMul: 1, stack: null, regClose: 23 * 60, repMul: 1,
     desc: '평일 데일리 토너먼트' };
   if (wd === 4) return Object.assign(base, { name: '금요 딥스택', short: '딥스택', arrivalK: 1.35, stack: 2, desc: '스타팅 50,000 고정 · 손님 +35% · 오래 간다' });
-  if (wd === 5 && week === SEASON_WEEKS) return Object.assign(base, { name: '🏆 시즌 챔피언십', short: '챔피언십', arrivalK: 1.6, feeMul: 2, regClose: 24 * 60, repMul: 1.5, champ: true,
-    desc: '시즌 포인트 상위 단골 여섯이 모두 온다 · 참가비 2배 · 레지 마감 24:00 · 우승자가 시즌 챔피언' });
+  if (wd === 5 && week % SEASON_WEEKS === 0) return Object.assign(base, { name: '🏆 시즌 챔피언십', short: '챔피언십', arrivalK: 1.6, feeMul: 2, regClose: 24 * 60, repMul: 1.5, champ: true,   // 계속 운영해도 8주마다
+    desc: '시즌 포인트 상위 단골 여섯을 초대한다 · 참가비 2배 · 레지 마감 24:00 · 우승자가 시즌 챔피언' });
   if (wd === 5) return Object.assign(base, { name: '토요 메인 이벤트', short: '메인 이벤트', arrivalK: 1.6, feeMul: 2, regClose: 24 * 60, repMul: 1.5,
     desc: '참가비 2배 · 손님 +60% · 레지 마감 24:00 · 평판이 1.5배로 움직인다' });
   if (wd === 6) return Object.assign(base, { name: '휴무', short: '휴무', desc: '주간 정산 · 임대료' });
@@ -1424,29 +1424,35 @@ function storyPick(i) {
   n.r.story = n.k + 1; G.storyDay = G.day;
   var msg = '📖 ' + n.r.name + ': "' + x[1] + '"';
   if (n.r.story === 3 && n.S.gift && DECOR_ITEMS[n.S.gift]) {
-    G.decorInv[n.S.gift] = decorCount(n.S.gift) + 1;
-    msg += ' · 🎁 ' + DECOR_ITEMS[n.S.gift].ic + ' ' + DECOR_ITEMS[n.S.gift].ko + ' 선물 — 꾸미기에서 놓는다';
+    var gift = n.S.gift, it = DECOR_ITEMS[gift];
+    var have = decorCount(gift) + G.placed.filter(function (p) { return p.kind === gift; }).length;
+    if (it.max && have >= it.max) gift = 'plant';   // 하나만 둘 수 있는 장식(트로피 진열장)이 이미 있으면 화분으로
+    G.decorInv[gift] = decorCount(gift) + 1;
+    msg += ' · 🎁 ' + DECOR_ITEMS[gift].ic + ' ' + DECOR_ITEMS[gift].ko + ' 선물 — 꾸미기에서 놓는다';
   }
   toast(msg); SFX.good();
   saveGame();
 }
-/* 🏆 시즌 포인트 · 챔피언십 (1.6) — 단골은 방문 +1 · 우승 +10. 8주차 토요일은 시즌 챔피언십 — 상위 여섯이 모두 온다 */
+/* 🏆 시즌 포인트 · 챔피언십 (1.6) — 단골은 방문 +1 · 우승 +10. 8주마다 토요일 시즌 챔피언십 — 상위 여섯을 초대한다.
+   예약한 단골은 예약대로 오고, 이미 와 있거나 다녀간 단골은 다시 부르지 않는다(방문 · 포인트를 두 번 세지 않게) */
 var CHAMP_N = 6;
 function champTop(n) {
   return G.regulars.filter(function (r) { return !r.gone; }).sort(function (a, b) { return (b.pts || 0) - (a.pts || 0) || b.aff - a.aff; }).slice(0, n || CHAMP_N);
 }
 function champSchedule() {
-  G.champArr = dayInfo().champ ? champTop().map(function (r, i) { return { at: 3 + i * 5, id: r.id }; }) : [];
+  G.champArr = dayInfo().champ ? champTop().filter(function (r) { return !r.reserved; }).map(function (r, i) { return { at: 3 + i * 5, id: r.id }; }) : [];
 }
 function champStep() {
   if (!G.champArr || !G.champArr.length) return;
   G.champArr = G.champArr.filter(function (f) {
     if (G.simT < f.at) return true;
     var r = G.regulars[f.id];
-    if (r && !r.gone && !r.inHouse && regOpen()) { var c = spawnCustomer({ reg: r }); say(c, '🏆 챔피언십 왔습니다!', 2.4); }
+    if (r && !r.gone && !r.inHouse && !r.reserved && r.lastDay !== G.day && regOpen()) { var c = spawnCustomer({ reg: r }); say(c, '🏆 챔피언십 왔습니다!', 2.4); }
     return false;
   });
 }
+/* 챔피언 — 이름 목록에 있는 이름만 믿는다(저장을 손대도 화면에 마크업이 들어가지 않게) */
+function champOk(c) { return !!(c && typeof c.name === 'string' && (NAMES.indexOf(c.name) >= 0 || REG_NAMES.indexOf(c.name) >= 0) && typeof c.week === 'number'); }
 /* 인플루언서 — 나갈 때 만족도로 평판이 크게 움직인다 */
 function vipDone(c) {
   if (!c.vip || c.vipDone || c.bounced) return;
@@ -3678,7 +3684,7 @@ function titleScreen() {
     if (G.rival.move && G.rival.move.type && !RIVAL_MOVES[G.rival.move.type]) G.rival.move = null;
     if (typeof G.rival.losses !== 'number') G.rival.losses = 0;
     G.storyDay = typeof sv.storyDay === 'number' ? sv.storyDay : 0;   // 1.5 이전 저장은 없다
-    G.champion = sv.champion && typeof sv.champion.name === 'string' ? sv.champion : null;
+    G.champion = champOk(sv.champion) ? sv.champion : null;
     G.regulars.forEach(function (r) { if (typeof r.pts !== 'number') r.pts = 0; if (typeof r.story !== 'number' || r.story < 0 || r.story > 3) r.story = 0; });
     if (G.rival.last && (typeof G.rival.last.me !== 'number' || typeof G.rival.last.them !== 'number')) G.rival.last = null;
     G.theme = THEMES[sv.theme] ? sv.theme : 'classic'; G.themes = sv.themes || { classic: true }; G.decorInv = sv.decorInv || {};
@@ -3925,9 +3931,9 @@ function prepScreen(tab) {
     }
   } else if (G.prepTab === 'regs') {
     var regs = G.regulars.slice().sort(function (a, b) { return (a.gone ? 1 : 0) - (b.gone ? 1 : 0) || b.aff - a.aff; });
-    var top = champTop(5);
+    var top = champTop(CHAMP_N);
     h += '<p class="note">단골은 발밑에 <b>금색 고리</b>가 있다. 만족하고 가면 호감이 오르고, 호감이 높으면 친구를 데려온다. 좋아하는 음료를 10초 안에 내면 더 좋아한다. 호감이 바닥나면 발길을 끊는다.</p>' +
-      '<div class="ptsbox"><b>🏆 시즌 포인트</b> <span class="note">방문 +1 · 우승 +10 — ' + SEASON_WEEKS + '주차 토요일 <b>시즌 챔피언십</b>에 상위 ' + CHAMP_N + '명이 모두 온다</span><ol>' +
+      '<div class="ptsbox"><b>🏆 시즌 포인트</b> <span class="note">방문 +1 · 우승 +10 — ' + SEASON_WEEKS + '주마다 토요일 <b>시즌 챔피언십</b>에 상위 ' + CHAMP_N + '명을 초대한다 · 챔피언이 나오면 포인트를 새로 센다</span><ol>' +
       top.map(function (r) { return '<li><b>' + r.name + '</b> ' + (r.pts || 0) + '점</li>'; }).join('') + '</ol>' +
       (G.champion ? '<div class="note">🏆 시즌 챔피언 — ' + G.champion.name + ' (' + G.champion.week + '주차)</div>' : '') + '</div>' +
       '<div class="shop">' + regs.map(function (r) {
@@ -4358,8 +4364,9 @@ function report(settleOk) {
   // 🏆 시즌 포인트 · 챔피언 — 단골이 우승하면 +10. 챔피언십 날 우승자는 시즌 챔피언
   var champDay = !!dayInfo().champ, wReg = G.winner && G.winner.reg ? G.winner.reg : null;
   if (wReg) wReg.pts = (wReg.pts || 0) + 10;
-  if (champDay && G.winner) { G.champion = { name: G.winner.name, week: dayInfo().week, reg: !!wReg }; if (wReg) wReg.aff = clamp(wReg.aff + 15, 0, 100); }
+  if (champDay && G.winner) { G.champion = { name: G.winner.name, week: dayInfo().week, day: G.day, reg: !!wReg }; if (wReg) wReg.aff = clamp(wReg.aff + 15, 0, 100); }
   var achNew = checkAch('day', { s: s, stars: stars, grade: grade, net: net, avgSat: avgSat, winner: G.winner, champ: champDay, champReg: champDay && !!wReg });
+  if (champDay) G.regulars.forEach(function (r) { r.pts = 0; });   // 챔피언십이 끝나면 포인트 경쟁을 새로 시작한다
   var starHTML = '<div class="gradebox g' + grade + '"><span>' + grade + '</span></div><div class="stars">' + [0, 1, 2].map(function (i) { return '<span class="' + (i < stars ? 'on' : '') + '" style="animation-delay:' + (i * 0.25) + 's">★</span>'; }).join('') + '</div>';
   var h = '<div class="kicker">' + G.day + '일차 마감 · ' + clock(gameMin()) + '</div>' + starHTML +
     '<h2 style="text-align:center">' + ['아쉬운 밤', '무난한 밤', '좋은 밤', '완벽한 밤'][stars] + '</h2>' +
@@ -4601,7 +4608,7 @@ var HELP = [
   ['⚡ 돌발 상황', '단체 손님 · 인플루언서 · 정전(왼쪽 벽 차단기) · 딜러 다툼 · 칩 환전 요구 · 취객 · 위생 점검. 주가 갈수록 잦아진다.'],
   ['🎨 꾸미기 · 테이블', '테마와 장식을 사서 배치 모드에서 놓는다 — 장식 반경 3 손님 만족이 오른다. 테이블에서는 실제 카드로 승자가 정해지고, 큰 족보는 테이블 위에 크게 뜬다. 믹스 테이블(PLO8)은 상점에서.'],
   ['🎯 목표 · 도전', '오늘의 목표 셋 = 별 셋. 이번 주 도전 셋은 일요일에 보상(셋 다면 장식). 난이도는 6주에 걸쳐 조금씩 오른다.'],
-  ['📖 단골 이야기 · 🏆 챔피언십', '단골 여섯에게는 이야기가 있다 — 자주 오고 ♥가 오르면 오픈 준비에 짧은 장면이 뜬다(하루 하나, 3막). 대답에 정답은 없고 효과가 조금씩 다르다. 3막을 마치면 장식을 선물한다. 단골은 방문 +1 · 우승 +10 으로 <b>시즌 포인트</b>를 쌓고(단골 탭), <b>' + SEASON_WEEKS + '주차 토요일 시즌 챔피언십</b>에는 상위 ' + CHAMP_N + '명이 모두 온다. 그날 우승자가 시즌 챔피언 — 시상은 트로피와 시드권.'],
+  ['📖 단골 이야기 · 🏆 챔피언십', '단골 여섯에게는 이야기가 있다 — 자주 오고 ♥가 오르면 오픈 준비에 짧은 장면이 뜬다(하루 하나, 3막). 대답에 정답은 없고 효과가 조금씩 다르다. 3막을 마치면 장식을 선물한다. 단골은 방문 +1 · 우승 +10 으로 <b>시즌 포인트</b>를 쌓고(단골 탭), <b>' + SEASON_WEEKS + '주마다 토요일 시즌 챔피언십</b>에는 상위 ' + CHAMP_N + '명을 초대한다(예약했거나 이미 다녀간 단골은 그대로). 그날 우승자가 시즌 챔피언 — 시상은 트로피와 시드권. 챔피언이 나오면 포인트를 새로 센다.'],
   ['🥊 라이벌 · 업적', '길 건너 「' + RIVAL + '」와 일요일마다 <b>한 주 손님 수</b>를 겨룬다(이기면 평판 +2, 지면 −1). 라이벌 손님은 주마다 는다. 2주차부터 월요일에 라이벌이 수를 하나 둔다 — 토요일 맞불 · 평일 할인 · 단골 · 딜러 빼가기. 오픈 준비에서 막을지(돈이 든다) 그냥 둘지 정한다. 🎖️ 업적은 명예뿐 — 딴 것 하나를 칭호로 걸 수 있다.'],
   ['⚖️ 합법 운영', '매출은 참가비 · 음료(· 예약 보증금 · 믹스 참가비)뿐이다. 우승 상품은 트로피와 다음 대회 시드권. <b>칩을 현금이나 상품권으로 바꿔 주지 않는다</b> — 게임 안에서도 마찬가지다.']
 ];
@@ -4730,7 +4737,7 @@ function seasonEnd(cleared, firstEnd) {
   showModal('<div class="titlecard"><div class="kicker">시즌 ' + SEASON_WEEKS + '주 끝</div><h1>' + (cleared ? '🏆 시즌 클리어!' : '시즌 종료') + '</h1>' +
     '<p class="sub">' + (cleared ? '당신의 펍은 이 동네의 홀덤 명소가 됐다.' : '목표에는 닿지 못했다 — 하지만 펍은 계속된다.') + '</p></div>' + achHtml(achNew) +
     '<p>평판 <b>' + Math.round(G.rep) + '</b> (' + rankOf(G.rep) + ') · 자금 <b>' + won(G.bank) + '원</b> · 직원 ' + G.roster.length + '명</p>' +
-    (G.champion && G.champion.week === SEASON_WEEKS ? '<p>🏆 시즌 챔피언 <b>' + G.champion.name + '</b>' + (G.champion.reg ? ' — 우리 단골' : '') + '</p>' : '') +
+    (champOk(G.champion) && G.champion.day && G.day - G.champion.day <= 2 ? '<p>🏆 시즌 챔피언 <b>' + G.champion.name + '</b>' + (G.champion.reg ? ' — 우리 단골' : '') + '</p>' : '') +
     (G.rival && G.rival.wins + G.rival.losses ? '<p>🥊 ' + RIVAL + '와 주간 대결 <b>' + G.rival.wins + '승 ' + G.rival.losses + '패</b> — ' + (G.rival.wins > G.rival.losses ? '동네 손님은 우리 편이다' : '다음 시즌엔 이기자') + '</p>' : '') +
     '<div class="titlebtns"><button class="cta" data-more="1">계속 운영하기</button><button class="cta ghost" data-new="1">새 시즌 — 처음부터</button></div>', true);
   if (cleared) { SFX.win(); confetti(V(0, 0)); }

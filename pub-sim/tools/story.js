@@ -70,6 +70,14 @@ const SHOT = process.argv[2] === 'shot';
   await G(() => { const P = window.__pub; P.day = 55; P.bank = 9000000; P.__prep('shop'); });
   out.hero = await G(() => document.querySelector('.hero h2').innerText);
   expect('champ day name', out.hero.indexOf('챔피언십') >= 0, out.hero);
+  out.week16 = await G(() => { const P = window.__pub, o = P.day; P.day = 111; P.__prep('shop'); const t = document.querySelector('.hero h2').innerText; P.day = 54; P.__prep('shop'); const n = document.querySelector('.hero h2').innerText; P.day = o; P.__prep('shop'); return [t, n]; });
+  expect('champ every 8 weeks', out.week16[0].indexOf('챔피언십') >= 0 && out.week16[1].indexOf('챔피언십') < 0, out.week16);
+  // 예약한 단골은 초대 목록에서 빠지고(예약대로 온다), 이미 다녀간 단골은 다시 부르지 않는다
+  out.dup = await G(() => { const P = window.__pub, top = P.__champ.top(); top[0].reserved = true; P.__champ.schedule(); const ids = P.champArr.map(f => f.id); top[0].reserved = false; return { excluded: !ids.includes(top[0].id), n: ids.length }; });
+  expect('reserved excluded', out.dup.excluded && out.dup.n === 5, out.dup);
+  // 트로피 진열장이 이미 있으면 이야기 선물은 화분
+  out.giftSwap = await G(() => { const P = window.__pub, r = P.regulars[0]; const inv = Object.assign({}, P.decorInv); P.decorInv.trophy = 1; const plant0 = P.decorInv.plant || 0; r.story = 2; r.visits = 9; r.aff = 90; const sd = P.storyDay; P.storyDay = 0; P.__story.pick(0); const res = { trophy: P.decorInv.trophy, plant: (P.decorInv.plant || 0) - plant0 }; P.decorInv = inv; P.storyDay = sd; return res; });
+  expect('trophy gift swaps to plant', out.giftSwap.trophy === 1 && out.giftSwap.plant === 1, out.giftSwap);
   await page.click('[data-tab="dealers"]');
   await page.click('[data-open]');
   await G(() => { window.__pub.speed = 10; window.__pub.evPlan = []; });
@@ -82,6 +90,8 @@ const SHOT = process.argv[2] === 'shot';
   }
   out.arrived = await G(() => { const P = window.__pub, names = P.customers.filter(c => c.reg).map(c => c.name); return P.__champ.top().filter(r => names.includes(r.name)).length; });
   expect('top six arrived', out.arrived === 6, out.arrived);
+  out.dupActors = await G(() => { const P = window.__pub, n = {}; P.customers.filter(c => c.reg).forEach(c => { n[c.name] = (n[c.name] || 0) + 1; }); return Object.values(n).filter(v => v > 1).length; });
+  expect('no regular spawned twice', out.dupActors === 0, out.dupActors);
   if (SHOT) await page.screenshot({ path: 'story-champ-floor.png' });
   // 보고서 — 단골 우승자 = 시즌 챔피언, 포인트 +10
   out.rep = await G(() => {
@@ -91,7 +101,8 @@ const SHOT = process.argv[2] === 'shot';
     return { line: (document.querySelector('.champline') || {}).innerText || '', pts: r.pts - pts0, aff: r.aff - aff0, champ: P.champion, ach: (document.querySelector('.achnew') || {}).innerText || '' };
   });
   expect('champion line', out.rep.line.indexOf('시즌 챔피언') >= 0 && out.rep.champ && out.rep.champ.reg && out.rep.champ.week === 8, out.rep);
-  expect('winner pts +10', out.rep.pts === 10, out.rep);
+  out.ptsAfter = await G(() => window.__pub.regulars.map(r => r.pts));
+  expect('pts reset after champion', out.ptsAfter.every(p => p === 0), out.ptsAfter);
   expect('champ ach', out.rep.ach.indexOf('챔피언') >= 0, out.rep);
   if (SHOT) await page.screenshot({ path: 'story-champ-report.png' });
   // 9. 저장 · 불러오기 (보고서가 저장한다)
