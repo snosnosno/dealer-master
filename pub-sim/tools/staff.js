@@ -15,7 +15,7 @@ const { chromium } = require('playwright');
   const out = {};
   await page.click('[data-go]');
   // 1) 직원 탭 — 특성 · 사기 표시, 일당 인상
-  await page.click('[data-tab="staff"]');
+  await page.click('[data-tab="dealers"]'); await page.click('[data-tab="staff"]');   // 1.7 — 「사람」 묶음 안의 작은 칸
   out.traitsShown = await page.locator('.trait').count();
   const before = await G(() => { const s = window.__pub.roster[0]; return { wage: s.wage, m: s.morale }; });
   await page.click('[data-raise="1"]');
@@ -55,7 +55,7 @@ const { chromium } = require('playwright');
     if (s.tasks.length && !s.walking) { try { await page.locator(`[data-task="${s.tasks[0]}"]`).click({ timeout: 800 }); } catch (e) {} continue; }
     await page.waitForTimeout(30);
   }
-  const txt = await G(() => document.querySelector('.modal').innerText);
+  const txt = await G(() => { document.querySelectorAll('details.more').forEach(d => { d.open = true; }); return document.querySelector('.modal').innerText; });
   out.report = (txt.match(/😞 그만뒀다[^\n]*/) || ['(없음)'])[0] + ' / ' + (txt.match(/⚠️ 사기가 낮다[^\n]*/) || ['(없음)'])[0];
   out.roster = await G(() => window.__pub.roster.map(s => s.name + ':' + Math.round(s.morale != null ? s.morale : 70)));
   // 5) 다음 날 — 사기 낮은 사람이 인상을 요청한다

@@ -609,6 +609,24 @@ details.weekfold[open] > summary { margin: 0 -10px 8px; border-bottom: 1px solid
 .pboard { padding: 6px 8px; border-radius: 10px; background: rgba(23,132,95,.22); border: 1px solid rgba(67,214,158,.25); }
 .pholes { margin: 4px 0 8px; }
 .pboard small { min-width: 34px; }   /* 다섯 장이 작은 폰에서도 한 줄에 */
+/* 1.7 「정리」 — 📬 소식함 · 탭 넷 + 작은 칸 · 마감 요약 */
+.inbox { margin: 0 0 10px; padding: 8px; border-radius: 16px; background: rgba(255,255,255,.03); border: 1px solid var(--glass-line); }
+.inbox .ibhead { font-size: 12px; font-weight: 800; color: var(--amber-ink); margin: 0 4px 6px; }
+.inbox .ibhead .note { font-weight: 600; }
+.inbox > .raisebox, .inbox > .rivalbox, .inbox > .storybox { margin: 0; }
+.subtabs { display: flex; gap: 6px; margin: -4px 0 12px; overflow-x: auto; scrollbar-width: none; }
+.subtabs::-webkit-scrollbar { display: none; }
+.subtabs button { flex: none; padding: 7px 12px; border-radius: 99px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); color: var(--ink-2); font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer; }
+.subtabs button.on { background: rgba(242,179,61,.16); border-color: var(--amber); color: #fff; }
+.weekfold .rivalbox { margin: 0 0 8px; }
+.sumgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0; }
+.sumgrid > div { padding: 8px 6px; border-radius: 12px; background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.07); text-align: center; min-width: 0; }
+.sumgrid small { display: block; font-size: 11px; font-weight: 800; color: var(--ink-3); }
+.sumgrid b { display: block; font: 900 15px var(--mono); color: var(--gold-a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sumwin { text-align: center; margin: 4px 0 8px; }
+details.more { margin: 8px 0 10px; border: 1px solid var(--line); border-radius: 12px; padding: 0 10px; background: rgba(255,255,255,.02); }
+details.more > summary { cursor: pointer; padding: 10px 2px; font-weight: 800; font-size: 13.5px; color: var(--ink-2); list-style-position: inside; }
+details.more[open] { padding-bottom: 8px; }
 /* 1.6 — 📖 단골 이야기 · 🏆 시즌 포인트 · 챔피언 */
 .storybox { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: linear-gradient(135deg, rgba(216,179,90,.16), rgba(23,132,95,.10)); border: 1px solid rgba(216,179,90,.4); }
 .storybox .kicker { text-transform: none; letter-spacing: 0; }

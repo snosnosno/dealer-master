@@ -3763,16 +3763,29 @@ function rivalTargetName(m) {
   if (m.type === 'poach_staff') { var s = G.roster.filter(function (x) { return x.id === m.target; })[0]; return s ? s.name : ''; }
   return '';
 }
-function rivalBox() {
+/* 1.7 📬 소식함 — 오픈 준비에서 정할 일(라이벌의 수 · 인상 요청 · 단골 이야기)을 카드 하나로. 한 건씩 보이고, 정하면 다음 소식 */
+function inboxBox() {
+  var items = [rivalBox('card'), raiseBox(), storyBox()].filter(Boolean);
+  if (!items.length) return '';
+  return '<div class="inbox"><div class="ibhead">📬 소식 <b>' + items.length + '</b>건' + (items.length > 1 ? ' <span class="note">— 하나를 정하면 다음 소식</span>' : '') + '</div>' + items[0] + '</div>';
+}
+/* 1.7 오픈 준비 탭 — 큰 탭 넷 · 작은 칸 */
+var PREP_GROUPS = [['store', '🏪', '가게', ['shop', 'decor']], ['people', '👥', '사람', ['dealers', 'staff']], ['night', '🌙', '오늘 밤', ['chips', 'drinks', 'resv']], ['regs', '⭐', '단골', ['regs']]];
+var PREP_SUB = { shop: '🛒 상점', decor: '🎨 꾸미기', dealers: '🃏 딜러', staff: '👥 직원', chips: '🎲 칩 · 구조', drinks: '🍺 음료', resv: '📋 예약', regs: '⭐ 단골' };
+/* mode 'card' — 📬 소식함에 들어가는 결정 카드(아직 정하지 않은 수만). 그 밖엔 「이번 주」 안의 현황 줄(버튼 없음) */
+function rivalBox(mode) {
   var R = rivalState(), w = dayInfo().week, m = R.move && R.move.week === w ? R.move : null;
+  var open = !!(m && m.type && m.status === 'open');
+  if (mode === 'card' && !open) return '';
   var rec = (R.wins + R.losses) ? ' · 시즌 <b>' + R.wins + '승 ' + R.losses + '패</b>' : '';
   var last = R.last ? ' · 지난주 손님 우리 ' + R.last.me + ' : ' + R.last.them : '';
   if (w < 2 && !R.last) return '<div class="rivalbox"><b>🥊 ' + RIVAL + '</b> — 길 건너에 새 홀덤펍이 문을 열었다. 일요일마다 <b>한 주 손님 수</b>로 겨룬다(이기면 평판 +2, 지면 −1).</div>';
-  var h = '<div class="rivalbox"><b>🥊 ' + RIVAL + '</b>' + rec + last + ' · 이번 주 목표치 약 <b>' + rivalBase(w) + '</b>명';
+  var h = '<div class="rivalbox"><b>🥊 ' + RIVAL + '</b>' + (mode === 'card' ? ' — 이번 주 수' : rec + last + ' · 이번 주 목표치 약 <b>' + rivalBase(w) + '</b>명');   // 카드엔 수만 — 전적은 「이번 주」 안에
   if (m && m.type) {
     var M = RIVAL_MOVES[m.type], who = rivalTargetName(m);
     h += '<div class="rmove">' + M.ic + ' ' + (who ? '<b>' + who + '</b>' + (m.type === 'poach_staff' ? '(딜러)' : '(단골)') + ' — ' : '') + RIVAL + josa(RIVAL, '이', '가') + ' ' + M.head + '. <span class="note">그냥 두면: ' + M.lose + '</span></div>';
-    if (m.status === 'open') {
+    if (open && mode !== 'card') h += '<div class="note">📬 위 소식함에서 정한다</div>';
+    else if (open) {
       var poor = M.cost > G.bank;
       h += '<div class="rqbtns"><button class="cta" data-rv="1"' + (poor ? ' disabled' : '') + '>' + M.counter + (M.cost ? ' (' + won(M.cost) + '원)' : '') + '</button><button class="cta ghost" data-rv="0">그냥 둔다</button></div>';
     } else h += '<div class="note">' + (m.status === 'countered' ? '✓ 막았다' : '— 그냥 두기로 했다') + '</div>';
@@ -3841,7 +3854,9 @@ function prepScreen(tab) {
   var cfg = G.cfg;
   // 해고된 딜러가 배치에 남아 있으면 비운다
   cfg.assign = cfg.assign.map(function (id) { return G.roster.some(function (s) { return s.id === id && s.role === 'dealer'; }) ? id : null; });
-  var tabs = [['shop', '🏪', '상점'], ['decor', '🎨', '꾸미기'], ['staff', '👥', '직원'], ['dealers', '🃏', '딜러'], ['chips', '🎲', '칩 · 구조'], ['drinks', '🍺', '음료'], ['resv', '📋', '예약'], ['regs', '⭐', '단골']];
+  /* 1.7 — 탭 여덟을 넷으로 묶는다: 큰 탭을 누르면 그 묶음의 첫 칸, 묶음 안에서는 작은 칸으로 옮긴다 */
+  var curG = PREP_GROUPS.filter(function (g) { return g[3].indexOf(G.prepTab) >= 0; })[0] || PREP_GROUPS[0];
+  var tabs = PREP_GROUPS.map(function (g) { return [g === curG ? G.prepTab : g[3][0], g[1], g[2], g === curG]; });
   var info = dayInfo(), first = G.day - info.wd;
   var cal = '<div class="cal">' + WEEKDAYS.map(function (wd, i) {
     var di = dayInfo(first + i), past = i < info.wd, today = i === info.wd;
@@ -3857,12 +3872,13 @@ function prepScreen(tab) {
     '<h2>' + info.name + '</h2><p class="note">' + info.desc + '</p></div>' +
     '<div class="hero-r"><div class="stat"><small>자금</small><b>' + won(G.bank) + '</b></div>' +
     '<div class="stat"><small>평판 · ' + rankOf(G.rep) + '</small><b>' + Math.round(G.rep) + '</b></div></div></div>' +
-    raiseBox() + rivalBox() + storyBox() +
+    inboxBox() +
     '<div class="goalchips"><span class="gl">🎯 오늘 목표 <small>하나에 +' + won(GOAL_REWARD) + '</small></span>' + G.goals.map(function (g) { return '<span class="gchip">' + goalText(g) + '</span>'; }).join('') + '</div>' +
     '<details class="weekfold"' + (monday ? ' open' : '') + '><summary>📅 이번 주 <span>시즌 ' + Math.min(SEASON_WEEKS, info.week) + '/' + SEASON_WEEKS + ' · 난이도 ' + diffLv() + '/6' +
-      (wch ? ' · 도전 ' + wDone + '/' + wch.list.length : '') + '</span></summary>' +
-      cal + seasonBar() + diffBox() + weekBox() + '<p class="note">오늘 인건비 ' + won(wagesTotal()) + '원</p></details>' +
-    '<div class="tabs">' + tabs.map(function (x) { return '<button data-tab="' + x[0] + '" class="' + (G.prepTab === x[0] ? 'on' : '') + '"><span class="ti">' + x[1] + '</span>' + x[2] + '</button>'; }).join('') + '</div>';
+      (wch ? ' · 도전 ' + wDone + '/' + wch.list.length : '') + (G.rival && G.rival.wins + G.rival.losses ? ' · 🥊 ' + G.rival.wins + '승 ' + G.rival.losses + '패' : '') + '</span></summary>' +
+      cal + rivalBox() + seasonBar() + diffBox() + weekBox() + '<p class="note">오늘 인건비 ' + won(wagesTotal()) + '원</p></details>' +
+    '<div class="tabs">' + tabs.map(function (x) { return '<button data-tab="' + x[0] + '" class="' + (x[3] ? 'on' : '') + '"><span class="ti">' + x[1] + '</span>' + x[2] + '</button>'; }).join('') + '</div>' +
+    (curG[3].length > 1 ? '<div class="subtabs">' + curG[3].map(function (k) { return '<button data-tab="' + k + '" class="' + (G.prepTab === k ? 'on' : '') + '">' + PREP_SUB[k] + '</button>'; }).join('') + '</div>' : '');
 
   if (G.prepTab === 'shop') {
     h += '<div class="shop">' + SHOP.map(function (it) {
@@ -4373,28 +4389,33 @@ function report(settleOk) {
     (rankAfter !== rankBefore ? '<div class="rankup">' + (G.rep > s.repStart ? '🎉 펍 등급 상승 — ' : '펍 등급 하락 — ') + '<b>' + rankAfter + '</b></div>' : '') +
     (gentle ? '<p class="note" style="text-align:center">🌱 첫 사흘 — 손님들이 너그럽다. 평판 하락이 절반으로 줄었다</p>' : '') +
     achHtml(achNew) +
-    '<h3>🎯 오늘의 목표</h3><ul class="goals">' + G.goals.map(function (g, i) { return '<li class="' + (done[i] ? 'ok' : 'no') + '">' + (done[i] ? '✓ ' : '✗ ') + goalText(g) + '</li>'; }).join('') + '</ul>' +
+    (champDay ? '<div class="champline">' + (G.winner ? '🏆 <b>시즌 챔피언 — ' + G.winner.name + '</b>' + (wReg ? ' (단골 · ♥ +15)' : ' (시즌 밖 손님의 깜짝 우승)') : '챔피언십 결판이 나지 않았다 — 공동 시드권') + '</div>' : '') +
+    /* 1.7 — 한눈에: 순이익 · 평판 · 우승 · 목표. 나머지는 「자세히」에 접는다 */
+    '<div class="sumgrid"><div><small>순이익</small><b><span data-countup="' + net + '">' + (net < 0 ? '−' : '') + won(Math.abs(net)) + '</span></b></div>' +
+    '<div><small>평판</small><b>' + Math.round(s.repStart) + ' → ' + Math.round(G.rep) + '</b></div>' +
+    '<div><small>자금</small><b>' + won(G.bank) + '</b></div></div>' +
+    '<p class="sumwin">' + (G.winner ? '🏆 우승 <b>' + G.winner.name + '</b>' + (wReg ? ' (시즌 포인트 +10)' : '') + ' — 트로피와 다음 대회 시드권' : '마감까지 결판이 나지 않았다 — 남은 사람들은 다음 대회 시드권') + '</p>' +
+    '<ul class="goals">' + G.goals.map(function (g, i) { return '<li class="' + (done[i] ? 'ok' : 'no') + '">' + (done[i] ? '✓ ' : '✗ ') + goalText(g) + '</li>'; }).join('') + '</ul>' +
+    (quit.length ? '<p class="warn">😞 그만뒀다 — ' + quit.map(function (x) { return x.name + '(' + ROLES[x.role].ko + ')'; }).join(' · ') + '. 사기가 바닥이었다</p>' : '') +
+    (G.debtDays ? '<p class="warn">⚠️ 자금 마이너스 ' + G.debtDays + '일째 — 사흘 연속이면 폐업이다</p>' : '') +
+    '<details class="more"><summary>📋 자세히 — 정산 · 운영 · 손님 · 직원 · 후기</summary>' +
     (settleOk ? '<p>✓ 레지 정산이 맞았다.</p>' : '<p>✗ 레지 정산이 틀렸다 — 차액을 맞추느라 마감이 늦어졌다.</p>') +
     '<table class="rows">' + rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + (r[1] < 0 ? '−' : '') + won(Math.abs(r[1])) + '</td></tr>'; }).join('') +
-    '<tr class="total"><td>순이익</td><td><span data-countup="' + net + '">' + (net < 0 ? '−' : '') + won(Math.abs(net)) + '</span></td></tr>' +
+    '<tr class="total"><td>순이익</td><td>' + (net < 0 ? '−' : '') + won(Math.abs(net)) + '</td></tr>' +
     '<tr><td>자금</td><td>' + won(G.bank) + '</td></tr></table>' +
     '<h3>운영</h3><p>플로어 호출 — 맞음 <b>' + s.right + '</b> · 틀림 <b>' + s.wrong + '</b> · 못 감 <b>' + s.missed + '</b>' + (s.quick ? ' · ⚡ 빠른 판정 <b>' + s.quick + '</b>' : '') + (s.spot ? ' · 🔍 딜러 실수 잡음 <b>' + s.spot + '</b>' : '') + (s.angry ? ' · 화나서 나간 손님 ' + s.angry : '') + '<br>' +
     '아나운스 ' + s.ann + '건' + (s.annByStaff ? ' (직원 ' + s.annByStaff + ')' : '') + ' · 틀림 ' + s.annWrong + ' · 놓침 ' + s.annMiss + ' · 밸런싱 ' + s.balanced + '건' + (s.balanceMiss ? ' (놓침 ' + s.balanceMiss + ')' : '') + '<br>' +
     '청소 ' + s.cleaned + '건 · 바닥이 젖어 있던 시간 ' + Math.round(s.spillSec) + '초 · 음료 품절로 못 판 것 ' + s.noStock + '건' + (s.maxCombo >= 2 ? '<br>🔥 최고 판정 콤보 ×' + s.maxCombo : '') + '</p>' +
     '<h3>손님</h3><p>평균 만족도 ' + Math.round(avgSat) + ' · 줄이 길어 돌아간 손님 ' + (s.lost + s.queueLeave) + '명 · 평판 ' + Math.round(s.repStart) + ' → <b>' + Math.round(G.rep) + '</b> (' + rankAfter + ')</p>' +
-    (champDay ? '<div class="champline">' + (G.winner ? '🏆 <b>시즌 챔피언 — ' + G.winner.name + '</b>' + (wReg ? ' (단골 · ♥ +15)' : ' (시즌 밖 손님의 깜짝 우승)') : '챔피언십 결판이 나지 않았다 — 공동 시드권') + '</div>' : '') +
-    '<p>' + (G.winner ? '🏆 우승 ' + G.winner.name + (wReg ? ' (시즌 포인트 +10)' : '') + ' — 트로피와 다음 대회 시드권' : '마감까지 결판이 나지 않았다 — 남은 사람들은 다음 대회 시드권') + '</p>' +
     (grown.length ? '<p class="note">직원 성장 — ' + grown.join(' · ') + ' 능력 +1</p>' : '') +
     (G.grownToday.length ? '<p>🎓 단계 상승 — ' + G.grownToday.join(' · ') + '</p>' : '') +
     (mentored.length ? '<p class="note">🤝 멘토링 — ' + mentored.join(' · ') + '</p>' : '') +
-    (quit.length ? '<p class="warn">😞 그만뒀다 — ' + quit.map(function (x) { return x.name + '(' + ROLES[x.role].ko + ')'; }).join(' · ') + '. 사기가 바닥이었다</p>' : '') +
     (lowM.length ? '<p class="warn">⚠️ 사기가 낮다 — ' + lowM.map(function (x) { return x.name + ' ' + Math.round(morale(x)); }).join(' · ') + ' (20 아래면 그만둔다)</p>' : '') +
     (G.resv ? '<p>📋 예약 ' + G.resv.total + '건 — 도착 ' + G.resv.arrived + ' · 노쇼 ' + G.resv.noshow + (G.cfg.resDeposit ? ' (보증금 받음)' : ' (보증금 없음)') + '</p>' : '') +
     (G.regDelta.length ? '<p>⭐ 단골 ' + G.regDelta.length + '명 — ' + G.regDelta.map(function (x) { return x.name + ' ' + (x.d >= 0 ? '+' : '') + x.d + '♥'; }).join(' · ') + '</p>' : '') +
     (G.absent.length ? '<p class="note">📵 노쇼 — ' + G.absent.map(function (x) { return x.name; }).join(' · ') + ' (일당 없음)</p>' : '') +
     (s.events.length ? '<h3>⚡ 돌발 상황</h3><p>' + s.events.map(function (e) { return (e.ok === true ? '✓ ' : (e.ok === false ? '✗ ' : '△ ')) + e.ic + ' ' + e.note; }).join('<br>') + '</p>' : '') +
-    '<h3>후기</h3><p>' + reviews.join('<br>') + '</p>' +
-    (G.debtDays ? '<p class="warn">⚠️ 자금 마이너스 ' + G.debtDays + '일째 — 사흘 연속이면 폐업이다</p>' : '') +
+    '<h3>후기</h3><p>' + reviews.join('<br>') + '</p></details>' +
     '<button class="cta" data-next-day="1">' + (G.debtDays >= 3 ? '…' : (dayInfo(G.day + 1).wd === 6 ? '🗓️ 일요일 — 주간 정산' : '다음 날 영업 준비')) + '</button> <button class="cta ghost" data-restart="1">타이틀로</button>';
   showModal(h, true);
   countUp();
@@ -4504,7 +4525,7 @@ function seasonBar() {
 // ═══════════════════════════════════════════════════
 // 출시용 껍데기 — 설정 · 일시정지 · 도움말 · 기록 · 만든 사람
 // ═══════════════════════════════════════════════════
-var VERSION = '1.6';
+var VERSION = '1.7';
 var SET_KEY = 'pubsim.settings', REC_KEY = 'pubsim.records';
 var SETTINGS = { music: 0.7, sfx: 1, quality: 'auto', motion: 'auto', talk: true };
 var SET_OK = {   // 저장된 설정이 망가져 있으면 기본값을 쓴다

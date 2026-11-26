@@ -17,7 +17,7 @@ const { chromium } = require('playwright');
   await page.click('[data-tab="shop"]');
   await page.screenshot({ path: 'wk-prep.png' });
   const info = await page.evaluate(() => ({ h2: document.querySelector('.modal h2').innerText, cal: [...document.querySelectorAll('.cd')].map(x => x.innerText.replace(/\n/g, ' ')) }));
-  await page.click('[data-tab="resv"]');
+  await page.click('[data-tab="chips"]'); await page.click('[data-tab="resv"]');   // 1.7 — 「오늘 밤」 묶음 안의 작은 칸
   await page.screenshot({ path: 'wk-resv.png' });
   const resvTab = await page.evaluate(() => document.querySelector('.modal .note:last-of-type') && [...document.querySelectorAll('.modal p')].map(p => p.innerText).join(' | ').slice(0, 400));
   await page.click('[data-tab="regs"]');
@@ -41,7 +41,7 @@ const { chromium } = require('playwright');
     else await page.waitForTimeout(20);
   }
   const resv = await page.evaluate(() => ({ resv: window.__pub.resv && { total: window.__pub.resv.total, arrived: window.__pub.resv.arrived, noshow: window.__pub.resv.noshow, open: window.__pub.resv.open }, regDelta: window.__pub.regDelta, regVisits: window.__pub.stats.regVisits, dep: window.__pub.stats.depositRev, regs: window.__pub.regulars.map(r => r.name + ':' + r.visits + ':' + r.aff) }));
-  const rtxt = await page.evaluate(() => document.querySelector('.modal').innerText.split('\n').filter(l => /예약|단골|보증금/.test(l)).join(' / '));
+  const rtxt = await page.evaluate(() => { document.querySelectorAll('details.more').forEach(d => { d.open = true; }); return document.querySelector('.modal').innerText; }).then(t => t.split('\n').filter(l => /예약|단골|보증금/.test(l)).join(' / '));
   const sat = await page.evaluate(() => ({ btn: document.querySelector('[data-next-day]').innerText, fee: [...document.querySelectorAll('.rows td')].slice(0, 2).map(x => x.innerText).join(' '), rep: window.__pub.rep, start: window.__pub.stats.repStart, regwarn: window.__pub.stats.ann }));
   await page.screenshot({ path: 'wk-report.png' });
   await page.click('[data-next-day]');

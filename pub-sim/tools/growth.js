@@ -54,7 +54,7 @@ const SHOT = process.argv[2] === 'shot';
     if (s.tasks.length && !s.walking) { try { await page.locator(`[data-task="${s.tasks[0]}"]`).click({ timeout: 800 }); } catch (e) {} continue; }
     await page.waitForTimeout(30);
   }
-  const txt = await G(() => document.querySelector('.modal').innerText);
+  const txt = await G(() => { document.querySelectorAll('details.more').forEach(d => { d.open = true; }); return document.querySelector('.modal').innerText; });
   out.report = [(txt.match(/🎓 단계 상승[^\n]*/) || ['(단계 상승 없음)'])[0], (txt.match(/🤝 멘토링[^\n]*/) || ['(멘토링 없음)'])[0]];
   out.after = await G(() => window.__pub.roster.filter(s => s.role === 'dealer').map(s => s.name + ' 단계 ' + JSON.stringify(s.train) + ' 경험 ' + JSON.stringify(s.xp || {})));
   // 월요일(29일차) 오픈 준비 — 난이도 막대 · 안내

@@ -39,7 +39,7 @@ const DAYS = +(process.argv[2] || 1), MODE = process.argv[3] || 'perfect', SHOT 
     await shot('shop');
     if (day === 0) {
       await page.evaluate(() => { const G = window.__pub; if (!G.cands.some(c => c.role === 'floor')) G.cands[0] = Object.assign(G.cands[0], { role: 'floor', skill: 75, wage: 180000 }); });
-      await page.click('[data-tab="staff"]');
+      await page.click('[data-tab="dealers"]'); await page.click('[data-tab="staff"]');   // 1.7 — 「사람」 묶음 안의 작은 칸
       await shot('staff');
       const fid = await page.evaluate(() => window.__pub.cands.find(c => c.role === 'floor').id);
       await page.click(`[data-hire="${fid}"]`);

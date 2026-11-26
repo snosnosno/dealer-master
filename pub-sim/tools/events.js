@@ -72,7 +72,7 @@ const TYPES = process.argv[3] ? process.argv[3].split(',') : ['group', 'influenc
   await G(() => { window.__pub.speed = 12; });
   for (let i = 0; i < 4000; i++) { const s = await drain(); if (s === 'closed') break; await page.waitForTimeout(30); }
   if (await page.$('[data-st]')) { const c = await G(() => window.__pub.current.correct); await page.locator('[data-st]').nth(c).click(); }
-  const rep = await G(() => { const m = document.querySelector('.modal'); return m ? m.innerText : ''; });
+  const rep = await G(() => { document.querySelectorAll('details.more').forEach(d => { d.open = true; }); const m = document.querySelector('.modal'); return m ? m.innerText : ''; });
   out.report = (rep.match(/⚡ 돌발 상황[\s\S]*?후기/) || [''])[0];
   out.fineRow = (rep.match(/벌금[^\n]*\n?[^\n]*/) || [''])[0];
   console.log(JSON.stringify({ mode: TIMEOUT ? 'timeout' : 'handle', out, errors: errors.slice(0, 8) }, null, 1));
