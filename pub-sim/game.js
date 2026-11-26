@@ -3875,7 +3875,7 @@ function prepScreen(tab) {
     inboxBox() +
     '<div class="goalchips"><span class="gl">🎯 오늘 목표 <small>하나에 +' + won(GOAL_REWARD) + '</small></span>' + G.goals.map(function (g) { return '<span class="gchip">' + goalText(g) + '</span>'; }).join('') + '</div>' +
     '<details class="weekfold"' + (monday ? ' open' : '') + '><summary>📅 이번 주 <span>시즌 ' + Math.min(SEASON_WEEKS, info.week) + '/' + SEASON_WEEKS + ' · 난이도 ' + diffLv() + '/6' +
-      (wch ? ' · 도전 ' + wDone + '/' + wch.list.length : '') + (G.rival && G.rival.wins + G.rival.losses ? ' · 🥊 ' + G.rival.wins + '승 ' + G.rival.losses + '패' : '') + '</span></summary>' +
+      (wch ? ' · 도전 ' + wDone + '/' + wch.list.length : '') + (G.rival && G.rival.wins + G.rival.losses ? ' · 🥊 ' + G.rival.wins + '승 ' + G.rival.losses + '패' : (info.week === 1 ? ' · 🥊 라이벌 등장' : '')) + '</span></summary>' +
       cal + rivalBox() + seasonBar() + diffBox() + weekBox() + '<p class="note">오늘 인건비 ' + won(wagesTotal()) + '원</p></details>' +
     '<div class="tabs">' + tabs.map(function (x) { return '<button data-tab="' + x[0] + '" class="' + (x[3] ? 'on' : '') + '"><span class="ti">' + x[1] + '</span>' + x[2] + '</button>'; }).join('') + '</div>' +
     (curG[3].length > 1 ? '<div class="subtabs">' + curG[3].map(function (k) { return '<button data-tab="' + k + '" class="' + (G.prepTab === k ? 'on' : '') + '">' + PREP_SUB[k] + '</button>'; }).join('') + '</div>' : '');

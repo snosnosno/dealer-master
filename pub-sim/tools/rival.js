@@ -21,8 +21,9 @@ const SHOT = process.argv[2] === 'shot';
   await page.click('[data-go]');
   await page.waitForTimeout(300);
   // 1. 1주차 — 소개만, 수 없음
-  out.week1 = await G(() => ({ box: (document.querySelector('.rivalbox') || {}).innerText || '', btn: !!document.querySelector('[data-rv]'), move: window.__pub.rival.move }));
-  expect('week1 intro', out.week1.box.indexOf('로열 라운지') >= 0 && !out.week1.btn && !out.week1.move, out.week1);
+  // 1.7 — 소개는 접힌 「이번 주」 안(textContent), 요약 줄에 「라이벌 등장」
+  out.week1 = await G(() => ({ box: (document.querySelector('.rivalbox') || {}).textContent || '', sum: (document.querySelector('.weekfold summary') || {}).innerText || '', btn: !!document.querySelector('[data-rv]'), move: window.__pub.rival.move }));
+  expect('week1 intro', out.week1.box.indexOf('로열 라운지') >= 0 && out.week1.sum.indexOf('라이벌 등장') >= 0 && !out.week1.btn && !out.week1.move, out.week1);
   if (SHOT) await page.screenshot({ path: 'rival-week1.png' });
 
   // 2. 수 넷 — 막기 / 그냥 두기
