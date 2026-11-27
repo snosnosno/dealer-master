@@ -2038,7 +2038,8 @@ function endHand(t) {
   t.potMoving = true;
   moveTo(pot, home, toward, 0.35, 0, function () { pot.position.copy(home); pot.scale.set(1, 0.5, 1); t.potMoving = false; }, 0.1);
   var wc = G.customers[t.seats[ws]];
-  t.lastResult = { name: wc.name, hand: sd.hi ? handName(sd.hi) : '', split: winners.length > 1, low: sd.lo && sd.los.length ? G.customers[t.seats[sd.los[0]]].name : null };
+  t.lastResult = { name: wc.name, hand: sd.hi ? handName(sd.hi) : '', split: winners.length > 1, low: sd.lo && sd.los.length ? G.customers[t.seats[sd.los[0]]].name : null,
+    cards: !isMix(t) && t.cards.holes[ws] ? t.cards.holes[ws].slice() : null };   // 📺 플레이 보기 — 이긴 홀카드
   if (sd.hi && sd.hi[0] >= 4 && chance(0.6)) {
     var cat = sd.hi[0];
     say(wc, (cat === 5 || cat === 8 ? flushSuit(t.cards.board) + ' ' : '') + CAT[cat] + '!' + (cat >= 6 ? ' 🔥' : ''), 2.2);
@@ -2906,6 +2907,7 @@ function frame(ts) {
     updateCamera(real);
     renderer.render(scene, camera);
     renderOverlay();
+    if (WATCH.tid !== null) renderWatch();
     if (G.phase === 'open') renderHud();
   }) && ok;
   if (ok) frame.errs = 0;   // 연속 오류만 센다 — 드문 오류가 쌓여 멈추지 않게
@@ -3156,12 +3158,16 @@ function renderOverlay() {
   // 테이블 라벨
   G.tables.forEach(function (t, i) {
     var el = OV.tables[i];
-    if (!el) { el = document.createElement('div'); el.className = 'tlabel'; el.onclick = function () { audioOn(); goTable(i); }; host.appendChild(el); OV.tables[i] = el; }
+    if (!el) {
+      el = document.createElement('div'); el.className = 'tlabel';
+      el.onclick = function (e) { audioOn(); if (e.target && e.target.closest && e.target.closest('[data-wt]')) { watchTable(i); return; } goTable(i); };   // 📺 은 바로 보기, 나머지는 걸어간다
+      host.appendChild(el); OV.tables[i] = el;
+    }
     var p = project(V(t.def.cx, t.def.cz - RZ - 0.3).setY(t.call ? 3.6 : 1.7));   // 뒤쪽 가장자리 위 — 보드를 가리지 않게
     el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
     var txt = t.broken ? t.name + '<small>재편으로 닫힘</small>' :
       (t.dealer === null ? '⚠️ ' + t.name + '<small>딜러 없음 — 눌러서 배치</small>' :
-      (t.call ? '🚨 플로어! — ' + t.name : t.name + (isMix(t) ? ' · PLO8' : '') + '<small>' + seated(t) + '명</small>'));
+      (t.call ? '🚨 플로어! — ' + t.name : t.name + (isMix(t) ? ' · PLO8' : '') + '<small>' + seated(t) + '명 <span class="wt" data-wt="1">📺 보기</span></small>'));
     if (el._t !== txt) { el.innerHTML = txt; el._t = txt; }
     el.className = 'tlabel' + (t.call ? ' alert' : '');
   });
@@ -3266,9 +3272,10 @@ function openTable(i) {
     }).join('') + '</div>';
   }
   if (d) h += '<p class="note">사기 ' + moraleTag(d.staff) + (d.staff.trait ? ' · ' + traitTag(d.staff) : '') + '</p>' + praiseBtn(d.staff);
-  h += '<button class="cta ghost" data-close="1">닫기</button>';
+  h += '<div class="titlebtns">' + (d ? '<button class="cta" data-watch="' + i + '">📺 플레이 보기</button>' : '') + '<button class="cta ghost" data-close="1">닫기</button></div>';
   showModal(h);
   bindPraise();
+  var wb = $('[data-watch]'); if (wb) wb.onclick = function () { watchTable(i); };
   document.querySelectorAll('[data-swap]').forEach(function (b) {
     b.onclick = function () { swapDealer(t, G.dealers[+b.getAttribute('data-swap')]); closeModal(); };
   });
@@ -3278,6 +3285,71 @@ function openTable(i) {
   $('[data-close]').onclick = closeModal;
 }
 
+/* 📺 플레이 보기 (1.8) — 테이블을 가까이 비추고, 아래에 지금 판(스트릿 · 보드 · 좌석 · 지난 핸드)을 띄운다.
+   창(모달)이 아니라 시간이 계속 흐른다. 그 테이블에서 플로어를 부르면 「판정하러 가기」 */
+var WATCH = { tid: null, prev: null, last: 0, html: '' };
+function watchTable(i) {
+  var t = G.tables[i];
+  if (!t || t.broken || G.phase !== 'open') return;
+  if (G.modal) closeModal();
+  if (WATCH.tid === null) WATCH.prev = { yaw: cam.yaw, pitch: cam.pitch, dist: cam.dist, target: cam.target.clone(), follow: cam.follow };
+  WATCH.tid = i; WATCH.html = ''; cam.follow = false;
+  cam.target.set(t.def.cx, 0, t.def.cz); cam.dist = 9; cam.pitch = 1.05;
+  renderWatch(true);
+}
+function unwatch() {
+  if (WATCH.tid === null) return;
+  WATCH.tid = null; WATCH.html = '';
+  var p = WATCH.prev;
+  if (p) { cam.yaw = p.yaw; cam.pitch = p.pitch; cam.dist = p.dist; cam.target.copy(p.target); cam.follow = p.follow; }
+  var host = $('#watch'); if (host) host.innerHTML = '';
+}
+function streetOf(t) {
+  if (!t.cards || !t.pos) return '다음 핸드 준비';
+  var h = t.handT;
+  return h < 3 ? '프리플랍' : (h < 5 ? '플랍' : (h < 6.6 ? '턴' : '리버'));
+}
+function renderWatch(force) {
+  if (WATCH.tid === null) return;
+  var host = $('#watch');
+  if (!host) return;
+  var t = G.tables[WATCH.tid];
+  if (!t || t.broken || G.phase !== 'open') { unwatch(); return; }
+  var nowT = performance.now();
+  if (!force && nowT - WATCH.last < 200) return;   // 다섯 번에 한 번만 다시 그린다
+  WATCH.last = nowT;
+  var d = t.dealer !== null ? G.dealers[t.dealer] : null, n = t.cards && t.shownBoard > 0 ? t.shownBoard : 0;
+  var back = '<span class="pc back">🂠</span>';
+  var board = t.cards ? t.cards.board.slice(0, n).map(cardHtml).join('') + new Array(5 - n + 1).join(back) : new Array(6).join(back);
+  var seats = t.seats.map(function (id, s) {
+    if (id === null) return '';
+    var c = G.customers[id], face = c.sat > 75 ? '😄' : (c.sat > 45 ? '🙂' : (c.sat > 25 ? '😐' : '😠'));
+    var btn = t.pos && t.pos.btn === s ? '<i class="btn">D</i>' : '';
+    return '<div class="wseat"><b>' + btn + c.name + '</b><span>' + face + (c.reg ? ' ⭐' : '') + '</span></div>';
+  }).join('');
+  var L = t.lastResult;
+  var last = L ? '<div class="wlast">🏆 지난 핸드 <b>' + L.name + '</b>' + (L.hand ? ' · ' + L.hand : '') + (L.split ? ' (찹)' : '') + (L.low ? ' · 🌙 로우 ' + L.low : '') +
+    (L.cards ? ' <span class="wcards">' + L.cards.map(cardHtml).join('') + '</span>' : '') + '</div>' : '<div class="wlast note">첫 핸드가 돌고 있다</div>';
+  var h = '<div class="watch"><div class="whead"><b>📺 ' + t.name + (isMix(t) ? ' · PLO8' : '') + '</b><span>' + (d ? '딜러 ' + d.name : '딜러 없음') + ' · <em>' + streetOf(t) + '</em></span>' +
+    '<button class="wclose" data-wclose="1" aria-label="플레이 보기 닫기">✕</button></div>' +
+    '<div class="pboard wboard"><small>보드</small>' + board + '</div>' +
+    '<div class="wseats">' + seats + '</div>' + last +
+    (t.call ? '<button class="cta" data-wcall="1">🚨 플로어 호출 — 판정하러 가기</button>' : '') + '</div>';
+  if (h !== WATCH.html) { host.innerHTML = h; WATCH.html = h; }   // 바뀐 때만 — 누르던 버튼이 사라지지 않게
+  // 폰 — 할 일 목록이 아래라 위에 띄우되, 상단 HUD(두 줄일 수 있다) 바로 아래로
+  var hud = $('#hud');
+  if (window.innerWidth <= 720 && hud) { host.style.top = Math.round(hud.getBoundingClientRect().bottom + 8) + 'px'; host.style.bottom = 'auto'; }
+  else { host.style.top = ''; host.style.bottom = ''; }
+}
+(function () {
+  var host = document.getElementById('watch');
+  if (!host) return;
+  host.addEventListener('click', function (e) {
+    if (!e.target || !e.target.closest) return;
+    if (e.target.closest('[data-wclose]')) { unwatch(); return; }
+    if (e.target.closest('[data-wcall]')) { var i = WATCH.tid; unwatch(); goTable(i); }
+  });
+})();
 /* 칭찬 — 하루 한 번, 한 사람. 사기 +8 */
 function praiseBtn(st) {
   var used = G.praiseDay === G.day;
@@ -4525,7 +4597,7 @@ function seasonBar() {
 // ═══════════════════════════════════════════════════
 // 출시용 껍데기 — 설정 · 일시정지 · 도움말 · 기록 · 만든 사람
 // ═══════════════════════════════════════════════════
-var VERSION = '1.7';
+var VERSION = '1.8';
 var SET_KEY = 'pubsim.settings', REC_KEY = 'pubsim.records';
 var SETTINGS = { music: 0.7, sfx: 1, quality: 'auto', motion: 'auto', talk: true };
 var SET_OK = {   // 저장된 설정이 망가져 있으면 기본값을 쓴다
@@ -4782,6 +4854,7 @@ G.placeAt = placeAtForTest;                    // 자동 점검용
 G.__music = MUSIC;   // 자동 점검용
 G.__plan = planEvents; G.__type = pickType; G.__diff = diffK;   // 자동 점검용
 G.__weekly = weeklyScreen; G.__prep = prepScreen; G.__save = saveGame;   // 자동 점검용
+G.__watch = { open: watchTable, close: unwatch, state: WATCH, cam: cam, table: openTable };   // 자동 점검용 (1.8)
 G.__story = { next: storyNext, pick: storyPick, all: STORIES, need: STORY_NEED }; G.__champ = { top: champTop, schedule: champSchedule, step: champStep }; G.__report = report;   // 자동 점검용 (1.6)
 G.__case = function (tid, n) { var t = G.tables[tid], d = genCase(t); if (n) d.id = n; createCall(t, 'case', d); return d; };   // 자동 점검용
 G.__cases = CASES; G.__caseQ = caseQuestion; G.__drill = openDrill; G.__open = openCall; G.__rival = { gen: genRivalMove, decide: rivalDecide, settle: rivalSettle, arrK: rivalArrK, base: rivalBase, moves: RIVAL_MOVES };G.__spotGen = function (tid) { return genIncident(G.tables[tid || 0], 'spot'); }; G.__spotCall = function (tid) { var t = G.tables[tid || 0]; createCall(t, 'spot', genIncident(t, 'spot')); return t.call; }; G.__best = best; G.__cmp = cmp;G.__achs = ACHS; G.__checkAch = checkAch; G.__openAch = openAch; G.__achGot = achGot;G.__isMix = isMix;

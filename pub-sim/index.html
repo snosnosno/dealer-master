@@ -609,6 +609,26 @@ details.weekfold[open] > summary { margin: 0 -10px 8px; border-bottom: 1px solid
 .pboard { padding: 6px 8px; border-radius: 10px; background: rgba(23,132,95,.22); border: 1px solid rgba(67,214,158,.25); }
 .pholes { margin: 4px 0 8px; }
 .pboard small { min-width: 34px; }   /* 다섯 장이 작은 폰에서도 한 줄에 */
+/* 1.8 — 📺 플레이 보기: 아래쪽 판 정보(창이 아니라 시간이 흐른다) */
+#watch { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 11; width: min(560px, calc(100% - 32px)); }
+.watch { background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid var(--glass-line); border-radius: 18px; padding: 10px 12px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+.whead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.whead b { font-size: 14px; color: #fff; }
+.whead span { flex: 1; font-size: 12px; color: var(--ink-2); }
+.whead em { font-style: normal; font-weight: 900; color: var(--amber-ink); }
+.wclose { min-width: 34px; height: 34px; border-radius: 10px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.06); color: var(--ink); font-size: 15px; cursor: pointer; }
+.wboard { margin: 0 0 6px; }
+.pc.back { background: linear-gradient(135deg, #1f4d8a, #102a52); color: rgba(255,255,255,.55); }
+.wseats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 0 0 6px; }
+.wseat { display: flex; justify-content: space-between; gap: 4px; padding: 4px 7px; border-radius: 8px; background: rgba(255,255,255,.04); font-size: 12px; min-width: 0; }
+.wseat b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 800; }
+.wseat .btn { display: inline-block; font-style: normal; font-size: 10px; font-weight: 900; color: #2a1700; background: var(--gold-a); border-radius: 99px; padding: 0 5px; margin-right: 3px; }
+.wlast { font-size: 12.5px; color: var(--ink-2); display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.wlast b { color: #fff; }
+.wcards .pc { min-width: 30px; font-size: 13px; padding: 2px 4px; }
+.watch .cta { width: 100%; margin-top: 8px; }
+.tlabel .wt { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 99px; background: rgba(242,179,61,.18); color: var(--amber-ink); font-weight: 800; }
+@media (max-width: 720px) { #watch { bottom: auto; top: calc(64px + env(safe-area-inset-top, 0px)); } }   /* 폰 — 할 일 목록이 아래라 위에 띄운다 */
 /* 1.7 「정리」 — 📬 소식함 · 탭 넷 + 작은 칸 · 마감 요약 */
 .inbox { margin: 0 0 10px; padding: 8px; border-radius: 16px; background: rgba(255,255,255,.03); border: 1px solid var(--glass-line); }
 .inbox .ibhead { font-size: 12px; font-weight: 800; color: var(--amber-ink); margin: 0 4px 6px; }
@@ -688,6 +708,7 @@ details.more[open] { padding-bottom: 8px; }
 <div id="tip"></div>
 <div id="placebar"></div>
 <div id="banner"></div>
+<div id="watch"></div>
 <script src="vendor/three.min.js"></script>
 <script src="game.js"></script>
 </body>
