@@ -1,4 +1,4 @@
-# 다음 세션 프롬프트 — 홀덤펍 점장 1.7 「정리」 뒤
+# 다음 세션 프롬프트 — 홀덤펍 점장 1.8 「플레이 보기」 뒤
 
 > 이 파일을 새 세션에 그대로 붙여 넣는다. 매번 **새로 쓴다** — 지난 지시 위에 덧붙이지 않는다.
 
@@ -6,7 +6,7 @@
 
 ## 0. 먼저 할 것
 
-1. **사용자에게 1.7 소감을 받는다** — `DESIGN.md` §33 끝 「1.7 해 보고 답해 줄 것」(소식함 · 탭 넷 · 마감 요약). 사용자는 「복잡하다」고 했다 — **새 기능보다 정리 · 깔끔함이 먼저**. 그다음 §32 끝 「1.6 해 보고 답해 줄 것」(이야기 · 챔피언십), §31 끝(라이벌 · 딜러 실수 · 업적). 1.4.x 질문(§29 시즌 목표 1,500만 · 작은 폰 글씨 · ⚡ 막대)도 아직 열려 있다.
+1. **사용자에게 1.7 소감을 받는다** — `DESIGN.md` §34 끝 「1.8 해 보고 답해 줄 것」(📺 플레이 보기), §33 끝 「1.7 해 보고 답해 줄 것」(소식함 · 탭 넷 · 마감 요약). 사용자는 「복잡하다」고 했다 — **새 기능보다 정리 · 깔끔함이 먼저**. 그다음 §32 끝 「1.6 해 보고 답해 줄 것」(이야기 · 챔피언십), §31 끝(라이벌 · 딜러 실수 · 업적). 1.4.x 질문(§29 시즌 목표 1,500만 · 작은 폰 글씨 · ⚡ 막대)도 아직 열려 있다.
    - 답이 오면 그에 맞춰 고친다. 「추천으로」면 사람 없이 **잴 수 있는 것**만(§3 아래쪽).
    - 「새로운것들」이면 §30 기획안의 남은 후보(E 2층 확장 · G 손님 사연 — B · C 는 1.6 에서 만들었다)에서 고르게 한다 — `AskUserQuestion` 으로.
 2. **ECC** 로 진행한다 — `.claude/` 에 설치(사용법 `.claude/ECC-사용법.md`).
@@ -18,12 +18,12 @@
 
 - 레포 `snosnosno/dealer-master`. 게임은 **`pub-sim/`** — 딜러마스터와 **별도 게임**, 빌드 없음
   - `index.html` · `game.js`(약 4,700줄, ES5 IIFE) · `vendor/three.min.js`(r149, MIT)
-  - `DESIGN.md` — 설계 정본(§9~§33). 실행 · 배포는 `README.md`
-  - `tools/` — `build-artifact.py` · `autoplay.js`(perfect · **human** · random) · `ach.js` · `spot.js` · `rival.js` · `story.js` · `cases.js` · `drill.js` · `events.js` · `staff.js` · `growth.js` · `week.js` · `release.js` · `decor.js` · `table.js` · `av.js` · `weekend.js` · `noshow.js`
+  - `DESIGN.md` — 설계 정본(§9~§34). 실행 · 배포는 `README.md`
+  - `tools/` — `build-artifact.py` · `autoplay.js`(perfect · **human** · random) · `ach.js` · `spot.js` · `rival.js` · `story.js` · `watch.js` · `cases.js` · `drill.js` · `events.js` · `staff.js` · `growth.js` · `week.js` · `release.js` · `decor.js` · `table.js` · `av.js` · `weekend.js` · `noshow.js`
 - **브랜치**: 1.4.1 부터는 `claude/wizardly-turing-61nkca`(1.4 브랜치 `claude/confident-lovelace-dmv6yd` 를 병합해 이어 감). 새 세션이 다른 브랜치로 열리면 그 브랜치에 `claude/wizardly-turing-61nkca` 를 병합하고 거기서 일한다
-- 폰 링크(비공개 Artifact): **https://claude.ai/artifact/K1UXZgBs2dT8LTZvX9X9BP** — 지금 **1.7**
+- 폰 링크(비공개 Artifact): **https://claude.ai/artifact/K1UXZgBs2dT8LTZvX9X9BP** — 지금 **1.8**
 
-## 2. 지금 게임 (1.7 까지 — 다시 만들지 마라)
+## 2. 지금 게임 (1.8 까지 — 다시 만들지 마라)
 
 - 3D 홀덤펍. 점장을 탭 · WASD 로 걸려 플로어 판정 · 아나운스 · 밸런싱 · 청소. 판정 중 시간 정지
 - 하루: 오픈 준비(탭 8) → 영업 18:00~02:00 → 레지 정산 → 보고서. 주간 캠페인 · 8주 시즌(목표 평판 85 + 자금 **1,500만**) · 단골 12명 · 예약
@@ -33,6 +33,7 @@
 - **1.5**: 🎖️ 업적 34개 · 칭호(명예뿐) · 🔍 딜러 실수 잡기(`spot` 호출 — 누가 이겼나 · 팟 나누기, 족보 · 셈이라 「원문 확인 전」 없음) · 🥊 라이벌 「로열 라운지」(일요일 한 주 손님 수 대결 · 2주차부터 월요일 수 하나를 막거나 둔다)
 - **1.6**: 📖 단골 이야기(여섯 × 3막, 하루 한 장면, 정답 없는 대답 · 3막 장식 선물) · 🏆 시즌 포인트(방문 +1 · 우승 +10) · 8주마다 토요일 시즌 챔피언십(상위 여섯 초대 · 챔피언) · 업적 38개
 - **1.7 「정리」**: 📬 소식함(라이벌 수 · 인상 요청 · 이야기를 한 건씩) · 탭 넷(가게 · 사람 · 오늘 밤 · 단골 + 작은 칸) · 마감 보고서 요약 + 「📋 자세히」 접기
+- **1.8**: 📺 테이블 플레이 보기(라벨 「📺 보기」 · 정보 창 버튼 — 카메라 가까이 + 스트릿 · 보드 · 좌석 · 지난 핸드 홀카드, 시간이 흐른다)
 
 ## 3. 다음 후보
 
@@ -64,7 +65,7 @@
 cd pub-sim
 node -e "new Function(require('fs').readFileSync('game.js','utf8'))"   # 문법
 node tools/autoplay.js 2 human            # errors [] · 두 날 모두 우승자 · clickMiss 적게 (perfect 는 위 한계, human 이 사람에 가깝다)
-node tools/ach.js; node tools/spot.js; node tools/rival.js; node tools/story.js   # 1.5 · 1.6 — bad [] · errors []
+node tools/ach.js; node tools/spot.js; node tools/rival.js; node tools/story.js; node tools/watch.js   # 1.5 · 1.6 — bad [] · errors []
 node tools/cases.js; node tools/drill.js; node tools/events.js handle; node tools/events.js timeout
 node tools/staff.js; node tools/growth.js; node tools/week.js; node tools/release.js; node tools/decor.js; node tools/table.js; node tools/av.js; node tools/weekend.js; node tools/noshow.js
 python3 tools/build-artifact.py <스크래치패드>/pub-artifact
@@ -74,9 +75,9 @@ cp game.js <스크래치패드>/pub-artifact/game.js; mkdir -p <스크래치패�
 - 클라우드 컨테이너는 소프트웨어 그래픽(약 8~10fps) — `autoplay.js` 가 fps 를 재서 배속 3 으로 돈다(하루 약 10분). `clickMiss` 가 많으면 결과를 믿지 마라
 - **컨테이너가 재시작되면 백그라운드 실행이 사라진다**(1.5 · 1.6 작업 중 여러 번 — `AP_LOG=파일` 로 하루마다 남기고, 긴 실행은 `nohup` 으로 띄운다). 긴 점검은 쪼개고, 커밋 · 푸시를 자주
 - 점검 도구는 실행한 폴더에 스크린샷을 남긴다 — 스크래치패드에서 실행. 여러 도구를 동시에 돌리면 느려진다
-- 게시: Artifact 도구로 `<스크래치패드>/pub-artifact/index.html` 을 publish, `files` 에 `{"game.js": …, "vendor/three.min.js": …}`, **url 은 위 링크**, `label` 「1.7.x — …」(game.js 의 VERSION 도 함께)
+- 게시: Artifact 도구로 `<스크래치패드>/pub-artifact/index.html` 을 publish, `files` 에 `{"game.js": …, "vendor/three.min.js": …}`, **url 은 위 링크**, `label` 「1.8.x — …」(game.js 의 VERSION 도 함께)
 - 새 대화에서는 먼저 `action: "read"` 로 읽고, 게시된 `game.js` 도 `path: "game.js"` 로 읽는다(안 읽으면 게시가 막힌다). 레포 커밋의 sha256 과 같은지 확인
 
 ## 6. 끝나면
 
-`DESIGN.md` 에 §34~ 로 게이트 답 · 변경 · 자동 점검 결과를 남기고, 사용자에게 링크와 다음 질문을 준다. 이 파일을 다음 세션용으로 **새로 쓴다**.
+`DESIGN.md` 에 §35~ 로 게이트 답 · 변경 · 자동 점검 결과를 남기고, 사용자에게 링크와 다음 질문을 준다. 이 파일을 다음 세션용으로 **새로 쓴다**.

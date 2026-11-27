@@ -88,7 +88,8 @@ const SHOT = process.argv[2] === 'shot';
     await G(() => { const c = document.querySelector('[data-close]') || document.querySelector('[data-ok]'); if (c) c.click(); });
     if (!(await G(() => window.__pub.champArr.length))) break;
   }
-  out.arrived = await G(() => { const P = window.__pub, names = P.customers.filter(c => c.reg).map(c => c.name); return P.__champ.top().filter(r => names.includes(r.name)).length; });
+  // 예약한 단골은 초대 목록에서 빠지고 예약 시간에 온다(1.6 리뷰) — 도착했거나 예약이 있으면 「온다」로 센다
+  out.arrived = await G(() => { const P = window.__pub, names = P.customers.filter(c => c.reg).map(c => c.name); return P.__champ.top().filter(r => names.includes(r.name) || r.reserved).length; });
   expect('top six arrived', out.arrived === 6, out.arrived);
   out.dupActors = await G(() => { const P = window.__pub, n = {}; P.customers.filter(c => c.reg).forEach(c => { n[c.name] = (n[c.name] || 0) + 1; }); return Object.values(n).filter(v => v > 1).length; });
   expect('no regular spawned twice', out.dupActors === 0, out.dupActors);
